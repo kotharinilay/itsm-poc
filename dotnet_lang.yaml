@@ -1,0 +1,553 @@
+version: 1
+rules_file: lang/dotnet
+applied_when: language in [dotnet, csharp]
+predefined: true
+entries:
+
+  # ---- DN1: clock -------------------------------------------------------------------------------
+  - id: lang/dotnet#DN1
+    text: Use DateTimeOffset.UtcNow or an injected TimeProvider; never DateTime.Now.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      For a timestamp write `DateTimeOffset.UtcNow`. For anything testable, inject `TimeProvider`
+      (.NET 8+) and call `_timeProvider.GetUtcNow()` — never `DateTime.Now` / `DateTime.Today`,
+      which bind to machine-local time and are unmockable.
+    enforcement:
+      - {kind: analyzer, detail: "BannedApiAnalyzers (RS0030) banning System.DateTime.get_Now/get_Today via BannedSymbols.txt — NOT an in-box CA rule; add the Microsoft.CodeAnalysis.BannedApiAnalyzers package"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/api/system.timeprovider",
+               quote: "Provides an abstraction for time.", status: current}
+
+  # ---- DN2: Thread.Sleep in async ---------------------------------------------------------------
+  - id: lang/dotnet#DN2
+    text: In async code use await Task.Delay; never Thread.Sleep.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [concurrency, hot-path]
+    guidance: >
+      Inside an `async` method replace `Thread.Sleep(n)` with `await Task.Delay(n, cancellationToken)`
+      so the thread returns to the pool instead of blocking.
+    enforcement:
+      - {kind: analyzer, detail: "CA1849 (Call async methods when in an async method) — Performance; off by default, bind dotnet_diagnostic.CA1849.severity = error in .editorconfig"}
+    satisfies: ["performance#PF1"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1849",
+               quote: "Call async methods when in an async method", status: current}
+
+  # ---- DN3: Console in app code -----------------------------------------------------------------
+  - id: lang/dotnet#DN3
+    text: Use ILogger in application/library code; never Console.WriteLine.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [logging-telemetry]
+    guidance: >
+      Inject `ILogger<T>` and emit structured events (`_logger.LogInformation("Order {OrderId} placed", id)`).
+      Reserve `Console.*` for the composition-root / CLI entrypoint only.
+    enforcement:
+      - {kind: analyzer, detail: "BannedApiAnalyzers (RS0030) banning System.Console.WriteLine/Write outside the entrypoint — NOT an in-box CA rule; add BannedApiAnalyzers"}
+    satisfies: ["principles#P29"]
+    related_picks: ["D7.4"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/core/extensions/logging",
+               quote: "high performance, structured logging via the ILogger API to help monitor application behavior and diagnose issues", status: current}
+
+  # ---- DN4: sync-over-async ---------------------------------------------------------------------
+  - id: lang/dotnet#DN4
+    text: Await async calls; never .Result / .Wait() / .GetAwaiter().GetResult().
+    tier: core
+    guarantee_mode: absent
+    applies_when: [concurrency, hot-path]
+    guidance: >
+      Make the caller `async` and `await` the task. Do not call `.Result`, `.Wait()`, or
+      `.GetAwaiter().GetResult()` on a request path — they block a pool thread and deadlock under a
+      captured context.
+    enforcement:
+      - {kind: analyzer, detail: "CA1849 (Call async methods when in an async method) — Performance; off by default. Its Cause explicitly flags Task.Wait()/Task<T>.Result/GetAwaiter().GetResult() and sync calls INSIDE a Task-returning method (bind severity = error). Detection OUTSIDE an async context needs a BannedApi/custom rule (noted)"}
+    satisfies: ["performance#PF1"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1849",
+               quote: "In addition, calling Task.Wait(), Task<T>.Result, or Task.GetAwaiter().GetResult() will produce this warning", status: current}
+
+  # ---- DN5: async void --------------------------------------------------------------------------
+  - id: lang/dotnet#DN5
+    text: Use async Task, not async void (except event handlers).
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [concurrency]
+    guidance: >
+      Declare async methods as `async Task` (or `async Task<T>`) so callers can await and observe
+      exceptions. `async void` is permitted only for a genuine `EventHandler` signature.
+    enforcement:
+      - {kind: analyzer, detail: "VSTHRD100 (Microsoft.VisualStudio.Threading.Analyzers) — NOT in-box; add the package and set severity = error. AsyncFixer is a community alternative"}
+    citation: {tier: T1, kind: docs, url: "https://microsoft.github.io/vs-threading/analyzers/VSTHRD100.html",
+               quote: "Methods with `async void` signatures make it impossible for their caller to track the entire asynchronous operation and handle exceptions that may be thrown by that method.", status: current}
+
+  # ---- DN6: nullable reference types (COMPILER, not CA) -----------------------------------------
+  - id: lang/dotnet#DN6
+    text: Enable nullable reference types project-wide.
+    tier: core
+    guarantee_mode: present
+    applies_when: [configuration]
+    guidance: >
+      Set `<Nullable>enable</Nullable>` in Directory.Build.props so every reference type is
+      non-nullable unless declared `T?`. Resolve, do not silence, the resulting flow warnings.
+    enforcement:
+      - {kind: analyzer, detail: "COMPILER (CS) diagnostics, not CA: CS8600/CS8602/CS8618 — active only under <Nullable>enable</Nullable>; promote to error via <TreatWarningsAsErrors> (DN7) or per-code WarningsAsErrors. MSBuild property emitted by profiles/dotnet"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/csharp/nullable-references",
+               quote: "Nullable reference types are a group of features that minimize the chance your code throws", status: current}
+
+  # ---- DN7: warnings as errors ------------------------------------------------------------------
+  - id: lang/dotnet#DN7
+    text: Treat warnings as errors in the build.
+    tier: core
+    guarantee_mode: present
+    applies_when: [configuration]
+    guidance: >
+      Set `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` in Directory.Build.props so analyzer
+      and compiler warnings (incl. the CS nullable codes and any CA raised to warning) fail the build.
+    enforcement:
+      - {kind: analyzer, detail: "MSBuild flag <TreatWarningsAsErrors>true</TreatWarningsAsErrors> — turns every CS/CA warning (e.g. CS8602) into a build-failing error. Emitted by profiles/dotnet"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/csharp/language-reference/compiler-options/errors-warnings",
+               quote: "The TreatWarningsAsErrors option treats all warnings as errors.", status: current}
+
+  # ---- DN8: ConfigureAwait in libs --------------------------------------------------------------
+  - id: lang/dotnet#DN8
+    text: Use ConfigureAwait(false) on awaits in library code.
+    tier: extended
+    guarantee_mode: present
+    applies_when: [concurrency]
+    guidance: >
+      In reusable library code write `await SomethingAsync().ConfigureAwait(false)` so continuations
+      do not marshal back to a captured synchronization context. Not required in ASP.NET Core app code
+      (no ambient context).
+    enforcement:
+      - {kind: analyzer, detail: "CA2007 (Do not directly await a Task) — Reliability; off by default, bind severity = error in .editorconfig for library projects only"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2007",
+               quote: "Do not directly await a Task", status: current}
+
+  # ---- DN9: forward cancellation token ----------------------------------------------------------
+  - id: lang/dotnet#DN9
+    text: Forward the CancellationToken to every async callee that accepts one.
+    tier: core
+    guarantee_mode: present
+    applies_when: [concurrency]
+    guidance: >
+      Thread the method's `CancellationToken` parameter into every downstream async call
+      (`await repo.GetAsync(id, cancellationToken)`), enabling cooperative cancellation end to end.
+    enforcement:
+      - {kind: analyzer, detail: "CA2016 (Forward the CancellationToken parameter to methods that take one) — Reliability (NOT Usage); ON by default as suggestion, so bind dotnet_diagnostic.CA2016.severity = error to make it build-failing"}
+    related_picks: ["D7.3"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2016",
+               quote: "Forward the CancellationToken parameter to methods that take one", status: current}
+
+  # ---- DN10: no catch general -------------------------------------------------------------------
+  - id: lang/dotnet#DN10
+    text: Catch specific exception types; never catch (Exception) and swallow it.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [error-path]
+    guidance: >
+      Catch the narrowest exception you can handle (`catch (SqlException)`), act on it, and rethrow or
+      translate. A top-level `catch (Exception)` is allowed only at a process/request boundary that
+      logs and re-signals — never an empty or swallowing catch.
+    enforcement:
+      - {kind: analyzer, detail: "CA1031 (Do not catch general exception types) — Design; off by default, bind dotnet_diagnostic.CA1031.severity = error in .editorconfig"}
+    satisfies: ["anti-patterns#A15"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1031",
+               quote: "Do not catch general exception types", status: current}
+
+  # ---- DN11: sealed by default ------------------------------------------------------------------
+  - id: lang/dotnet#DN11
+    text: Seal classes not designed for inheritance.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Declare concrete classes `sealed` unless a subclass is a designed extension point. This gives
+      the JIT devirtualization headroom and states intent.
+    enforcement:
+      - {kind: analyzer, detail: "CA1852 (Seal internal types) — Performance; off by default, severity = error. NOTE: CA1852 only seals INTERNAL types; sealing PUBLIC types by default is convention/pr_review (no in-box analyzer)"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1852",
+               quote: "Seal internal types", status: current}
+
+  # ---- DN12: no public mutable fields -----------------------------------------------------------
+  - id: lang/dotnet#DN12
+    text: Expose properties, not public/protected instance fields.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Replace `public int Count;` with `public int Count { get; private set; }` (or an init-only /
+      readonly property). Public fields break encapsulation and binary versioning.
+    enforcement:
+      - {kind: analyzer, detail: "CA1051 (Do not declare visible instance fields) — Design; off by default, bind dotnet_diagnostic.CA1051.severity = error. Fix is BREAKING"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1051",
+               quote: "Do not declare visible instance fields", status: current}
+
+  # ---- DN13: prefer System.Text.Json ------------------------------------------------------------
+  - id: lang/dotnet#DN13
+    text: Use System.Text.Json for new serialization; Newtonsoft only on a documented feature gap.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [serialization]
+    guidance: >
+      Serialize with `System.Text.Json` (`JsonSerializer`, `[JsonPropertyName]`, source-gen
+      `JsonSerializerContext` for AOT). Pull in Newtonsoft.Json only for a capability STJ lacks, and
+      document why.
+    enforcement:
+      - {kind: analyzer, detail: "BannedApiAnalyzers (RS0030) banning Newtonsoft.Json namespace via BannedSymbols.txt — NOT an in-box CA rule; the ban is the mechanical gate"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/migrate-from-newtonsoft",
+               quote: "Migrate from Newtonsoft.Json to System.Text.Json", status: current}
+
+  # ---- DN14: no config indexer ------------------------------------------------------------------
+  - id: lang/dotnet#DN14
+    text: Bind configuration to IOptions<T>; never read IConfiguration["..."] in app/domain code.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [configuration]
+    guidance: >
+      Define a typed options class, register `services.Configure<MyOptions>(config.GetSection("My"))`
+      with validation (`.ValidateDataAnnotations().ValidateOnStart()`), and inject `IOptions<MyOptions>`.
+      No string-key `IConfiguration["Key"]` reads outside the composition root.
+    enforcement:
+      - {kind: analyzer, detail: "BannedApiAnalyzers (RS0030) banning Microsoft.Extensions.Configuration.IConfiguration.get_Item via BannedSymbols.txt — NOT an in-box CA rule; add BannedApiAnalyzers"}
+    satisfies: ["anti-patterns#A14"]
+    related_picks: ["D6.3"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/core/extensions/options",
+               quote: "The options pattern uses classes to provide strongly typed access to groups of related settings.", status: current}
+
+  # ---- DN15: dispose disposables ----------------------------------------------------------------
+  - id: lang/dotnet#DN15
+    text: Dispose owned IDisposable resources; prefer using declarations.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Wrap owned disposables in `using var x = ...;` (or `await using` for `IAsyncDisposable`). In a
+      finalizable type call `GC.SuppressFinalize(this)` from `Dispose()`. Undisposed owned resources
+      leak handles/connections.
+    enforcement:
+      - {kind: analyzer, detail: "CA2000 (Dispose objects before losing scope) — Reliability; off by default, severity = error. PLUS CA1816 (Call GC.SuppressFinalize correctly) — Usage; ON by default as suggestion, raise to error"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2000",
+               quote: "Dispose objects before losing scope", status: current}
+
+  # ---- DN16: validate public args ---------------------------------------------------------------
+  - id: lang/dotnet#DN16
+    text: Validate arguments at public boundaries (ArgumentNullException.ThrowIfNull).
+    tier: extended
+    guarantee_mode: present
+    applies_when: [always]
+    guidance: >
+      At the top of a public method, guard inputs: `ArgumentNullException.ThrowIfNull(order);`
+      `ArgumentOutOfRangeException.ThrowIfNegative(qty);`. Fail fast before the value propagates.
+    enforcement:
+      - {kind: analyzer, detail: "CA1062 (Validate arguments of public methods) — Design; off by default, bind dotnet_diagnostic.CA1062.severity = error"}
+    satisfies: ["secure-coding#SC2"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1062",
+               quote: "Validate arguments of public methods", status: current}
+
+  # ---- DN17: no concrete collections in public API ----------------------------------------------
+  - id: lang/dotnet#DN17
+    text: Return IReadOnlyList<T> / IEnumerable<T> from public APIs, not List<T> or arrays.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [public-contract-change]
+    guidance: >
+      Type public return values and properties as `IReadOnlyList<T>` / `IReadOnlyCollection<T>` /
+      `IEnumerable<T>`. Do not expose `List<T>` (mutable, over-broad) or `T[]` (property returning an
+      array reallocates and leaks internal state).
+    enforcement:
+      - {kind: analyzer, detail: "CA1002 (Do not expose generic lists) — Design; off by default, severity = error. PLUS CA1819 (Properties should not return arrays) — Performance; off by default, severity = error"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1002",
+               quote: "Do not expose generic lists", status: current}
+
+  # ---- DN18: explicit string comparison ---------------------------------------------------------
+  - id: lang/dotnet#DN18
+    text: Specify StringComparison / IFormatProvider in string operations.
+    tier: extended
+    guarantee_mode: present
+    applies_when: [always]
+    guidance: >
+      Pass an explicit comparison: `s.Equals(other, StringComparison.Ordinal)`,
+      `s.StartsWith(x, StringComparison.OrdinalIgnoreCase)`; and an `IFormatProvider`
+      (`value.ToString(CultureInfo.InvariantCulture)`) for machine-facing formatting.
+    enforcement:
+      - {kind: analyzer, detail: "CA1305 (Specify IFormatProvider) — Globalization; off by default, severity = error. PLUS CA1307 (Specify StringComparison for clarity) and CA1310 (Specify StringComparison for correctness) — Globalization; off by default, severity = error"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1305",
+               quote: "Specify IFormatProvider", status: current}
+
+  # ---- DN19: no goto ----------------------------------------------------------------------------
+  - id: lang/dotnet#DN19
+    text: Avoid unstructured control flow (goto).
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Express control flow with loops, `break`/`continue`, early return, or pattern-matched `switch`
+      expressions. Do not use `goto` (the rare `switch`-fallthrough case is a documented exception).
+    enforcement:
+      - {kind: structural_test, detail: "No in-box analyzer for goto (MS coding conventions only). Discharge with a custom Roslyn/structural check that fails on GotoStatementSyntax — structural_test is matrix-legal for absent (pr_review is NOT)"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/csharp/fundamentals/coding-style/coding-conventions",
+               quote: "Coding conventions are essential for maintaining code readability, consistency, and collaboration within a development team.", status: current}
+
+  # ---- DN20: prefer records / immutability ------------------------------------------------------
+  - id: lang/dotnet#DN20
+    text: Use records / readonly structs for value types (required members in C# 11+).
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [domain-model]
+    guidance: >
+      Model value-like domain types as `record` / `readonly record struct` with `init`-only or
+      `required` members, giving value equality and immutability by construction.
+    enforcement:
+      - {kind: pr_review, detail: "No in-box analyzer selects record-vs-class. convention mode permits pr_review; a custom analyzer flagging mutable public setters on domain types is the mechanical upgrade path (noted)"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/record",
+               quote: "While records can be mutable, they're primarily intended for supporting immutable data models.", status: current}
+
+  # ---- DN21: justified suppressions -------------------------------------------------------------
+  - id: lang/dotnet#DN21
+    text: Every #pragma warning disable / SuppressMessage is scoped and carries a justification.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Suppress narrowly and locally — re-enable with `#pragma warning restore`, or use
+      `[SuppressMessage(..., Justification = "why")]` with a non-empty justification. No file- or
+      project-wide blanket disables.
+    enforcement:
+      - {kind: pr_review, detail: "convention mode; reviewer confirms the justification. Mechanical upgrade: a custom analyzer requiring a non-empty Justification on SuppressMessage (noted). No in-box analyzer."}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/suppress-warnings",
+               quote: "This article covers the various ways you can suppress warnings from code analysis when you build your .NET app.", status: current}
+
+  # ---- DN22: prefer LibraryImport ---------------------------------------------------------------
+  - id: lang/dotnet#DN22
+    text: Use source-generated [LibraryImport] over [DllImport] for P/Invoke (.NET 7+).
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [external-call]
+    guidance: >
+      Declare native interop with `[LibraryImport("lib")]` on a `partial` method so marshalling is
+      source-generated and AOT-compatible, instead of the reflection-based `[DllImport]`.
+    enforcement:
+      - {kind: analyzer, detail: "SYSLIB1054 (Use LibraryImportAttribute instead of DllImportAttribute) — Interop P/Invoke source-generator diagnostic; NOT build-failing by default (informational/suggestion-level — it 'automatically alerts you' to migration sites), so set dotnet_diagnostic.SYSLIB1054.severity = error in .editorconfig to gate it"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/syslib-diagnostics/syslib1050-1069",
+               quote: "Use LibraryImportAttribute instead of DllImportAttribute to generate p/invoke marshalling code at compile time.", status: current}
+
+  # ---- DN23: pin analysis level -----------------------------------------------------------------
+  - id: lang/dotnet#DN23
+    text: Enable the .NET analyzers and pin AnalysisLevel to a current, deterministic rule set.
+    tier: core
+    guarantee_mode: present
+    applies_when: [configuration]
+    guidance: >
+      In Directory.Build.props set `<EnableNETAnalyzers>true</EnableNETAnalyzers>` and
+      `<AnalysisLevel>latest-Recommended</AnalysisLevel>` so the analyzer baseline is current and
+      reproducible across machines/CI. Concrete emission is owned by profiles/dotnet.
+    enforcement:
+      - {kind: host_wiring, detail: "MSBuild <EnableNETAnalyzers>true</EnableNETAnalyzers> + <AnalysisLevel>latest-Recommended</AnalysisLevel> — the meta-switch that turns the CA family on; the per-rule severities (this file) still need .editorconfig. Emitted by profiles/dotnet"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/overview",
+               quote: "analyzers inspect your C# or Visual Basic code for code quality and style issues", status: current}
+
+  - id: lang/dotnet#DN24
+    text: Parameterize all SQL; never build a query by concatenating untrusted input.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [query, persistence-write, user-input]
+    guidance: >
+      Use parameters (`cmd.Parameters.AddWithValue`, Dapper `new { id }`, or EF LINQ /
+      `FromSqlInterpolated`). Never string-concatenate user input into command text. EF raw-SQL uses
+      interpolated `FromSqlInterpolated`, not `FromSqlRaw($"...{input}...")`.
+    enforcement:
+      - {kind: analyzer, detail: "CA2100 (Review SQL queries for security vulnerabilities) — Security; off by default, severity = error. PLUS CA3001 (Review code for SQL injection vulnerabilities) — Security taint/dataflow; off by default, severity = error (requires the dataflow analyzers)"}
+    satisfies: ["secure-coding#SC4", "anti-patterns#A25"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca3001",
+               quote: "Review code for SQL injection vulnerabilities", status: current}
+
+  - id: lang/dotnet#DN25
+    text: Never use weak or broken cryptographic algorithms (MD5, SHA1, DES, RC2).
+    tier: core
+    guarantee_mode: absent
+    applies_when: [sensitive-data]
+    guidance: >
+      Use `SHA256`/`SHA512` for hashing, `Aes` (AES-GCM) for symmetric encryption, and a KDF
+      (`Rfc2898DeriveBytes` / `PBKDF2`, or Argon2 via a vetted package) for passwords. Never `MD5`,
+      `SHA1`, `DES`, `TripleDES` for security-sensitive work, or `RC2`.
+    enforcement:
+      - {kind: analyzer, detail: "CA5350 (Do Not Use Weak Cryptographic Algorithms — flags TripleDES/SHA1/RIPEMD160) and CA5351 (Do Not Use Broken Cryptographic Algorithms — flags MD5/DES/RC2) — Security; both off by default, bind severity = error in .editorconfig"}
+    satisfies: ["secure-coding#SC22"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca5351",
+               quote: "Do Not Use Broken Cryptographic Algorithms", status: current}
+
+  - id: lang/dotnet#DN26
+    text: Rethrow to preserve the original stack trace; never throw the caught exception object.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [error-path]
+    guidance: >
+      Use bare `throw;` to rethrow, or `throw new WrapperException("...", ex)` to wrap with the inner
+      preserved. Never `throw ex;` — it resets the stack trace to the rethrow site.
+    enforcement:
+      - {kind: analyzer, detail: "CA2200 (Rethrow to preserve stack details) — Usage; ON by default as Warning, so raise dotnet_diagnostic.CA2200.severity = error to make it build-failing"}
+    satisfies: ["anti-patterns#A30"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2200",
+               quote: "Rethrow to preserve stack details", status: current}
+
+  - id: lang/dotnet#DN27
+    text: Non-constant fields should not be visible (no mutable public/protected statics).
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [concurrency]
+    guidance: >
+      Make shared static state `const` or `static readonly` (and deeply immutable). A mutable
+      `public static` field is a thread-safety hazard and hidden global coupling — encapsulate behind
+      a method or an injected singleton instead.
+    enforcement:
+      - {kind: analyzer, detail: "CA2211 (Non-constant fields should not be visible) — Usage; ON by default as suggestion, raise dotnet_diagnostic.CA2211.severity = error to make it build-failing"}
+    satisfies: ["anti-patterns#A28"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2211",
+               quote: "Non-constant fields should not be visible", status: current}
+
+  - id: lang/dotnet#DN28
+    text: Follow the standard C# naming style (PascalCase types/members, _camelCase private fields).
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      PascalCase for types, methods, properties, and public members; camelCase for parameters/locals;
+      `_camelCase` for private instance fields; `I`-prefixed interfaces. Codify the exact scheme in the
+      committed .editorconfig naming section.
+    enforcement:
+      - {kind: analyzer, detail: "IDE1006 (Naming rule violation) — Style/Naming; needs EnforceCodeStyleInBuild=true PLUS dotnet_diagnostic.IDE1006.severity = error and the naming rules defined in .editorconfig (the per-rule 'severity' inside a naming rule is respected only in the IDE, not on build). Emitted by profiles/dotnet"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/naming-rules",
+               quote: "Naming rule violation", status: current}
+
+  - id: lang/dotnet#DN29
+    text: Enforce consistent code formatting in the build.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Commit a single .editorconfig formatting section (indentation, spacing, new-lines, `using`
+      ordering) and let the build enforce it, so formatting is never a review topic.
+    enforcement:
+      - {kind: analyzer, detail: "IDE0055 (Fix formatting) — Style/Formatting; needs <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild> PLUS dotnet_diagnostic.IDE0055.severity = error (severity must be warning or error to enforce on build). Emitted by profiles/dotnet"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0055",
+               quote: "Fix formatting", status: current}
+
+  - id: lang/dotnet#DN30
+    text: Log with a constant message template and named placeholders; never concatenate or interpolate the template.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [logging-telemetry]
+    guidance: >
+      Pass a constant message template plus arguments —
+      `_logger.LogInformation("Order {OrderId} placed for {UserId}", orderId, userId)` — so the log
+      keeps its structure and placeholder/value correlation. Never build the template with `+`
+      concatenation or `$"..."` interpolation; that loses the structured fields.
+    enforcement:
+      - {kind: analyzer, detail: "CA2254 (Template should be a static expression) — Usage; ON by default as suggestion, raise dotnet_diagnostic.CA2254.severity = error to make it build-failing"}
+    satisfies: ["principles#P29"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2254",
+               quote: "Template should be a static expression", status: current}
+
+  - id: lang/dotnet#DN31
+    text: Use compile-time LoggerMessage source generation on hot logging paths, not ILogger extension methods.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [logging-telemetry, hot-path]
+    guidance: >
+      For frequently hit log statements, define a `[LoggerMessage(Level = ..., Message = "...")]`
+      `partial` method instead of calling `_logger.LogInformation(...)` directly. The source generator
+      avoids boxing value types and re-parsing the template on every call.
+    enforcement:
+      - {kind: analyzer, detail: "CA1848 (Use the LoggerMessage delegates) — Performance; off by default, bind dotnet_diagnostic.CA1848.severity = error in .editorconfig"}
+    satisfies: ["performance#PF11"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1848",
+               quote: "Use the LoggerMessage delegates", status: current}
+
+  - id: lang/dotnet#DN32
+    text: Use PascalCase for structured-logging named placeholders.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [logging-telemetry]
+    guidance: >
+      Name log placeholders in PascalCase (`{OrderId}`, `{UserName}`), not camelCase, so they become
+      consistent property names in structured-log sinks and are queryable across aggregated logs.
+    enforcement:
+      - {kind: analyzer, detail: "CA1727 (Use PascalCase for named placeholders) — Naming; off by default, bind dotnet_diagnostic.CA1727.severity = error in .editorconfig"}
+    satisfies: ["principles#P29"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1727",
+               quote: "Use PascalCase for named placeholders", status: current}
+
+  - id: lang/dotnet#DN33
+    text: Use concrete types (not interface/abstract types) for locals, fields, and returns where a virtual/interface call is otherwise incurred.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [hot-path]
+    guidance: >
+      When a local, field, parameter, or return can be typed as the concrete class instead of an
+      interface/abstract base without changing behavior, do so — it removes virtual/interface dispatch
+      overhead and enables inlining. (Applies where the analyzer proves the dispatch is avoidable; keep
+      abstractions at genuine seams per principles#P19.)
+    enforcement:
+      - {kind: analyzer, detail: "CA1859 (Use concrete types when possible for improved performance) — Performance (.NET 8+); ON by default as suggestion, raise dotnet_diagnostic.CA1859.severity = error to make it build-failing"}
+    satisfies: ["performance#PF11"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1859",
+               quote: "Use concrete types when possible for improved performance", status: current}
+
+  - id: lang/dotnet#DN34
+    text: Never disable TLS server-certificate validation (no always-true ServerCertificateValidationCallback).
+    tier: core
+    guarantee_mode: absent
+    applies_when: [external-call, sensitive-data]
+    guidance: >
+      Do not assign a certificate-validation callback that returns `true` unconditionally. Validate
+      the chain (`sslPolicyErrors == SslPolicyErrors.None`), and if a custom trust is genuinely needed,
+      scope it to a specific host and pinned thumbprint — never globally accept every certificate.
+    enforcement:
+      - {kind: analyzer, detail: "CA5359 (Do not disable certificate validation) — Security; off by default, bind dotnet_diagnostic.CA5359.severity = error in .editorconfig"}
+    satisfies: ["secure-coding#SC30"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca5359",
+               quote: "Do not disable certificate validation", status: current}
+
+  - id: lang/dotnet#DN35
+    text: Never enable deprecated TLS/SSL protocol versions (SSL2/SSL3/TLS1.0/TLS1.1); let the OS negotiate.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [external-call, configuration]
+    guidance: >
+      Do not set `ServicePointManager.SecurityProtocol` or an `SslProtocols` value to `Ssl3`, `Tls`,
+      `Tls11` (or the raw integers). Prefer `SslProtocols.None` / `SecurityProtocolType` default so the
+      OS picks a current version (TLS 1.2/1.3).
+    enforcement:
+      - {kind: analyzer, detail: "CA5364 (Do not use deprecated security protocols — SecurityProtocolType) and CA5397 (Do not use deprecated SslProtocols values) — Security; both off by default, bind severity = error in .editorconfig"}
+    satisfies: ["secure-coding#SC30"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca5397",
+               quote: "Do not use deprecated SslProtocols values", status: current}
+
+  - id: lang/dotnet#DN36
+    text: Guard platform-specific APIs with an OS check; do not call an API unsupported on a target platform.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [external-call]
+    guidance: >
+      Wrap calls to `[SupportedOSPlatform]`/`[UnsupportedOSPlatform]`-annotated APIs in an
+      `OperatingSystem.IsWindows()` (etc.) guard, or annotate your own API to forward the requirement.
+      Do not call a platform-specific API from platform-neutral code paths.
+    enforcement:
+      - {kind: analyzer, detail: "CA1416 (Validate platform compatibility) — Interoperability; ON by default as WARNING for .NET 5+ (already build-failing under DN7 TreatWarningsAsErrors); keep an explicit dotnet_diagnostic.CA1416.severity = error for determinism. No neutral core maps cleanly (portability/reliability), so satisfies is omitted"}
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416",
+               quote: "Validate platform compatibility", status: current}
+
+  - id: lang/dotnet#DN37
+    text: Remove dead conditional code — conditions that always evaluate true/false and their unreachable branches.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Do not leave conditionals (null checks, comparisons) that dataflow analysis proves are always
+      `true` or always `false`, nor the unreachable branch they guard. Delete the dead branch or fix
+      the logic that made it unreachable.
+    enforcement:
+      - {kind: analyzer, detail: "CA1508 (Avoid dead conditional code) — Maintainability; off by default, bind dotnet_diagnostic.CA1508.severity = error. NOTE: performs expensive dataflow analysis and can increase build time; scope via .editorconfig if needed"}
+    satisfies: ["principles#P7"]
+    citation: {tier: T1, kind: docs, url: "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1508",
+               quote: "Avoid dead conditional code", status: current}

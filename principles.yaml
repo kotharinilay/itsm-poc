@@ -1,0 +1,500 @@
+version: 1
+category: principles
+entries:
+
+  - id: principles#P1
+    text: A module has one reason to change; group what changes together and separate what changes for different reasons.
+    tier: core
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Give each class/module a single axis of change tied to one actor or stakeholder. When a type
+      accumulates unrelated responsibilities (persistence + formatting + policy), split it into
+      collaborators behind narrow interfaces. Keep methods short and functions doing one thing;
+      route cross-cutting concerns (logging, transactions) through decorators/middleware, not inline.
+    enforcement:
+      - {kind: analyzer, detail: "fail when a type/method exceeds size, cyclomatic-complexity, or low-cohesion (LCOM) thresholds as a proxy for too-many-responsibilities"}
+      - {kind: pr_review, detail: "reviewer confirms the module has a single reason to change beyond what metrics can prove"}
+    citation: {tier: T2, kind: reference, url: "https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html",
+               quote: "Each software module should have one and only one reason to change.", status: current}
+
+  - id: principles#P2
+    text: Software entities are open for extension but closed for modification; add behavior via new code, not edits to tested code.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [public-contract-change]
+    guidance: >
+      Introduce new behavior by adding a new implementation of an existing abstraction (a new strategy,
+      handler, or subtype) rather than editing a switch/if-ladder or a stable, tested class. Design
+      variation points as interfaces or abstract seams up front where variation is expected; keep the
+      stable core untouched when requirements grow.
+    enforcement:
+      - {kind: pr_review, detail: "reviewer confirms new behavior was added through an extension seam rather than by modifying stable, tested code"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle",
+               quote: "software entities (classes, modules, functions, etc.) should be open for extension, but closed for modification", status: current}
+
+  - id: principles#P3
+    text: Subtypes must be substitutable for their base types without breaking a caller's correctness expectations.
+    tier: extended
+    guarantee_mode: behavioral
+    applies_when: [domain-model]
+    guidance: >
+      A subtype must honor the base type's contract: do not strengthen preconditions, weaken
+      postconditions, throw where the base does not, or return sentinels the base forbids. If a subtype
+      cannot fulfill the contract, it is not a subtype — model it as a sibling. Write one contract test
+      suite against the base abstraction and run it against every implementation.
+    enforcement:
+      - {kind: integration_test, detail: "a shared behavioral contract suite for each abstraction is executed against every implementation; substitutability is a runtime property no structural proxy can discharge"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Liskov_substitution_principle",
+               quote: "objects of type T in a program may be replaced with objects of type S without altering any of the desirable properties of that program", status: current}
+
+  - id: principles#P4
+    text: No client is forced to depend on methods it does not use; prefer many small role-focused interfaces over one fat interface.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [public-contract-change]
+    guidance: >
+      Define interfaces around a single caller's role, not around an implementation's full surface.
+      When one consumer uses only a slice of a wide interface, extract that slice into its own
+      interface and depend on it. Avoid "header" interfaces that mirror every public method of a class.
+    enforcement:
+      - {kind: analyzer, detail: "flag interfaces whose member count exceeds a threshold and implementations that leave many members unused as a proxy for a fat interface"}
+      - {kind: pr_review, detail: "reviewer confirms each interface is scoped to one client role"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Interface_segregation_principle",
+               quote: "no code should be forced to depend on methods it does not use", status: current}
+
+  - id: principles#P5
+    text: High-level policy depends on abstractions, not on infrastructure detail; both depend on abstractions.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [domain-model, cross-module-write]
+    guidance: >
+      Domain/application code references only interfaces it owns; concrete infrastructure (persistence,
+      HTTP, messaging, vendor SDK types) is injected and lives at the outer edge. Never import an
+      infrastructure namespace/package into a domain type. Define the port (interface) in the inner
+      layer and implement the adapter in the outer layer, wiring at composition root.
+    enforcement:
+      - {kind: arch_test, detail: "fail the build when a domain/application module references an infrastructure namespace or a concrete adapter type; dependencies must point inward toward abstractions"}
+    citation: {tier: T2, kind: reference, url: "https://martinfowler.com/articles/injection.html",
+               quote: "I can abstract my use of these components by talking to them through an interface (and using an adapter if the component isn't designed with an interface in mind).", status: current}
+
+  - id: principles#P6
+    text: Every piece of knowledge has one authoritative representation; do not duplicate a concept across the codebase.
+    tier: core
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Represent each business rule, constant, or schema once and reference it. Before copying a block,
+      name the shared concept and extract it — but only within a module boundary and only at the
+      rule-of-three: two occurrences may stay; a forced abstraction over an unnamed concept is worse
+      than duplication. Do not DRY across module/service boundaries (that recouples them).
+    enforcement:
+      - {kind: analyzer, detail: "a copy/paste duplication detector flags repeated token/AST blocks above a threshold"}
+      - {kind: pr_review, detail: "reviewer confirms semantic (non-textual) duplication of a rule is consolidated and that no premature cross-boundary abstraction was introduced"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Don%27t_repeat_yourself",
+               quote: "Every piece of knowledge must have a single, unambiguous, authoritative representation within a system", status: current}
+
+  - id: principles#P7
+    text: Prefer the simplest design that satisfies the requirement; complexity must be justified.
+    tier: core
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Reach for the plainest construct first — a function before a class, a class before a framework,
+      a direct call before an event. Cap nesting and branching; flatten with early returns and guard
+      clauses. Do not add configuration knobs, indirection layers, or generality that the current
+      requirement does not exercise.
+    enforcement:
+      - {kind: analyzer, detail: "fail when cyclomatic/cognitive complexity or nesting depth exceeds a threshold as a proxy for accidental complexity"}
+      - {kind: pr_review, detail: "reviewer confirms a simpler design would not have met the requirement"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/KISS_principle",
+               quote: "KISS implies that simplicity should be a design goal", status: current}
+
+  - id: principles#P8
+    text: Do not build a capability until a current requirement needs it.
+    tier: core
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Implement only what the accepted requirement demands. Do not add speculative parameters,
+      extension points, config flags, or "future-proof" abstractions with no present caller. Delete
+      dead/unreachable code and unused public surface rather than keeping it "just in case."
+    enforcement:
+      - {kind: analyzer, detail: "flag unreachable code and unused non-public members as a proxy for speculative capability"}
+      - {kind: pr_review, detail: "reviewer confirms each new abstraction/parameter has a present caller and is not speculative"}
+    citation: {tier: T2, kind: reference, url: "https://martinfowler.com/bliki/Yagni.html",
+               quote: "It's a statement that some capability we presume our software needs in the future should not be built now because 'you aren't gonna need it'.", status: current}
+
+  - id: principles#P9
+    text: Tell an object what to do rather than asking it for its data and acting on that data elsewhere.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [domain-model]
+    guidance: >
+      Put behavior next to the data it operates on. Instead of pulling fields out of an object and
+      making decisions about them in a caller, expose an intention-revealing method on the object that
+      encapsulates the decision. Avoid long getter chains feeding external conditionals (feature envy).
+    enforcement:
+      - {kind: lint, detail: "flag feature-envy access patterns and repeated external getter-then-decide sequences on the same object"}
+      - {kind: pr_review, detail: "reviewer confirms decisions live with the data rather than in a distant caller"}
+    citation: {tier: T2, kind: reference, url: "https://martinfowler.com/bliki/TellDontAsk.html",
+               quote: "Rather than asking an object for data and acting on that data, we should instead tell an object what to do.", status: current}
+
+  - id: principles#P10
+    text: Favor object composition over class inheritance for reuse and variation.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [domain-model]
+    guidance: >
+      Reuse behavior by holding a collaborator and delegating, not by extending a base class. Reserve
+      inheritance for genuine substitutable is-a relationships (and see P3); model has-a and
+      capabilities via composition and interfaces. Avoid deep inheritance hierarchies and protected
+      mutable state shared with subclasses.
+    enforcement:
+      - {kind: analyzer, detail: "flag inheritance depth beyond a threshold and inheritance used purely for code reuse across an is-a boundary"}
+      - {kind: pr_review, detail: "reviewer confirms inheritance encodes a real substitutable relationship rather than convenience reuse"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Composition_over_inheritance",
+               quote: "a common design pattern that tries to achieve code reuse without requiring inheritance", status: current}
+
+  - id: principles#P11
+    text: Surface errors and invalid state at the earliest point they can be detected.
+    tier: core
+    guarantee_mode: present
+    applies_when: [error-path, user-input]
+    guidance: >
+      Validate arguments and preconditions at the top of a function/boundary with guard clauses and
+      fail immediately on violation; do not let bad input propagate to be re-checked deeper. Prefer
+      non-nullable parameters and typed inputs so absence is caught at the boundary rather than as a
+      null dereference later.
+    enforcement:
+      - {kind: analyzer, detail: "nullability/precondition analysis requires arguments be validated (or made non-nullable) at the entry point before use"}
+      - {kind: structural_test, detail: "assert boundary types/handlers carry entry-point guards for their preconditions"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Fail-fast_system",
+               quote: "a fail-fast system is one that immediately reports at its interface any condition that is likely to indicate a failure", status: current}
+
+  - id: principles#P12
+    text: A method talks only to its immediate collaborators, not to objects reached by navigating an object graph.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Call methods on your own fields, parameters, and objects you create — not on the return values of
+      those (no a.getB().getC().doThing() train wrecks). If you need something deep, expose a method on
+      the immediate collaborator that returns it or does the work, keeping knowledge of the graph local.
+    enforcement:
+      - {kind: lint, detail: "flag method-call chains that navigate beyond the immediate collaborator (train-wreck / graph-navigation access)"}
+      - {kind: arch_test, detail: "assert no method call navigates beyond its immediate collaborator"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Law_of_Demeter",
+               quote: "Each unit should only talk to its friends; don't talk to strangers.", status: current}
+
+  - id: principles#P13
+    text: Distinct concerns live in distinct modules or layers so each can be reasoned about and changed independently.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [cross-module-write, domain-model]
+    guidance: >
+      Assign one concern per module/layer (e.g. presentation, application, domain, infrastructure) and
+      route interaction through explicit boundaries. Do not mix transport, business rules, and
+      persistence in one unit. A change to one concern should not force edits across unrelated layers.
+    enforcement:
+      - {kind: arch_test, detail: "fail the build when a module reaches across a declared layer/concern boundary the layering rules forbid"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Separation_of_concerns",
+               quote: "a complex problem should be divided into distinct concerns — aspects or issues — that can be analyzed, addressed or managed individually", status: current}
+
+  - id: principles#P14
+    text: Behave the way a reasonable user of the code expects; avoid surprising side effects and inconsistent conventions.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Make names describe exactly what a member does; do not hide mutation, I/O, or state change behind
+      an innocuous-looking accessor. Keep parameter order, return conventions, and error signaling
+      consistent with the rest of the codebase and the platform's idioms so callers are not caught out.
+    enforcement:
+      - {kind: pr_review, detail: "reviewer confirms behavior matches the name/signature and follows established conventions; no hidden or surprising side effects"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Principle_of_least_astonishment",
+               quote: "a component of a system should behave in a way that most users will expect it to behave, and therefore not astonish or surprise users", status: current}
+
+  - id: principles#P15
+    text: A method either returns data or changes observable state, never both.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Split commands from queries: a query returns a value and is side-effect free and safely
+      repeatable; a command changes state and returns void (or only a status/id). Do not mutate state
+      inside a getter or return domain results from a state-changing operation, so callers can read
+      without fear of side effects.
+    enforcement:
+      - {kind: analyzer, detail: "flag members that both return a value and mutate observable state where the stack affords purity/side-effect analysis"}
+      - {kind: pr_review, detail: "reviewer confirms queries are side-effect free and commands do not double as queries"}
+    citation: {tier: T2, kind: reference, url: "https://martinfowler.com/bliki/CommandQuerySeparation.html",
+               quote: "Queries: Return a result and do not change the observable state of the system (are free of side effects).", status: current}
+
+  - id: principles#P16
+    text: All statements in a function operate at a single level of abstraction.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Do not mix high-level policy with low-level detail in one function. If a function orchestrates
+      steps, each step is a well-named call at the same altitude; push byte/loop/parsing detail down
+      into helpers. A reader should be able to follow one function as a short paragraph of intent.
+    enforcement:
+      - {kind: analyzer, detail: "flag functions with excessive length or nesting depth as a proxy for mixed abstraction levels"}
+      - {kind: pr_review, detail: "reviewer confirms statements in a function sit at one abstraction level"}
+    citation: {tier: T3, kind: reference, url: "https://principles-wiki.net/principles:single_level_of_abstraction",
+               quote: "Each method should be written in terms of a single level of abstraction.", status: current}
+
+  - id: principles#P17
+    text: Grant each component the minimum rights, access, and visibility it needs to do its job.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Default every type, member, and field to the most restrictive access modifier that still works
+      (private/internal before public; sealed/final unless designed for extension); widen only on
+      demonstrated need. Scope credentials, tokens, and infrastructure permissions to the narrowest
+      resource and action set. Never grant broad/wildcard rights for convenience.
+    enforcement:
+      - {kind: analyzer, detail: "flag public/exported members and mutable public fields that could be more restrictive, and non-sealed types not designed for extension"}
+      - {kind: arch_test, detail: "fail when a component declares access, roles, or resource scopes broader than its declared need"}
+    citation: {tier: T1, kind: standard, url: "https://csrc.nist.gov/glossary/term/least_privilege",
+               quote: "The principle that a security architecture is designed so that each entity is granted the minimum system resources and authorizations that the entity needs to perform its function.", status: current}
+
+  - id: principles#P18
+    text: Hide implementation behind a stable interface and isolate the parts most likely to change.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Expose intent through a narrow public interface and keep data and mechanism private. No public
+      mutable fields; expose behavior, not internal representation. Group volatile design decisions
+      (formats, algorithms, vendor specifics) behind a module boundary so callers are insulated when
+      they change.
+    enforcement:
+      - {kind: analyzer, detail: "flag public/exported mutable fields and leaked internal types on public signatures; require access through the declared interface"}
+      - {kind: arch_test, detail: "fail when callers reference a module's internal implementation types instead of its published interface"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Information_hiding",
+               quote: "the principle of segregation of the design decisions in a computer program that are most likely to change", status: current}
+
+  - id: principles#P19
+    text: Depend on abstractions for collaborators, programming to an interface rather than a concrete implementation.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [domain-model, external-call]
+    guidance: >
+      Type fields, parameters, and return values of collaborators as the interface/abstract type, not
+      the concrete class, so implementations are substitutable and testable with fakes. Construct
+      concrete types only at the composition root; the rest of the code names only abstractions.
+    enforcement:
+      - {kind: analyzer, detail: "flag collaborator dependencies declared as concrete types where an owned abstraction exists"}
+      - {kind: arch_test, detail: "fail when a module constructs or names a concrete collaborator outside the composition root"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Design_Patterns",
+               quote: "Program to an interface, not an implementation.", status: current}
+
+  - id: principles#P20
+    text: Use the type system so invalid data cannot be constructed; parse input into precise types at the boundary.
+    tier: core
+    guarantee_mode: present
+    applies_when: [domain-model, user-input, serialization]
+    guidance: >
+      At each boundary, parse raw input once into a domain type that can only hold valid values (value
+      objects, non-empty collections, closed unions/enums, smart constructors) and pass that type
+      inward — do not pass primitives and re-validate. Prefer the most precise type that makes illegal
+      combinations unrepresentable rather than validating with scattered runtime checks.
+    enforcement:
+      - {kind: structural_test, detail: "assert boundary DTOs are parsed into constrained domain types and that domain constructors reject invalid state; illegal states have no constructor path"}
+      - {kind: analyzer, detail: "nullability/exhaustiveness analysis flags unparsed primitives crossing into the domain and non-exhaustive handling of closed types"}
+    citation: {tier: T2, kind: reference, url: "https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/",
+               quote: "Use a data structure that makes illegal states unrepresentable. Model your data using the most precise data structure you reasonably can.", status: current}
+
+  - id: principles#P21
+    text: Operations that may be retried are designed to be idempotent so repeated execution has the same effect as one.
+    tier: core
+    guarantee_mode: behavioral
+    applies_when: [http-endpoint, persistence-write, event-consume, external-call]
+    guidance: >
+      For any operation a client or broker may retry, make the intended effect independent of how many
+      times it runs: accept an idempotency key or use a natural unique key, upsert instead of blind
+      insert, and de-duplicate consumed events. Reserve non-idempotent creates for cases with a genuine
+      dedupe guarantee upstream.
+    enforcement:
+      - {kind: integration_test, detail: "execute the operation two or more times with the same input and assert a single net effect (one row, one side effect); idempotency is a runtime property only an execution test discharges"}
+    citation: {tier: T1, kind: standard, url: "https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2.2",
+               quote: "the intended effect on the server of multiple identical requests with that method is the same as the effect for a single such request", status: current}
+
+  - id: principles#P22
+    text: Leave every module you touch at least as clean as you found it.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      When editing existing code, make the small adjacent improvement the change invites — a clearer
+      name, a removed dead branch, a fixed warning — without scope-creeping. Never increase the count
+      of analyzer/lint warnings in a file you modify; drive it down.
+    enforcement:
+      - {kind: analyzer, detail: "a warning-count baseline ratchet fails the build if a modified file introduces net-new analyzer/lint warnings"}
+      - {kind: pr_review, detail: "reviewer confirms touched code was left cleaner and no gratuitous unrelated churn was added"}
+    citation: {tier: T2, kind: reference, url: "https://github.com/97-things/97-things-every-programmer-should-know/blob/master/en/thing_08/README.md",
+               quote: "Always leave the campground cleaner than you found it.", status: current}
+
+  - id: principles#P23
+    text: Provide sensible defaults so a developer configures only the exceptions, not the norm.
+    tier: extended
+    guarantee_mode: convention
+    applies_when: [always]
+    guidance: >
+      Follow the framework's and codebase's naming, folder, and wiring conventions so components are
+      discovered and wired by default with no explicit configuration. Introduce explicit configuration
+      only where behavior must deviate from the convention; do not restate defaults.
+    enforcement:
+      - {kind: lint, detail: "naming and project-layout rules enforce the conventions defaults rely on (file/type/member naming, folder placement)"}
+      - {kind: pr_review, detail: "reviewer confirms explicit configuration is present only where deviating from the established convention"}
+    citation: {tier: T2, kind: reference, url: "https://rubyonrails.org/doctrine",
+               quote: "You're not a beautiful and unique snowflake. By giving up vain individuality, you can leapfrog the toils of mundane decisions, and make faster progress in areas that really matter.", status: current}
+
+  - id: principles#P24
+    text: Group strongly related responsibilities together and minimize dependencies between modules.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Keep members that change and are used together in the same module (high cohesion); expose a small
+      surface and depend on few other modules through narrow interfaces (low coupling). Avoid a module
+      that reaches into many others or is reached into by many; break bidirectional and cyclic
+      dependencies.
+    enforcement:
+      - {kind: analyzer, detail: "flag low cohesion (LCOM) and high efferent/afferent coupling metrics beyond thresholds"}
+      - {kind: arch_test, detail: "fail on dependency cycles between modules and on fan-out exceeding the declared limit"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Coupling_(computer_programming)",
+               quote: "Low coupling often correlates with high cohesion, and vice versa.", status: current}
+
+  - id: principles#P25
+    text: Data is immutable by default; expose mutation only where a mutable model is genuinely required.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [domain-model, concurrency]
+    guidance: >
+      Model domain and DTO types as immutable value objects — set all state at construction, expose
+      read-only members, and return new instances for changes rather than mutating in place. Reserve
+      mutable state for a deliberately-scoped, single-threaded owner. Immutable data is safe to share
+      across threads and cannot drift into an invalid state after construction (reinforces P20).
+    enforcement:
+      - {kind: analyzer, detail: "flag mutable public/exported fields and settable properties on domain/DTO types; require read-only/immutable declarations where the stack affords them"}
+      - {kind: structural_test, detail: "assert domain value types expose no post-construction mutators"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Immutable_object",
+               quote: "an immutable object (unchangeable object) is an object whose state cannot be modified after it is created.", status: current}
+
+  - id: principles#P26
+    text: Dependencies are explicit and injected; components never reach out to hidden global state or a service locator.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [always]
+    guidance: >
+      Declare every collaborator a component needs as a constructor parameter (or equivalent explicit
+      input) so its dependencies are visible and substitutable in tests. Do not resolve services from a
+      static container/service locator, ambient singleton, or mutable global inside business code;
+      resolve and wire only at the composition root.
+    enforcement:
+      - {kind: analyzer, detail: "flag access to mutable static/global state and service-locator resolution calls inside business code"}
+      - {kind: arch_test, detail: "fail when a module outside the composition root resolves a dependency from a container/locator instead of receiving it as an injected input"}
+    citation: {tier: T2, kind: reference, url: "https://martinfowler.com/articles/injection.html",
+               quote: "I can abstract my use of these components by talking to them through an interface (and using an adapter if the component isn't designed with an interface in mind).", status: current}
+
+  - id: principles#P27
+    text: Configuration and environment-specific values live outside the code and are read from the environment, never hardcoded.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [configuration, sensitive-data]
+    guidance: >
+      Keep no environment-specific literal — connection string, hostname/URL, port, credential, API key,
+      feature toggle — inline in source. Read every such value from the injected configuration abstraction
+      (environment variables or a config provider) and pass it inward from the composition root. The same
+      build artifact must run in every environment with only its configuration changing.
+    enforcement:
+      - {kind: analyzer, detail: "flag hardcoded connection strings, URLs, credentials/secrets, and environment-specific literals in source as configuration that must be externalized"}
+      - {kind: arch_test, detail: "fail when business/domain code reads configuration directly instead of receiving it from the injected configuration abstraction wired at the composition root"}
+    citation: {tier: T2, kind: reference, url: "https://12factor.net/config",
+               quote: "The twelve-factor app stores config in environment variables", status: current}
+
+  - id: principles#P28
+    text: Services hold no client or session state between requests; durable state lives in a backing store.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [http-endpoint, concurrency]
+    guidance: >
+      Treat each request or message as self-contained: do not stash per-client state in instance fields of a
+      long-lived (singleton/shared) handler, in mutable module/static variables, or in in-process memory a
+      later request expects to find. Persist anything that must outlive the request to a datastore, cache, or
+      the request-scoped context so any instance can serve any request.
+    enforcement:
+      - {kind: analyzer, detail: "flag mutable instance/static fields on shared-lifetime service/handler types that accumulate per-request state"}
+      - {kind: arch_test, detail: "fail when a request-handling component declares shared mutable state instead of persisting it to a backing resource or request scope"}
+    citation: {tier: T2, kind: reference, url: "https://12factor.net/processes",
+               quote: "Twelve-factor processes are stateless and share-nothing.", status: current}
+
+  - id: principles#P29
+    text: Diagnostic output is emitted as an event stream through the logging abstraction, never written directly to files or the console.
+    tier: extended
+    guarantee_mode: absent
+    applies_when: [logging-telemetry]
+    guidance: >
+      Emit logs, metrics, and traces through the injected logging/telemetry abstraction and let the execution
+      environment route and store them. Do not open log files, manage rotation, or write diagnostics with raw
+      console/stdout print calls from application code. Prefer structured events with stable keys over
+      interpolated free-text messages.
+    enforcement:
+      - {kind: analyzer, detail: "flag raw console/stdout writes and direct log-file handling in application code as diagnostics that must go through the logging abstraction"}
+      - {kind: arch_test, detail: "fail when application modules reference file-system or console I/O for diagnostics instead of the injected logging/telemetry port"}
+    citation: {tier: T2, kind: reference, url: "https://12factor.net/logs",
+               quote: "A twelve-factor app never concerns itself with routing or storage of its output stream.", status: current}
+
+  - id: principles#P30
+    text: Every caught error is handled, translated, or rethrown with context; errors are never silently swallowed.
+    tier: core
+    guarantee_mode: absent
+    applies_when: [error-path]
+    guidance: >
+      Never write an empty or comment-only catch/except block, and never discard a returned error or result
+      status. On catching, do exactly one of: recover meaningfully, translate to a domain-appropriate error
+      and rethrow, or rethrow preserving the original cause and stack. Do not catch a broad/base error type
+      to mask failures; log-and-continue only where continuing is a deliberate, documented choice.
+    enforcement:
+      - {kind: analyzer, detail: "flag empty or comment-only catch/except blocks, swallowed exceptions, and ignored error return values"}
+      - {kind: lint, detail: "forbid catching the broadest error type without rethrow and forbid discarding error-typed results"}
+      - {kind: arch_test, detail: "assert no catch or except block is empty, comment-only, or discards an error-typed result"}
+    citation: {tier: T1, kind: standard, url: "https://cwe.mitre.org/data/definitions/390.html",
+               quote: "The product detects a specific error, but takes no actions to handle the error.", status: current}
+
+  - id: principles#P31
+    text: Resources with a release obligation are acquired and released deterministically within a bounded scope, never leaked.
+    tier: extended
+    guarantee_mode: present
+    applies_when: [external-call, persistence-write]
+    guidance: >
+      Acquire any resource that must be released — connection, file/stream handle, lock, socket, cursor —
+      inside a scoped construct that guarantees release on every exit path, including exceptions (a
+      using/try-with-resources/defer-style block or the language's disposal contract). Do not rely on the
+      garbage collector or finalizers for timely release, and release in reverse order of acquisition.
+    enforcement:
+      - {kind: analyzer, detail: "flag disposable/closable resources not released on all paths and require a scoped acquire/release construct"}
+      - {kind: structural_test, detail: "assert that types owning released resources expose and honor a disposal/close contract used within a bounded scope"}
+    citation: {tier: T1, kind: standard, url: "https://cwe.mitre.org/data/definitions/772.html",
+               quote: "The product does not release a resource after its effective lifetime has ended, i.e., after the resource is no longer needed.", status: current}
+
+  - id: principles#P32
+    text: Public operations declare and enforce their preconditions, postconditions, and invariants as an explicit contract.
+    tier: extended
+    guarantee_mode: present
+    applies_when: [public-contract-change, domain-model]
+    guidance: >
+      Specify each public operation's contract and enforce it in code: check preconditions at entry (see
+      P11), assert postconditions on the returned result, and maintain a class/aggregate invariant that holds
+      before and after every public call. Express contracts as executable checks or the contract construct the
+      stack affords, so violations surface as failures rather than silent corruption.
+    enforcement:
+      - {kind: structural_test, detail: "assert public operations verify their declared postconditions and that types expose an invariant check exercised across public calls"}
+      - {kind: integration_test, detail: "exercise each operation against its contract, asserting postconditions hold and invariants are preserved through representative call sequences"}
+    citation: {tier: T2, kind: reference, url: "https://en.wikipedia.org/wiki/Design_by_contract",
+               quote: "software designers should define formal, precise and verifiable interface specifications for software components", status: current}

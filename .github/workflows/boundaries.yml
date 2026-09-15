@@ -1,0 +1,27 @@
+name: boundaries
+
+# The cross-deployable rule (ADR-0001). No compiler catches this, because there is nothing to
+# compile across the boundary - this workflow is what catches it. REQUIRED CHECK.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    name: no cross-deployable dependency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boundary check
+        run: bash build/scripts/check-boundaries.sh
+
+      # Proves the guard still fails on a planted violation. A guard nobody has seen fail is a
+      # guard nobody knows works - and this one silently stopped working once already.
+      - name: Verify the guard fails correctly
+        run: bash build/scripts/verify-boundary-guard.sh

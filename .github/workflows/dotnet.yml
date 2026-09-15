@@ -1,0 +1,50 @@
+name: dotnet
+
+# Constitution §Quality gate: build, tests, format, analysis all pass or the change does not merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'dotnet/**'
+      - '.github/workflows/dotnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  build-test:
+    name: build, format, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dotnet
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Synthia.sln
+
+      # -warnaserror is the gate. Analyzers run at latest-Recommended with
+      # EnforceCodeStyleInBuild, so a style or analysis finding fails here.
+      - name: Build (warnings as errors)
+        run: dotnet build Synthia.sln --no-restore -warnaserror
+
+      - name: Format check
+        run: dotnet format Synthia.sln --verify-no-changes --no-restore
+
+      # Runs every suite under dotnet/tests/ — unit today; architecture, authorization,
+      # tenant-isolation, contract and security suites land in Phases 2, 5 and 11 and are
+      # picked up here with no workflow change.
+      - name: Test
+        run: dotnet test Synthia.sln --no-build --verbosity normal

@@ -1,0 +1,49 @@
+name: desktop
+
+# The Electron security suite. Every assertion corresponds to a control the constitution states
+# unconditionally, and each fails when its switch is flipped - that is the gate
+# (constitution Principle VII, plan Stage 4).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  security-suite:
+    name: typecheck, security suite, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc -p tsconfig.json --noEmit
+
+      # Asserts configuration rather than driving a window, so it runs on a machine with no
+      # display. A security control that needs a real window is one CI skips.
+      - name: Security suite
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build

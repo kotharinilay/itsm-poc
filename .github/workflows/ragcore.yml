@@ -1,0 +1,51 @@
+name: ragcore
+
+# Constitution §Python baseline: CI runs strict type checking and pytest as FAILING steps.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'ragcore/**'
+      - '.github/workflows/ragcore.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  lint-type-test:
+    name: ruff, mypy, pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ragcore
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ragcore/uv.lock
+
+      # --frozen: the lockfile is authoritative. A dependency change that was not committed
+      # fails here rather than resolving to something nobody reviewed.
+      - name: Sync (locked)
+        run: uv sync --all-groups --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      # The Ruff formatter is authoritative (constitution §Python baseline).
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: mypy --strict
+        run: uv run mypy
+
+      - name: pytest
+        run: uv run pytest -q

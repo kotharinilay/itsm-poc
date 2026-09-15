@@ -1,0 +1,23 @@
+# Normalise line endings so a Windows checkout does not break Linux CI.
+* text=auto eol=lf
+
+# Shell scripts MUST be LF — CRLF makes them unrunnable in CI containers.
+*.sh text eol=lf
+build/scripts/* text eol=lf
+
+# Windows-only files keep CRLF.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Never normalise binaries.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Lock files are generated: collapse diffs in review.
+uv.lock linguist-generated=true
+package-lock.json linguist-generated=true

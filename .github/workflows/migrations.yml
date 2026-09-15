@@ -1,0 +1,61 @@
+name: migrations
+
+# ADR-0003: Alembic owns every migration. Migrations run as a gated job before revision
+# activation, NEVER at application startup - Container Apps runs multiple replicas and scales to
+# zero, so anything at startup runs concurrently, repeatedly, at unpredictable times.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'ragcore/migrations/**'
+      - 'ragcore/src/ragcore/persistence/**'
+      - '.github/workflows/migrations.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  alembic:
+    name: single head, upgrade, downgrade
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ragcore
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: synthia_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ragcore/uv.lock
+
+      - name: Sync (locked)
+        run: uv sync --all-groups --frozen
+
+      # pytest-alembic asserts single head, upgrade from base, models match DDL, and that
+      # EVERY downgrade succeeds. Alembic is initialised at Stage 7 (T082).
+      - name: Migration tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/synthia_test
+        run: |
+          if [ -f alembic.ini ]; then
+            uv run pytest --test-alembic -q
+          else
+            echo "::notice::Alembic is initialised at Stage 7 (T082) - no migrations to test yet"
+          fi

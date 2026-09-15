@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Approvals/Synthia.Modules.Approvals.csproj" />
+  </ItemGroup>
+
+</Project>

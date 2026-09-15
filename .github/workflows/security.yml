@@ -1,0 +1,57 @@
+name: security
+
+# Constitution §Secrets: no credential in source, in tests, or in committed local configuration.
+# Also runs the dependency audits that caught a vulnerable OpenTelemetry and an out-of-support
+# Electron during Stage 1 - both were found by a gate, not by review.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a newly published advisory against an unchanged dependency still surfaces.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependencies:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # NU1902/NU1903 are already warnings-as-errors in the build; this reports them explicitly.
+      - name: .NET vulnerable packages
+        working-directory: dotnet
+        run: dotnet list package --vulnerable --include-transitive
+
+      - name: Web audit
+        working-directory: apps/web
+        run: npm audit --audit-level=high
+
+      - name: Desktop audit
+        working-directory: apps/desktop
+        run: npm audit --audit-level=high

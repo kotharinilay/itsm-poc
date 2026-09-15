@@ -1,0 +1,80 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "paths": {
+      "customer-features": ["./dist/customer-features"],
+      "design-system": ["./dist/design-system"],
+      "platform-core": ["./dist/platform-core"],
+      "staff-features": ["./dist/staff-features"]
+    },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve"
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "typeCheckHostBindings": true,
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./projects/customer-portal/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/customer-portal/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/staff-portal/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/staff-portal/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/desktop-renderer/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/desktop-renderer/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/customer-features/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/customer-features/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/staff-features/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/staff-features/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/platform-core/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/platform-core/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/design-system/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/design-system/tsconfig.spec.json"
+    }
+  ]
+}

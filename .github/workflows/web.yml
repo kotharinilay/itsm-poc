@@ -1,0 +1,63 @@
+name: web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  lint-build-test:
+    name: lint, build, test, accessibility
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Enforces the library boundaries in plan §Dependency direction — a customer library
+      # importing a staff library is an error here, not a review note.
+      - name: Lint
+        run: npx eslint .
+
+      - name: Format check
+        run: npx prettier --check .
+
+      - name: Type check
+        run: npx tsc -b --pretty
+
+      # Libraries build before applications: the workspace resolves them from dist/.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # WCAG 2.2 AA on all three surfaces, no best-effort surface (spec FR-SURF-010).
+      # The sweep lands with the journeys it measures, in Phase 3 (T049).
+      - name: Accessibility sweep
+        run: |
+          if npm run | grep -q 'test:a11y'; then
+            npm run test:a11y
+          else
+            echo "::notice::axe-core sweep arrives with T049 (Phase 3) - no journeys to sweep yet"
+          fi

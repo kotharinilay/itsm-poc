@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="../Synthia.Contracts/Synthia.Contracts.csproj" />
+    <ProjectReference Include="../Synthia.Observability/Synthia.Observability.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Sessions/Synthia.Modules.Sessions.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Work/Synthia.Modules.Work.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Approvals/Synthia.Modules.Approvals.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Governance/Synthia.Modules.Governance.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Audit/Synthia.Modules.Audit.csproj" />
+    <ProjectReference Include="../Modules/Synthia.Modules.Tenancy/Synthia.Modules.Tenancy.csproj" />
+  </ItemGroup>
+
+</Project>

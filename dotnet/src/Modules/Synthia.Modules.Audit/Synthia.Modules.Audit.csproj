@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Synthia.Contracts/Synthia.Contracts.csproj" />
+    <ProjectReference Include="../../Synthia.Persistence/Synthia.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>

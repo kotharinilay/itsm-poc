@@ -1,0 +1,61 @@
+# Build artifacts MUST NOT be committed (constitution §Commits and versioning).
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coverlet.json
+coverage*.xml
+coverage*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+
+# Node / Angular / Electron
+node_modules/
+apps/web/dist/
+apps/web/.angular/
+apps/desktop/dist/
+apps/desktop/out/
+apps/desktop/release/
+*.tsbuildinfo
+.eslintcache
+
+# Secrets — never committed, in any environment (constitution §Secrets)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+local.settings.json
+
+# Editors and OS
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

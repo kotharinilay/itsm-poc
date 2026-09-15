@@ -30,28 +30,28 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 
 **Goal**: A monorepo skeleton with both toolchains, CI and boundary enforcement. Nothing runs yet.
 
-- [ ] T001 Create the monorepo skeleton per plan.md in the repository root: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/{docker,infra/ai-gateway,scripts}/` — Boundary: repository | Validates: Plan §Project Structure
-- [ ] T002 [P] Write root `README.md` describing the two deployables and the no-dependency rule — Boundary: repository | Validates: Constitution P-X
-- [ ] T003 [P] Create `docs/adr/README.md` indexing ADR-0001 through ADR-0005 with status — Boundary: documentation | Validates: Constitution P-X
-- [ ] T004 [P] Create `dotnet/Directory.Build.props` with `Nullable=enable`, `TreatWarningsAsErrors=true`, `EnableNETAnalyzers=true`, `AnalysisLevel=latest-Recommended`, `EnforceCodeStyleInBuild=true`, `Deterministic=true`, `InvariantGlobalization=true` — Boundary: .NET build | Validates: Constitution §.NET baseline
-- [ ] T005 [P] Create `dotnet/Directory.Packages.props` with `ManagePackageVersionsCentrally=true`, pinning EF Core 10, Npgsql, OpenTelemetry, `Http.Resilience`, xUnit, NetArchTest, Testcontainers — Boundary: .NET build | Validates: Constitution §.NET baseline
-- [ ] T006 [P] Create `dotnet/.editorconfig` setting IDE0055 and IDE1006 to `error` — Boundary: .NET build | Validates: Constitution §.NET baseline
-- [ ] T007 Create `dotnet/Synthia.sln` with stubs for the 11 projects in plan.md — Boundary: .NET solution | Validates: Plan §Complexity Tracking
-- [ ] T008 [P] Create `ragcore/pyproject.toml` (PEP 621) with `requires-python >=3.12`, ruff select `["E","F","B","I","UP","S","PTH","SIM","ASYNC","DTZ","N"]`, ruff format authoritative, `[tool.mypy] strict = true` — Boundary: Python build | Validates: Constitution §Python baseline
-- [ ] T009 [P] Generate and commit `ragcore/uv.lock` pinning FastAPI, Pydantic, Pydantic Settings, LangGraph, langgraph-checkpoint-postgres, SQLAlchemy, asyncpg, Alembic, alembic_utils, azure-servicebus, azure-identity, httpx — Boundary: Python build | Validates: Constitution §Python baseline
-- [ ] T010 [P] Initialise the Angular workspace in `apps/web/` with `tsconfig.base.json` setting `strict`, `strictTemplates`, `noUncheckedIndexedAccess`, `noImplicitOverride` — Boundary: web build | Validates: Constitution §Angular
-- [ ] T011 [P] Create `apps/web/eslint.config.js` with library boundary rules: `customer-features` may not import `staff-features` or any application; `design-system` may not import business logic — Boundary: Angular libraries | Validates: Plan Stage 3
-- [ ] T012 [P] Initialise the Electron host in `apps/desktop/package.json` with main/preload/renderer builds and strict TypeScript — Boundary: desktop host | Validates: Constitution P-VII
-- [ ] T013 Create `build/scripts/check-boundaries.sh` failing on any cross-deployable reference: a `ragcore` string in any `.csproj`, a `Synthia` import in `ragcore/`, or an HTTP client in either targeting the other — Boundary: cross-deployable | Validates: Constitution P-V, ADR-0001
-- [ ] T014 [P] Create `.github/workflows/dotnet.yml` running restore, `dotnet build -warnaserror` and every `dotnet/tests/` suite — Boundary: CI | Validates: Constitution §Quality gate
-- [ ] T015 [P] Create `.github/workflows/ragcore.yml` running `ruff check`, `ruff format --check`, `mypy --strict src/` and pytest as failing steps — Boundary: CI | Validates: Constitution §Python baseline
-- [ ] T016 [P] Create `.github/workflows/web.yml` running lint, type-check, unit tests and the accessibility sweep — Boundary: CI | Validates: Constitution §Angular
-- [ ] T017 Create `.github/workflows/boundaries.yml` invoking `build/scripts/check-boundaries.sh` as a required check — Boundary: cross-deployable | Validates: Constitution P-V
-- [ ] T018 [P] Create `.github/workflows/migrations.yml` running `pytest --test-alembic` in `ragcore/` — Boundary: schema | Validates: ADR-0003
-- [ ] T019 [P] Add secret scanning to CI and a `.gitignore` excluding build artifacts in the repository root — Boundary: repository | Validates: Constitution §Secrets, §Commits
-- [ ] T020 [P] Create unit test projects `dotnet/tests/Synthia.SharedKernel.Tests/` and `dotnet/tests/Synthia.Modules.<Name>.Tests/` for all six modules, added to the solution — Boundary: .NET test | Validates: Constitution §Required test categories
-- [ ] T021 [P] Create the RagCore unit test structure in `ragcore/tests/unit/` mirroring `src/ragcore/` packages — Boundary: Python test | Validates: Constitution §Required test categories
-- [ ] T022 Plant a deliberate cross-tree reference and confirm `build/scripts/check-boundaries.sh` fails, then remove it — Boundary: cross-deployable | Validates: Stage 1 gate (the guard must demonstrably fail)
+- [X] T001 Create the monorepo skeleton per plan.md in the repository root: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/{docker,infra/ai-gateway,scripts}/` — Boundary: repository | Validates: Plan §Project Structure
+- [X] T002 [P] Write root `README.md` describing the two deployables and the no-dependency rule — Boundary: repository | Validates: Constitution P-X
+- [X] T003 [P] Create `docs/adr/README.md` indexing ADR-0001 through ADR-0005 with status — Boundary: documentation | Validates: Constitution P-X
+- [X] T004 [P] Create `dotnet/Directory.Build.props` with `Nullable=enable`, `TreatWarningsAsErrors=true`, `EnableNETAnalyzers=true`, `AnalysisLevel=latest-Recommended`, `EnforceCodeStyleInBuild=true`, `Deterministic=true`, `InvariantGlobalization=true` — Boundary: .NET build | Validates: Constitution §.NET baseline
+- [X] T005 [P] Create `dotnet/Directory.Packages.props` with `ManagePackageVersionsCentrally=true`, pinning EF Core 10, Npgsql, OpenTelemetry, `Http.Resilience`, xUnit, NetArchTest, Testcontainers — Boundary: .NET build | Validates: Constitution §.NET baseline
+- [X] T006 [P] Create `dotnet/.editorconfig` setting IDE0055 and IDE1006 to `error` — Boundary: .NET build | Validates: Constitution §.NET baseline
+- [X] T007 Create `dotnet/Synthia.sln` with stubs for the 11 projects in plan.md — Boundary: .NET solution | Validates: Plan §Complexity Tracking
+- [X] T008 [P] Create `ragcore/pyproject.toml` (PEP 621) with `requires-python >=3.12`, ruff select `["E","F","B","I","UP","S","PTH","SIM","ASYNC","DTZ","N"]`, ruff format authoritative, `[tool.mypy] strict = true` — Boundary: Python build | Validates: Constitution §Python baseline
+- [X] T009 [P] Generate and commit `ragcore/uv.lock` pinning FastAPI, Pydantic, Pydantic Settings, LangGraph, langgraph-checkpoint-postgres, SQLAlchemy, asyncpg, Alembic, alembic_utils, azure-servicebus, azure-identity, httpx — Boundary: Python build | Validates: Constitution §Python baseline
+- [X] T010 [P] Initialise the Angular workspace in `apps/web/` with `tsconfig.base.json` setting `strict`, `strictTemplates`, `noUncheckedIndexedAccess`, `noImplicitOverride` — Boundary: web build | Validates: Constitution §Angular
+- [X] T011 [P] Create `apps/web/eslint.config.js` with library boundary rules: `customer-features` may not import `staff-features` or any application; `design-system` may not import business logic — Boundary: Angular libraries | Validates: Plan Stage 3
+- [X] T012 [P] Initialise the Electron host in `apps/desktop/package.json` with main/preload/renderer builds and strict TypeScript — Boundary: desktop host | Validates: Constitution P-VII
+- [X] T013 Create `build/scripts/check-boundaries.sh` failing on any cross-deployable reference: a `ragcore` string in any `.csproj`, a `Synthia` import in `ragcore/`, or an HTTP client in either targeting the other — Boundary: cross-deployable | Validates: Constitution P-V, ADR-0001
+- [X] T014 [P] Create `.github/workflows/dotnet.yml` running restore, `dotnet build -warnaserror` and every `dotnet/tests/` suite — Boundary: CI | Validates: Constitution §Quality gate
+- [X] T015 [P] Create `.github/workflows/ragcore.yml` running `ruff check`, `ruff format --check`, `mypy --strict src/` and pytest as failing steps — Boundary: CI | Validates: Constitution §Python baseline
+- [X] T016 [P] Create `.github/workflows/web.yml` running lint, type-check, unit tests and the accessibility sweep — Boundary: CI | Validates: Constitution §Angular
+- [X] T017 Create `.github/workflows/boundaries.yml` invoking `build/scripts/check-boundaries.sh` as a required check — Boundary: cross-deployable | Validates: Constitution P-V
+- [X] T018 [P] Create `.github/workflows/migrations.yml` running `pytest --test-alembic` in `ragcore/` — Boundary: schema | Validates: ADR-0003
+- [X] T019 [P] Add secret scanning to CI and a `.gitignore` excluding build artifacts in the repository root — Boundary: repository | Validates: Constitution §Secrets, §Commits
+- [X] T020 [P] Create unit test projects `dotnet/tests/Synthia.SharedKernel.Tests/` and `dotnet/tests/Synthia.Modules.<Name>.Tests/` for all six modules, added to the solution — Boundary: .NET test | Validates: Constitution §Required test categories
+- [X] T021 [P] Create the RagCore unit test structure in `ragcore/tests/unit/` mirroring `src/ragcore/` packages — Boundary: Python test | Validates: Constitution §Required test categories
+- [X] T022 Plant a deliberate cross-tree reference and confirm `build/scripts/check-boundaries.sh` fails, then remove it — Boundary: cross-deployable | Validates: Stage 1 gate (the guard must demonstrably fail)
 
 **Checkpoint**: All five workflows green on an empty repository; the boundary script provably fails a violation.
 
@@ -106,13 +106,13 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 
 **Goal**: A thin, hardened host that renders the renderer and decides nothing.
 
-- [ ] T050 Implement main-process window creation in `apps/desktop/src/main/window.ts` with `nodeIntegration=false`, `contextIsolation=true`, `sandbox=true` **unconditionally** (plan Stage 4 resolves "where compatible"; disabling it requires an ADR) — Boundary: desktop host | Validates: Constitution P-VII
-- [ ] T051 Implement the narrow typed `contextBridge` surface in `apps/desktop/src/preload/bridge.ts`, never exposing raw `ipcRenderer` or broad Electron/Node APIs — Boundary: IPC | Validates: Constitution P-VII
-- [ ] T052 Implement IPC **sender** validation and **argument** validation as two distinct checks in `apps/desktop/src/main/ipc-guard.ts` — Boundary: IPC | Validates: Constitution P-VII
-- [ ] T053 [P] Implement the navigation and new-window allow-list in `apps/desktop/src/main/navigation.ts` permitting **only** the renderer bundle origin, the single gateway origin and the Entra authority (plan Stage 4 names the complete set); the window-open handler denies every destination without exception; exact scheme match on HTTPS/WSS only; `webSecurity` never disabled — Boundary: desktop host | Validates: Constitution P-VII, Spec §FR-SURF-017
-- [ ] T054 [P] Implement the plan Stage 3 CSP baseline for the renderer in `apps/desktop/src/main/csp.ts`, applied from the main process on received headers so the renderer cannot weaken it, with connect-src narrowed to the gateway, SignalR and Entra origins — Boundary: desktop host | Validates: Constitution P-VII
-- [ ] T055 [P] Write the Electron security suite in `apps/desktop/tests/security.spec.ts` asserting each switch, that IPC rejects an unvalidated sender and an unvalidated argument, and that navigation outside the allow-list is blocked — Boundary: desktop host | Validates: Stage 4 gate
-- [ ] T056 [P] Write a test in `apps/desktop/tests/no-policy.spec.ts` asserting no business authorization decision exists in the renderer **or** the main process — Boundary: desktop host | Validates: Constitution P-VII
+- [X] T050 Implement main-process window creation in `apps/desktop/src/main/window.ts` with `nodeIntegration=false`, `contextIsolation=true`, `sandbox=true` **unconditionally** (plan Stage 4 resolves "where compatible"; disabling it requires an ADR) — Boundary: desktop host | Validates: Constitution P-VII
+- [X] T051 Implement the narrow typed `contextBridge` surface in `apps/desktop/src/preload/bridge.ts`, never exposing raw `ipcRenderer` or broad Electron/Node APIs — Boundary: IPC | Validates: Constitution P-VII
+- [X] T052 Implement IPC **sender** validation and **argument** validation as two distinct checks in `apps/desktop/src/main/ipc-guard.ts` — Boundary: IPC | Validates: Constitution P-VII
+- [X] T053 [P] Implement the navigation and new-window allow-list in `apps/desktop/src/main/navigation.ts` permitting **only** the renderer bundle origin, the single gateway origin and the Entra authority (plan Stage 4 names the complete set); the window-open handler denies every destination without exception; exact scheme match on HTTPS/WSS only; `webSecurity` never disabled — Boundary: desktop host | Validates: Constitution P-VII, Spec §FR-SURF-017
+- [X] T054 [P] Implement the plan Stage 3 CSP baseline for the renderer in `apps/desktop/src/main/csp.ts`, applied from the main process on received headers so the renderer cannot weaken it, with connect-src narrowed to the gateway, SignalR and Entra origins — Boundary: desktop host | Validates: Constitution P-VII
+- [X] T055 [P] Write the Electron security suite in `apps/desktop/tests/security.spec.ts` asserting each switch, that IPC rejects an unvalidated sender and an unvalidated argument, and that navigation outside the allow-list is blocked — Boundary: desktop host | Validates: Stage 4 gate
+- [X] T056 [P] Write a test in `apps/desktop/tests/no-policy.spec.ts` asserting no business authorization decision exists in the renderer **or** the main process — Boundary: desktop host | Validates: Constitution P-VII
 
 **Checkpoint**: The security suite passes, and fails correctly when a setting is flipped.
 

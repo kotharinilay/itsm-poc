@@ -8,15 +8,24 @@
 
 **Organization**: Phases mirror the plan's stages, in dependency order. **Phases 1–11 are scaffold** and
 carry no story label — they are setup and foundational work. **Phases 12–13 are the two architectural
-golden paths** and carry story labels. Between them they demonstrate **all four execution treatments**:
-`AUTO` and `NOT_ALLOWED` in Phase 12, `STAFF_APPROVAL` and `END_USER_APPROVAL` in Phase 13 — which is
-what `SC-SCOPE-002` requires. The twelve business use cases are **not here**; they are Stage 14, gated
-behind both golden paths.
+golden paths** and carry story labels. Phase 12 proves the synchronous governed machine (`AUTO` and
+`NOT_ALLOWED`); **Phase 13 proves asynchronous platform integration** through the three inert sample
+flows in [contracts/sample-flows.md](./contracts/sample-flows.md). The twelve business use cases are
+**not here**; they are Stage 14, gated behind both golden paths.
+
+**Revised 2026-09-16 — scaffold scope correction.** Phases 1–6 are complete and untouched. The
+approval and consent workflow tasks that formed the old Phase 13 are **withdrawn from the scaffold, not
+from the platform** (spec `FR-DEMO-016`, `FR-DEMO-017`); their IDs are permanently retired and listed
+under *Withdrawn 2026-09-16*. No completed task was reopened. The four execution treatments remain
+catalogue data and are classified deterministically in Phase 12; two of the four are no longer
+*exercised*, and `FR-DEMO-018` makes the unexercised gate **fail closed** rather than permit by
+default.
 
 ## Format: `[ID] [P?] [Story] Description — Boundary: … | Validates: …`
 
 - **[P]**: parallelizable — different files, no incomplete dependency
-- **[Story]**: US1–US5 from spec.md, on golden-path phases only
+- **[Story]**: US1–US6 from spec.md, on golden-path phases only. **US6** is *The platform proves its
+  own plumbing before it carries any product* — the scaffold's own acceptance story
 - **Boundary**: the architectural boundary the task sits on or guards
 - **Validates**: the requirement, principle or gate the task must satisfy
 
@@ -176,38 +185,38 @@ host that actually renders something, and record the two boundaries the desktop 
 
 **Goal**: The authoritative durable store, migration discipline, and the read-view contract.
 
-- [ ] T082 Initialise Alembic in `ragcore/` with the async template; configure `ragcore/migrations/env.py` with `async_engine_from_config`, `NullPool` and `connection.run_sync` — Boundary: schema | Validates: ADR-0003
-- [ ] T083 Configure `ragcore/migrations/env.py` to exclude the `langgraph` schema from autogenerate via `include_schemas`/`include_object` — Boundary: schema | Validates: research R-004
-- [ ] T084 Configure the durable LangGraph checkpointer in `ragcore/src/ragcore/graph/checkpointer.py` using `langgraph-checkpoint-postgres` against the `langgraph` schema, compile the graph with it in place of the in-memory saver, and run the checkpointer's own `setup()` from the migration job — never at application startup — Boundary: orchestration | Validates: Constitution P-IV (one checkpoint store), research R-004
-- [ ] T085 [P] Create the `tenant_mapping` migration in `ragcore/migrations/versions/` — `tenant_id` uuid PK, `entra_tid` uuid unique not null, `display_name` text not null, `status` enum (`active`, `suspended`, `offboarded`) not null, `retention_overrides` jsonb null, `version` int not null — Boundary: Tenant & Configuration | Validates: data-model.md
-- [ ] T086 [P] Create the `chat_session` migration in `ragcore/migrations/versions/` — `state` enum (`conversational`, `resolving`, `awaiting_user`, `awaiting_consent`, `awaiting_approval`, `staff_controlled`, `resolved`, `escalated`, `closed_declined`) not null, `content_expires_at` timestamptz **null while active**, `version` int not null — Boundary: Session | Validates: Spec §FR-SESS-015, §FR-SESS-020
-- [ ] T087 [P] Create the `message` migration in `ragcore/migrations/versions/` — `tenant_id` uuid not null (denormalised for non-bypassable filtering), `sender_kind` enum (`end_user`, `agent`, `staff`) not null — Boundary: Session | Validates: data-model.md
-- [ ] T088 [P] Create the `feedback` migration in `ragcore/migrations/versions/` — `signal` enum (`positive`, `negative`) not null, **unique on (`message_id`, `given_by_oid`)** so a revision updates rather than inserts — Boundary: Session | Validates: Spec §FR-SESS-010
-- [ ] T089 Create the `work_item` migration in `ragcore/migrations/versions/` with `state` enum (`open`, `awaiting_decision`, `authorized`, `claimed`, `executed`, `failed`, `expired`, `cancelled`, `escalated`) and `approval_state` enum (`none`, `pending`, `approved`, `rejected`, `expired`), plus `version` int not null — Boundary: Work | Validates: data-model.md
-- [ ] T090 Add a database-level immutability guard on `work_item` authority fields (`tenant_id`, `requested_by_oid`, `case_reference`, `governed_action`, `target`) via trigger or column grant in `ragcore/migrations/versions/` — Boundary: Work | Validates: Spec §FR-EXEC-008
-- [ ] T091 [P] Create the `operation` migration in `ragcore/migrations/versions/` — `treatment` enum (`AUTO`, `END_USER_APPROVAL`, `STAFF_APPROVAL`, `NOT_ALLOWED`), `verification` enum (`server_confirmed`, `client_attested`, `contradicted`) null — Boundary: Governance | Validates: data-model.md
-- [ ] T092 [P] Create the `governance_record` migration in `ragcore/migrations/versions/` — composite PK (`catalogue_id`, `version`), `accepted_roles` text[] not null, `is_reference_fixture` bool not null, `requires_elevation` bool not null **with a CHECK constraint enforcing false** — Boundary: Governance | Validates: ADR-0004
-- [ ] T093 [P] Create the `tenant_entitlement` migration in `ragcore/migrations/versions/` — `credential_reference` text null (a Key Vault reference, **never a secret value**) — Boundary: Tool Execution | Validates: Spec §FR-EXT-016
-- [ ] T094 [P] Create the `approval` migration in `ragcore/migrations/versions/` — `work_item_id` uuid FK **unique** not null (at most one approval per case), `decided_by_roles` text[] null, `expires_at` timestamptz null — Boundary: Approval | Validates: Spec §FR-INTR-010
-- [ ] T095 [P] Create the `consent` migration in `ragcore/migrations/versions/` — `consented_by_oid` uuid not null, `verdict` enum (`granted`, `refused`) not null — Boundary: Approval | Validates: Spec §FR-INTR-005
-- [ ] T096 [P] Create the `audit_event` migration in `ragcore/migrations/versions/` with the full actor chain, `execution_method` enum (`workload`, `desktop_script`, `none`), `correlation_id` text not null, `retain_until` timestamptz not null, append-only with no update or delete grant — Boundary: Audit | Validates: Spec §FR-AUDIT-001
-- [ ] T097 [P] Create the `outbox_message` migration in `ragcore/migrations/versions/` — `payload` jsonb carrying opaque identifiers and correlation only, `dispatched_at` timestamptz null, `attempts` int, `version` int — Boundary: messaging | Validates: research R-017
-- [ ] T098 [P] Create the `idempotency_record` migration in `ragcore/migrations/versions/` — `idempotency_key` text PK, `outcome` jsonb null replayed on repeat, and **no `version` column**: this is the single named exemption from the optimistic-concurrency convention (data-model.md §Conventions) — Boundary: Tool Execution | Validates: data-model.md
-- [ ] T099 [P] Create the `ingestion_run` migration in `ragcore/migrations/versions/` — `watermark` text null, `state` enum (`running`, `completed`, `failed`), tenant-stamped — Boundary: Ingestion | Validates: research R-021
-- [ ] T100 [P] Scaffold the ingestion worker entry point in `ragcore/workers/ingestion_run.py` opening an `ingestion_run` row and recording its watermark and terminal state, with **no acquisition, chunking or embedding behaviour** — Boundary: Ingestion | Validates: Plan §Project Structure, Constitution P-IX
-- [ ] T101 Create the published-view migration in `ragcore/migrations/versions/` using `alembic_utils` defining all eleven `vw_*_v1` views, each carrying `tenant_id`, none exposing credential material, each respecting retention and excluding soft-deleted rows — Boundary: read contract | Validates: Contracts §read-views
-- [ ] T102 Grant separated database principals in `ragcore/migrations/versions/`: migration job DDL, RagCore runtime DML+SELECT, monolith runtime SELECT on published views only — Boundary: schema ownership | Validates: ADR-0003
-- [ ] T103 Implement SQLAlchemy models and repositories in `ragcore/src/ragcore/persistence/` where **every** query applies `tenant_id` and no method omits it — Boundary: tenant isolation | Validates: Spec §FR-IDENT-008
-- [ ] T104 [P] Implement optimistic concurrency in `ragcore/src/ragcore/persistence/concurrency.py` using the `version` column on every table except the named `idempotency_record` exemption, with **no distributed lock anywhere**, **no Serializable transaction** and **no `deleted_at` column on any scaffold entity** — all three positions stated in data-model.md §Conventions — Boundary: persistence | Validates: research R-018
-- [ ] T105 [P] Implement retention-from-terminal-state in `ragcore/src/ragcore/persistence/retention.py` so `content_expires_at` is set only on a terminal transition — Boundary: Session | Validates: Spec §FR-SESS-020
+- [X] T082 Initialise Alembic in `ragcore/` with the async template; configure `ragcore/migrations/env.py` with `async_engine_from_config`, `NullPool` and `connection.run_sync` — Boundary: schema | Validates: ADR-0003
+- [X] T083 Configure `ragcore/migrations/env.py` to exclude the `langgraph` schema from autogenerate via `include_schemas`/`include_object` — Boundary: schema | Validates: research R-004
+- [X] T084 Configure the durable LangGraph checkpointer in `ragcore/src/ragcore/graph/checkpointer.py` using `langgraph-checkpoint-postgres` against the `langgraph` schema, compile the graph with it in place of the in-memory saver, and run the checkpointer's own `setup()` from the migration job — never at application startup — Boundary: orchestration | Validates: Constitution P-IV (one checkpoint store), research R-004
+- [X] T085 [P] Create the `tenant_mapping` migration in `ragcore/migrations/versions/` — `tenant_id` uuid PK, `entra_tid` uuid unique not null, `display_name` text not null, `status` enum (`active`, `suspended`, `offboarded`) not null, `retention_overrides` jsonb null, `version` int not null — Boundary: Tenant & Configuration | Validates: data-model.md
+- [X] T086 [P] Create the `chat_session` migration in `ragcore/migrations/versions/` — `state` enum (`conversational`, `resolving`, `awaiting_user`, `awaiting_consent`, `awaiting_approval`, `staff_controlled`, `resolved`, `escalated`, `closed_declined`) not null, `content_expires_at` timestamptz **null while active**, `version` int not null — Boundary: Session | Validates: Spec §FR-SESS-015, §FR-SESS-020
+- [X] T087 [P] Create the `message` migration in `ragcore/migrations/versions/` — `tenant_id` uuid not null (denormalised for non-bypassable filtering), `sender_kind` enum (`end_user`, `agent`, `staff`) not null — Boundary: Session | Validates: data-model.md
+- [X] T088 [P] Create the `feedback` migration in `ragcore/migrations/versions/` — `signal` enum (`positive`, `negative`) not null, **unique on (`message_id`, `given_by_oid`)** so a revision updates rather than inserts — Boundary: Session | Validates: Spec §FR-SESS-010
+- [X] T089 Create the `work_item` migration in `ragcore/migrations/versions/` with `state` enum (`open`, `awaiting_decision`, `authorized`, `claimed`, `executed`, `failed`, `expired`, `cancelled`, `escalated`) and `approval_state` enum (`none`, `pending`, `approved`, `rejected`, `expired`), plus `version` int not null — Boundary: Work | Validates: data-model.md
+- [X] T090 Add a database-level immutability guard on `work_item` authority fields (`tenant_id`, `requested_by_oid`, `case_reference`, `governed_action`, `target`) via trigger or column grant in `ragcore/migrations/versions/` — Boundary: Work | Validates: Spec §FR-EXEC-008
+- [X] T091 [P] Create the `operation` migration in `ragcore/migrations/versions/` — `treatment` enum (`AUTO`, `END_USER_APPROVAL`, `STAFF_APPROVAL`, `NOT_ALLOWED`), `verification` enum (`server_confirmed`, `client_attested`, `contradicted`) null — Boundary: Governance | Validates: data-model.md
+- [X] T092 [P] Create the `governance_record` migration in `ragcore/migrations/versions/` — composite PK (`catalogue_id`, `version`), `accepted_roles` text[] not null, `is_reference_fixture` bool not null, `requires_elevation` bool not null **with a CHECK constraint enforcing false** — Boundary: Governance | Validates: ADR-0004
+- [X] T093 [P] Create the `tenant_entitlement` migration in `ragcore/migrations/versions/` — `credential_reference` text null (a Key Vault reference, **never a secret value**) — Boundary: Tool Execution | Validates: Spec §FR-EXT-016
+- [X] T094 [P] Create the `approval` migration in `ragcore/migrations/versions/` — `work_item_id` uuid FK **unique** not null (at most one approval per case), `decided_by_roles` text[] null, `expires_at` timestamptz null — Boundary: Approval | Validates: Spec §FR-INTR-010
+- [X] T095 [P] Create the `consent` migration in `ragcore/migrations/versions/` — `consented_by_oid` uuid not null, `verdict` enum (`granted`, `refused`) not null — Boundary: Approval | Validates: Spec §FR-INTR-005
+- [X] T096 [P] Create the `audit_event` migration in `ragcore/migrations/versions/` with the full actor chain, `execution_method` enum (`workload`, `desktop_script`, `none`), `correlation_id` text not null, `retain_until` timestamptz not null, append-only with no update or delete grant — Boundary: Audit | Validates: Spec §FR-AUDIT-001
+- [X] T097 [P] Create the `outbox_message` migration in `ragcore/migrations/versions/` — `payload` jsonb carrying opaque identifiers and correlation only, `dispatched_at` timestamptz null, `attempts` int, `version` int — Boundary: messaging | Validates: research R-017
+- [X] T098 [P] Create the `idempotency_record` migration in `ragcore/migrations/versions/` — `idempotency_key` text PK, `outcome` jsonb null replayed on repeat, and **no `version` column**: this is the single named exemption from the optimistic-concurrency convention (data-model.md §Conventions) — Boundary: Tool Execution | Validates: data-model.md
+- [X] T099 [P] Create the `ingestion_run` migration in `ragcore/migrations/versions/` — `watermark` text null, `state` enum (`running`, `completed`, `failed`), tenant-stamped — Boundary: Ingestion | Validates: research R-021
+- [X] T100 [P] Scaffold the ingestion worker entry point in `ragcore/workers/ingestion_run.py` opening an `ingestion_run` row and recording its watermark and terminal state, with **no acquisition, chunking or embedding behaviour** — Boundary: Ingestion | Validates: Plan §Project Structure, Constitution P-IX
+- [X] T101 Create the published-view migration in `ragcore/migrations/versions/` using `alembic_utils` defining all eleven `vw_*_v1` views, each carrying `tenant_id`, none exposing credential material, each respecting retention and excluding soft-deleted rows — Boundary: read contract | Validates: Contracts §read-views
+- [X] T102 Grant separated database principals in `ragcore/migrations/versions/`: migration job DDL, RagCore runtime DML+SELECT, monolith runtime SELECT on published views only — Boundary: schema ownership | Validates: ADR-0003
+- [X] T103 Implement SQLAlchemy models and repositories in `ragcore/src/ragcore/persistence/` where **every** query applies `tenant_id` and no method omits it — Boundary: tenant isolation | Validates: Spec §FR-IDENT-008
+- [X] T104 [P] Implement optimistic concurrency in `ragcore/src/ragcore/persistence/concurrency.py` using the `version` column on every table except the named `idempotency_record` exemption, with **no distributed lock anywhere**, **no Serializable transaction** and **no `deleted_at` column on any scaffold entity** — all three positions stated in data-model.md §Conventions — Boundary: persistence | Validates: research R-018
+- [X] T105 [P] Implement retention-from-terminal-state in `ragcore/src/ragcore/persistence/retention.py` so `content_expires_at` is set only on a terminal transition — Boundary: Session | Validates: Spec §FR-SESS-020
 - [ ] T106 Implement the retention sweeper in `ragcore/workers/retention_sweep.py` removing data past its window for every class in data-model.md §Retention summary — chat content 90 days from terminal state, graph checkpoints 30 days after the work completes, audit events 7 years — resolving each window from `tenant_mapping.retention_overrides` and falling back to the platform default wherever no override is configured — Boundary: retention | Validates: Spec §FR-SESS-007, §FR-SESS-008, §FR-AUDIT-004, §FR-AUDIT-005
-- [ ] T107 Implement per-organisation erasure in `ragcore/src/ragcore/persistence/erasure.py` removing that organisation's records, their derived representations and any cached copies — Boundary: Tenant & Configuration | Validates: Spec §FR-AUDIT-006
+- [X] T107 Implement per-organisation erasure in `ragcore/src/ragcore/persistence/erasure.py` removing that organisation's records, their derived representations and any cached copies — Boundary: Tenant & Configuration | Validates: Spec §FR-AUDIT-006
 - [X] T108 Configure EF Core read contexts in `dotnet/src/Synthia.Persistence/` mapped to `vw_*_v1` views with `AsNoTracking` default, parameterized queries, and a mandatory tenant filter with no unfiltered path — Boundary: read contract | Validates: Constitution §.NET data access
-- [ ] T109 [P] Write migration tests in `ragcore/tests/migrations/test_migrations.py` importing pytest-alembic's `test_single_head_revision`, `test_upgrade`, `test_model_definitions_match_ddl`, `test_up_down_consistency` — Boundary: schema | Validates: ADR-0003
-- [ ] T110 [P] Write a test in `ragcore/tests/migrations/test_schema_isolation.py` asserting autogenerate never proposes a change inside the `langgraph` schema — Boundary: schema | Validates: research R-004
-- [ ] T111 [P] Write a test in `ragcore/tests/checkpoint/test_durable_checkpointer.py` asserting the compiled graph carries the PostgreSQL saver, that no in-memory saver reaches a non-test path, and that no second durable checkpoint store exists — Boundary: orchestration | Validates: Constitution P-IV
-- [ ] T112 [P] Write concurrency tests in `ragcore/tests/concurrency/test_optimistic.py` asserting a losing writer sees a version conflict and re-reads rather than blocking — Boundary: persistence | Validates: research R-018
-- [ ] T113 [P] Write retention tests in `ragcore/tests/retention/test_retention_classes.py` verifying removal independently for each class and asserting that expiring chat content leaves its audit records intact and complete — Boundary: retention | Validates: Spec §SC-AUDIT-002, §SC-AUDIT-003
+- [X] T109 [P] Write migration tests in `ragcore/tests/migrations/test_migrations.py` importing pytest-alembic's `test_single_head_revision`, `test_upgrade`, `test_model_definitions_match_ddl`, `test_up_down_consistency` — Boundary: schema | Validates: ADR-0003
+- [X] T110 [P] Write a test in `ragcore/tests/migrations/test_schema_isolation.py` asserting autogenerate never proposes a change inside the `langgraph` schema — Boundary: schema | Validates: research R-004
+- [X] T111 [P] Write a test in `ragcore/tests/checkpoint/test_durable_checkpointer.py` asserting the compiled graph carries the PostgreSQL saver, that no in-memory saver reaches a non-test path, and that no second durable checkpoint store exists — Boundary: orchestration | Validates: Constitution P-IV
+- [X] T112 [P] Write concurrency tests in `ragcore/tests/concurrency/test_optimistic.py` asserting a losing writer sees a version conflict and re-reads rather than blocking — Boundary: persistence | Validates: research R-018
+- [X] T113 [P] Write retention tests in `ragcore/tests/retention/test_retention_classes.py` verifying removal independently for each class and asserting that expiring chat content leaves its audit records intact and complete — Boundary: retention | Validates: Spec §SC-AUDIT-002, §SC-AUDIT-003
 
 **Checkpoint**: Migrations run as a gated job, never at startup; every downgrade succeeds; no unfiltered query path exists; the graph is backed by the durable PostgreSQL checkpointer and every retention class is removable.
 
@@ -220,7 +229,7 @@ host that actually renders something, and record the two boundaries the desktop 
 - [ ] T114 Implement the outbox writer in `ragcore/src/ragcore/messaging/outbox.py` so the outbox row commits **in the same transaction** as the state change it describes — Boundary: messaging | Validates: research R-017
 - [ ] T115 Implement the outbox dispatcher worker in `ragcore/workers/outbox_dispatch.py` publishing to Service Bus and setting `dispatched_at`, with exponential backoff and jitter to a **ceiling of 10 attempts**, after which the row is marked undispatchable, left in place and never auto-retried — and, for a `granted` kind, surfaced as approved-but-not-executed with an operational alert; a blocked row never blocks another — Boundary: messaging | Validates: Contracts §triggers, research R-017
 - [ ] T116 [P] Implement the Service Bus publisher in `ragcore/src/ragcore/messaging/publisher.py` emitting only `workItemId`, `correlationId` and a `kind` drawn from the closed set in `contracts/triggers.md` — Boundary: trigger contract | Validates: Contracts §triggers
-- [ ] T117 Implement the resume consumer in `ragcore/workers/resume_worker.py` performing load, verify, atomic claim, resume, execute, record — dispatching on `kind` for all four trigger kinds while reading authority only from the work record, and routing the two refusal kinds to closure without execution — Boundary: Work | Validates: ADR-0002, Contracts §triggers
+- [ ] T117 Implement the resume consumer in `ragcore/workers/resume_worker.py` performing load, verify, atomic claim, resume, execute, record — dispatching on `kind` while reading authority **only** from the work record, never from the message. *Amended 2026-09-16*: the scaffold wires the **sample-flow kind** only; the four approval and consent kinds remain in the closed set in `contracts/triggers.md` and their handlers are deferred (spec FR-DEMO-016). An unhandled kind is dead-lettered with an alert, **never** treated as authorization to proceed (spec FR-DEMO-018) — Boundary: Work | Validates: ADR-0002, Contracts §triggers
 - [ ] T118 [P] Implement the atomic claim in `ragcore/src/ragcore/execution/claim.py` as a conditional update on `claimed_at IS NULL` — idempotency boundary 1 — Boundary: Work | Validates: Spec §FR-EXEC-004
 - [ ] T119 [P] Implement idempotency-key generation and the replay path in `ragcore/src/ragcore/execution/idempotency.py` — idempotency boundary 2 — Boundary: Tool Execution | Validates: Spec §FR-EXEC-005
 - [ ] T120 [P] Implement bounded pre-claim retry with jitter in `ragcore/src/ragcore/messaging/retry.py`, and **no post-claim retry** — Boundary: execution | Validates: Spec §FR-EXEC-006
@@ -231,7 +240,12 @@ host that actually renders something, and record the two boundaries the desktop 
 - [ ] T125 [P] Write idempotency tests in `ragcore/tests/idempotency/test_duplicate_trigger.py` asserting a duplicate trigger produces exactly one execution and one external effect — Boundary: messaging | Validates: Stage 8 gate
 - [ ] T126 [P] Write an outbox crash test in `ragcore/tests/integration/test_outbox_crash.py` asserting a crash between commit and publish loses nothing and duplicates nothing — Boundary: messaging | Validates: quickstart V16
 
-**Checkpoint**: Duplicate delivery absorbed by the claim; expired messages dead-letter rather than executing.
+- [ ] T219 Authenticate the Service Bus client by **managed identity** in `ragcore/src/ragcore/messaging/credentials.py` using `DefaultAzureCredential`, with **no connection string, no shared access key and no SAS token** anywhere in source or configuration; the namespace is a fully qualified name, not a credential-bearing DSN — Boundary: messaging | Validates: Spec §FR-DEMO-011, Plan §Authentication
+- [ ] T220 Implement the **sample async message flow** end to end in `ragcore/src/ragcore/messaging/sample_flow.py` — publish a `sample.flow` trigger from the outbox and consume it in the resume worker, acting only on an inert reference operation and producing **no external effect** — Boundary: sample flow | Validates: Spec §FR-DEMO-007, §FR-DEMO-014
+- [ ] T221 [P] Propagate the correlation identifier and W3C `traceparent` onto every outbox row and every published message in `ragcore/src/ragcore/messaging/publisher.py`, and restore them as the ambient context in the consumer, so one journey is followable across the asynchronous hop — Boundary: observability | Validates: Spec §FR-DEMO-009, §FR-OPS-001
+- [ ] T222 [P] Write a test in `ragcore/tests/messaging/test_trigger_payload.py` asserting a published trigger carries **only** `workItemId`, `correlationId` and `kind` — no tenant, requester, role, action, target or approval state — Boundary: trigger contract | Validates: Contracts §triggers, Spec §FR-DEMO-010
+
+**Checkpoint**: Duplicate delivery absorbed by the claim; expired messages dead-letter rather than executing; the bus is reached by managed identity and the payload carries no authority.
 
 ---
 
@@ -252,7 +266,12 @@ host that actually renders something, and record the two boundaries the desktop 
 - [ ] T137 [P] Write a test in `ragcore/tests/integrations/test_no_provider_leak.py` asserting no provider SDK or model type appears in `domain/` or `application/` — Boundary: layering | Validates: Spec §FR-EXT-011
 - [ ] T138 [P] Write a test in `ragcore/tests/architecture/test_no_direct_model_call.py` asserting no module holds a provider endpoint outside `integrations/model/` — Boundary: model egress | Validates: Constitution §Model access
 
-**Checkpoint**: No provider type reaches inward; no direct model access exists; every outbound call has a timeout.
+- [ ] T223 [P] Implement the **Azure AI Search** boundary in `ragcore/src/ragcore/retrieval/search.py` behind the `RetrievalPort` from T027 — reached by **managed identity**, tenant filter applied on every query with **no code path able to issue an unfiltered one**, and the index treated as **derived**: a lost index is rebuilt by re-running ingestion, never restored — Boundary: Retrieval | Validates: Spec §FR-IDENT-008, §FR-IDENT-009, Constitution P-IV
+- [X] T224 [P] Implement Key Vault credential-reference resolution in `ragcore/src/ragcore/config/secrets.py` — resolves a `*_secret_name` **reference** to a value at the point of use via managed identity, caches within the process lifetime only, and **never logs, echoes or persists a resolved value**; `tenant_entitlement.credential_reference` resolves through this path and nowhere else — Boundary: configuration | Validates: Spec §FR-EXT-016, §FR-DEMO-012
+- [X] T225 Implement the shared Azure credential chain in `ragcore/src/ragcore/infrastructure/azure_credentials.py` — one `DefaultAzureCredential`, reused by every Azure SDK client (Service Bus, SignalR, Key Vault, AI Search, Foundry, PostgreSQL), so **managed identity is used wherever the resource supports it** and no client constructs its own credential — Boundary: identity | Validates: Spec §FR-DEMO-011, Plan §Authentication
+- [X] T225a [P] Enforce the **cross-platform Azure identity rule**. One shared registry in `build/policy/azure-identity.json` naming all eight resources (PostgreSQL, Service Bus, SignalR, Key Vault, AI Search, Foundry/gateway, Application Insights, Redis), their managed-identity position and any named exemption; enforced on both stacks by `ragcore/tests/security/test_azure_identity.py` and `dotnet/tests/Synthia.ArchitectureTests/AzureIdentityTests.cs`, each of which asserts the other exists, reads the same registry and covers the same resources. Rejects application-owned credential types, credential-bearing connection strings, embedded PostgreSQL passwords and secret-valued configuration keys — Boundary: secrets | Validates: Spec §SC-DEMO-004, Plan §Authentication
+
+**Checkpoint**: No provider type reaches inward; no direct model access exists; every outbound call has a timeout; every Azure resource is reached by managed identity and every secret by reference.
 
 ---
 
@@ -277,7 +296,44 @@ host that actually renders something, and record the two boundaries the desktop 
 - [ ] T151 [P] Write security tests in `ragcore/tests/security/test_no_leakage.py` asserting no secret, token, authorization header, sensitive payload or cross-tenant value reaches a log sink — Boundary: observability | Validates: Spec §FR-OPS-002
 - [ ] T152 [P] Write a trace test in `ragcore/tests/integration/test_trace_continuity.py` following one request across suspension and resume via a single correlation identifier — Boundary: observability | Validates: quickstart V18
 
-**Checkpoint**: Configuration fails fast; images are digest-pinned, non-root and read-only.
+### Public edge and the gateway trust boundary *(added 2026-09-16)*
+
+Spec `FR-DEMO-019` makes edge traversal part of **acceptance**, not deployment. These tasks gate
+Phase 13, and provisioning is the scaffold's longest-lead dependency — start it early, because every
+sample flow passes locally right up until it has to cross a boundary that does not exist.
+
+**Status 2026-09-16** — T226–T230a and T232 were implemented in commit `1f8d312`. Paths differ from the
+originals as recorded below: the edge lives in `build/infra/frontdoor/`, and APIM policy is split into a
+cross-cutting `global.inbound.xml` plus one file per audience rather than a single `identity.xml` — one
+policy per audience is what makes "the surface decides the authorization model" structural, since there
+is then no shared branch in which the customer path could read a role claim.
+
+**These tasks define committed configuration; they do not provision it.** Acceptance still requires a
+deployed environment (`FR-DEMO-019`, `SC-DEMO-001`), and T256 remains the gate. No task currently covers
+Azure provisioning of Front Door, APIM or the gateway certificate.
+
+- [X] T226 Define the **Front Door + WAF** public edge in `build/infra/frontdoor/` — the single public entry point for all three audiences, WAF in prevention mode with a documented managed rule set, origin reaching APIM over Private Link so neither APIM nor the containers are **publicly reachable** — Boundary: edge | Validates: Spec §FR-DEMO-019, Plan §Platform Environment
+- [X] T227 Define **APIM** as the trust boundary in `build/infra/apim/` — terminates the public edge, routes `/api/{customer,staff,workload}/v1/...` to the correct deployable, and is the **only** network path to either container — Boundary: gateway | Validates: Spec §FR-DEMO-004a, Contracts §README rule 4
+- [X] T228 Implement **identity derivation at APIM** in `build/infra/apim/global.inbound.xml` (cross-cutting) and `build/infra/apim/{customer,staff,workload}.v1.xml` (one per audience) — validates the Entra token once and emits the closed `X-Idp-*` contract of **exactly five values**: `X-Idp-Tenant-Id`, `X-Idp-Principal-Id`, `X-Idp-Roles` (complete set, canonical order), `X-Idp-Credential-Class`, `X-Idp-Client-Surface`. **Audience is not a header** — it is the route prefix APIM matched, so a caller cannot promote themselves by supplying one. **Neither deployable parses a token**; both consume the contract — Boundary: identity | Validates: Constitution P-I, P-II, Spec §FR-IDENT-011, Contracts §README
+- [X] T229 Implement **trusted tenant, audience and role propagation** from the derived header contract through both deployables in `ragcore/src/ragcore/api/middleware/identity.py` and `dotnet/src/Synthia.Api/Middleware/`, so tenant and roles reach every layer from trusted context and from nowhere else — Boundary: identity | Validates: Spec §FR-IDENT-002, §FR-DEMO-010
+- [X] T230 Implement **rejection of client-supplied authority headers** at APIM and, as defence in depth, at both deployables — any inbound `X-Idp-*` header arriving from a client is stripped at the gateway, and a deployable receiving one that did not come from APIM refuses the request rather than trusting it — Boundary: identity | Validates: Spec §FR-IDENT-002, §SC-DEMO-003b, Constitution P-I
+- [X] T230a [P] Write a test in `ragcore/tests/security/test_gateway_provenance.py` and `dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs` asserting a request carrying a **well-formed but self-supplied** `X-Idp-*` header set is refused — the shape a real bypass takes, and the case a naive negative test misses. Refused **on provenance, before any header is parsed**, so a better-formed forgery fares no better — Boundary: identity | Validates: Spec §SC-DEMO-002, §SC-DEMO-003b, §FR-IDENT-012
+
+### Platform resource access *(added 2026-09-16)*
+
+- [ ] T231 [P] Implement the **Redis transient cache** abstraction in `ragcore/src/ragcore/infrastructure/cache.py` — reached by managed identity, **every entry carries a TTL**, and the type exposes no API that could persist an authority record or a durable decision. Redis is **transient only**; it is never a source of truth and no sample flow reads it — Boundary: cache | Validates: Constitution P-IV, Plan §Platform Environment
+- [X] T232 [P] Bind **Key Vault** to both deployables in `build/docker/containerapps/` — secrets surfaced as references resolved at the point of use, **never** as environment variables holding values, and never baked into an image — Boundary: configuration | Validates: Spec §FR-DEMO-012
+- [ ] T233 Assign **managed identity and Azure RBAC** per deployable in `build/infra/identity/` — one identity each, with data-plane role assignments for Service Bus, SignalR, Key Vault, PostgreSQL, AI Search, Foundry and Application Insights. Rights come from role assignment on the resource, **not** from a credential the application holds, so they are centrally revocable and visible without reading application configuration — Boundary: identity | Validates: Plan §Authentication, Spec §SC-DEMO-003
+
+### OpenAPI contract emission *(added 2026-09-16)*
+
+- [X] T234 [P] Emit the **customer** audience OpenAPI document from the running services — FastAPI for RagCore, the built-in generator for .NET Minimal APIs — written to `build/contracts/customer.v1.openapi.json` — Boundary: API contract | Validates: Spec §FR-DEMO-013
+- [X] T235 [P] Emit the **staff** audience OpenAPI document to `build/contracts/staff.v1.openapi.json` — Boundary: API contract | Validates: Spec §FR-DEMO-013
+- [X] T236 [P] Emit the **workload** audience OpenAPI document to `build/contracts/workload.v1.openapi.json`. **One document per audience; a merged document is prohibited** — it would let a customer-facing client discover the staff and workload surfaces — Boundary: API contract | Validates: Contracts §README rule 5
+- [X] T237 Publish **versioned OpenAPI artifacts** from CI in `.github/workflows/contracts.yml` — emitted on every build, versioned by API version and commit, and attached to the build rather than committed by hand — Boundary: CI | Validates: Spec §FR-DEMO-013
+- [X] T238 Implement **CI contract validation** in `.github/workflows/contracts.yml` — contract tests run against the **emitted** documents, not hand-written copies, and a route whose emitted shape stops matching its declared contract **fails the build** rather than surfacing at a client — Boundary: CI | Validates: Spec §SC-DEMO-011
+
+**Checkpoint**: Configuration fails fast; images are digest-pinned, non-root and read-only; the edge and gateway exist and derive identity; every audience emits a validated contract.
 
 ---
 
@@ -341,47 +397,108 @@ host that actually renders something, and record the two boundaries the desktop 
 
 ---
 
-## Phase 13: Golden path B — governed human decision: `STAFF_APPROVAL` and `END_USER_APPROVAL` *(Stage 13)*
+## Phase 13: Golden path B — asynchronous platform integration *(Stage 13)*
 
-**Goal**: Prove durable suspension, an authenticated human decision, and execution surviving the requester's
-absence. Both treatments share one machine — suspend → verdict → outbox → trigger → resume → claim →
-execute — and differ only in **who may decide** and **on which surface**, so both are proven here rather
-than duplicating the path.
+**Goal**: Prove the platform's integration seams end to end on **inert** fixtures — a request entering
+at the public edge, becoming durable state, crossing the deployable boundary through the outbox and
+the bus, being acted on by the workload leg, and returning to the client as a notification, with one
+correlation identifier and one organisation binding intact throughout.
 
-**Independent test**: Two runs. (a) Drive the `STAFF_APPROVAL` reference operation to an interrupt,
-**close the customer client entirely**, approve from the staff portal, and confirm the work completes.
-(b) Drive the `END_USER_APPROVAL` reference operation to the consent interrupt, type an affirmative
-message in the chat and confirm **nothing happens**, then submit the explicit consent action and confirm
-the work resumes.
+*Replaced 2026-09-16. The approval and consent tasks that stood here proved product workflow against a
+fixture. They are **not lost**: the behaviour remains specified in spec `FR-INTR-*` and User Stories 2
+and 3, and is deferred under `FR-DEMO-016`. Tasks T208–T211 and T216 were **kept** — take-over,
+cancellation, the staff read modules and the concurrency test are session and read-side behaviour, not
+approval behaviour.*
 
-- [ ] T193 [US2] Implement the approval request use case in `ragcore/src/ragcore/application/approvals.py` binding approver, tenant, work item, operation, target, version, expiry and audit, and disclosing every command — Boundary: Approval | Validates: Spec §FR-INTR-009, Constitution P-III
-- [ ] T194 [US2] Implement the approval interrupt node in `ragcore/src/ragcore/graph/nodes/approval_interrupt.py` suspending the graph durably — Boundary: Agent/RagCore | Validates: Spec §FR-INTR-002
-- [ ] T195 [US2] Implement `POST /api/staff/v1/approvals/{approvalId}/verdict` in `ragcore/src/ragcore/api/staff/approvals.py` — sets `expires_at` to now + 15 minutes, writes the outbox row carrying `approval.granted` or `approval.rejected` in the same transaction, and **returns before execution runs** — Boundary: Staff API | Validates: ADR-0002, Spec §FR-EXEC-001
-- [ ] T196 [P] [US2] Implement first-valid-verdict-wins in `ragcore/src/ragcore/application/approvals.py` so a later verdict is recorded without changing the outcome — Boundary: Approval | Validates: Spec §FR-INTR-010
-- [ ] T197 [P] [US2] Implement `interrupt.pending` and `approval.decided` notification publication in `ragcore/src/ragcore/notifications/events.py` carrying no authority-bearing value — Boundary: realtime | Validates: Contracts §notifications
-- [ ] T198 [P] [US2] Implement the Approvals read module in `dotnet/src/Modules/Synthia.Modules.Approvals/` over `vw_approval_queue_v1` and `vw_approval_unexecuted_v1` — Boundary: Approval (read) | Validates: Contracts §read-views
-- [ ] T199 [P] [US2] Implement the Work read module in `dotnet/src/Modules/Synthia.Modules.Work/` over `vw_work_item_v1` — Boundary: Work (read) | Validates: Contracts §read-views
-- [ ] T200 [P] [US2] Implement staff approval queue endpoints in `dotnet/src/Synthia.Api/Endpoints/StaffViews.cs` including the approved-but-not-executed surface — Boundary: Staff API | Validates: Spec §FR-EXEC-007
-- [ ] T201 [P] [US2] Implement the approval queue UI in `apps/web/projects/staff-features/approvals/` showing the fully disclosed command set before a decision — Boundary: presentation | Validates: Spec §FR-INTR-009
-- [ ] T202 [US3] Implement the consent interrupt node in `ragcore/src/ragcore/graph/nodes/consent_interrupt.py` suspending the graph durably and rendering the consent prompt in the conversation — Boundary: Agent/RagCore | Validates: Spec §FR-INTR-002
-- [ ] T203 [US3] Implement `POST /api/customer/v1/work/{workItemId}/consent` in `ragcore/src/ragcore/api/customer/consent.py` — an explicit authenticated action bound to the work, accepted only from the work item's `requested_by_oid` and rejected with 403 otherwise, writing the outbox row carrying `consent.granted` or `consent.refused` in the same transaction — Boundary: Customer API | Validates: Spec §FR-INTR-005, §FR-INTR-006
-- [ ] T204 [P] [US3] Implement the consent prompt in `apps/web/projects/customer-features/consent/` disclosing exactly what will happen, fully operable by keyboard and conveyed to assistive technology — Boundary: presentation | Validates: Spec §FR-SURF-012
-- [ ] T205 [P] [US3] Write a test in `ragcore/tests/governance/test_consent_not_chat.py` asserting an affirmative chat message confers no authority and leaves the work suspended — Boundary: Governance | Validates: Spec §FR-INTR-006, Constitution P-I
-- [ ] T206 [P] [US3] Write a test in `ragcore/tests/authorization/test_consent_authority.py` asserting consent from anyone but the requester is rejected, and that consent never satisfies a `STAFF_APPROVAL` requirement — Boundary: authorization | Validates: Spec §FR-INTR-005, §FR-INTR-007
-- [ ] T207 [US3] End-to-end golden path test in `ragcore/tests/e2e/test_consent_golden_path.py` driving the `END_USER_APPROVAL` reference operation to the consent interrupt, confirming an affirmative message changes nothing, then submitting the explicit action and asserting the work resumes and completes — Boundary: cross-cutting | Validates: Spec §SC-SCOPE-002, §SC-IDENT-001
+**Every task in this phase is driven through the deployed edge** (Front Door → WAF → APIM →
+Container Apps). A run against a deployable directly does not satisfy `FR-DEMO-019`, however green it
+looks. Phase 13 therefore **depends on T226–T230a**.
+
+**Independent test**: Drive all three flows in `contracts/sample-flows.md` through the deployed edge and
+confirm the nine Stage 13 validation gates in plan.md.
+
+### Reference fixtures and the inertness guard
+
+- [ ] T239 [P] [US6] Seed the **sample-flow reference operations** in `ragcore/src/ragcore/governance/fixtures.py` — inert, `is_reference_fixture=true`, `requires_elevation=false`, producing **no external effect** and excluded from production configuration — Boundary: Governance | Validates: Spec §FR-DEMO-014, §FR-SCOPE-005
+- [ ] T240 [P] [US6] Write an inertness guard in `ragcore/tests/e2e/test_sample_flows_are_inert.py` asserting no sample flow reaches an external system, a model, the retrieval index or the cache, and that **no sample flow is presented as product capability** on any surface — Boundary: scaffold honesty | Validates: Spec §FR-DEMO-014, §FR-DEMO-015, §SC-DEMO-012
+
+### Flow 1 — Customer API
+
+- [ ] T241 [US6] Implement `POST /api/customer/v1/sample-flows/round-trip` in `ragcore/src/ragcore/api/customer/sample_flows.py` — accepts no tenant, role or audience parameter, derives organisation from trusted context, opens the durable record and returns the correlation identifier — Boundary: Customer API | Validates: Spec §FR-DEMO-001, Contracts §sample-flows
+- [ ] T242 [US6] Implement `GET /api/customer/v1/sample-flows/round-trip/{id}` in the same module as the **client state refresh**, returning the outcome the workload leg persisted — Boundary: Customer API | Validates: Spec §FR-DEMO-001
+
+### Flow 2 — Staff API
+
+- [ ] T243 [US6] Implement `GET /api/staff/v1/sample-flows/records` in `dotnet/src/Synthia.Api/Endpoints/StaffSampleFlows.cs` reading **`vw_*_v1` only**, with the target organisation resolved from the platform object being read and never from the request — Boundary: Staff API | Validates: Spec §FR-DEMO-002, Contracts §read-views
+- [ ] T244 [P] [US6] Write a test in `dotnet/tests/Synthia.IntegrationTests/BaseTableDeniedTests.cs` asserting the monolith's database principal **cannot** read a base table — the refusal comes from PostgreSQL, not from application code — Boundary: read contract | Validates: Spec §FR-DEMO-002, ADR-0003
+
+### Flow 3 — Workload API
+
+- [ ] T245 [US6] Implement `POST /api/workload/v1/sample-flows/execute` in `ragcore/src/ragcore/api/workload/sample_flows.py` — app-only, carrying **no customer-organisation authority of its own**, resolving its tenant from the durable work record, claiming atomically and recording an outcome with **no external effect** — Boundary: Workload API | Validates: Spec §FR-DEMO-003, §FR-DEMO-014
+
+### Flow 4 — Service-to-service
+
+- [ ] T246 [US6] Implement `POST /api/customer/v1/sample-flows/service-hop` in `ragcore/src/ragcore/api/customer/sample_flows.py` reaching the workload boundary **through APIM**, app-only, and returning what the callee reports about the caller's identity — Boundary: service boundary | Validates: Spec §FR-DEMO-004
+- [ ] T247 [US6] Write the **bypass negative suite** in `ragcore/tests/security/test_no_direct_route.py` asserting a request presented straight to a deployable fails across every audience — including one carrying a **well-formed but self-supplied gateway header contract** — and that no pod-to-pod route is reachable — Boundary: service boundary | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a, §SC-DEMO-003b
+
+### Flow 5 — Service Bus
+
+- [ ] T248 [US6] Wire the sample flow onto the bus end to end in `ragcore/workers/resume_worker.py` — dispatcher publishes, consumer claims and executes — reading authority **only** from the durable record and never from the message — Boundary: messaging | Validates: Spec §FR-DEMO-007
+- [ ] T249 [P] [US6] Write an idempotency test in `ragcore/tests/idempotency/test_sample_flow_duplicate.py` asserting the same bus message delivered twice produces **exactly one** effect — Boundary: messaging | Validates: Spec §SC-DEMO-009
+
+### Flow 6 — SignalR notification
+
+- [ ] T250 [US6] Publish the sample-flow completion notification in `ragcore/src/ragcore/notifications/sample_flow.py` carrying **no authority-bearing value**; the client learns the outcome by reading back through T242, not from the payload — Boundary: realtime | Validates: Spec §FR-DEMO-008, Contracts §notifications
+- [ ] T251 [P] [US6] Write a test in `ragcore/tests/integration/test_notification_is_a_leaf.py` asserting the flow reaches an **identical outcome with no client connected** — Boundary: realtime | Validates: Spec §SC-DEMO-010
+
+### Flow 7 — Persistence and outbox
+
+- [ ] T252 [US6] Wire the sample flow's state change and its outbox row into **one transaction** in `ragcore/src/ragcore/application/sample_flows.py`, so the two are durable together or not at all — Boundary: messaging | Validates: Spec §FR-DEMO-006
+- [ ] T253 [P] [US6] Write a crash test in `ragcore/tests/integration/test_sample_flow_outbox_crash.py` inducing a failure between the state change and the publish, asserting **0 messages lost and 0 effects duplicated** — Boundary: messaging | Validates: Spec §SC-DEMO-008
+
+### Cross-cutting proofs
+
+- [ ] T254 [P] [US6] Write a tenant-isolation test in `ragcore/tests/isolation/test_sample_flow_isolation.py` asserting a flow scoped to one organisation returns **0 rows** belonging to another, **including after the asynchronous hop** — Boundary: tenant isolation | Validates: Spec §SC-DEMO-006
+- [ ] T255 [P] [US6] Write a correlation-continuity test in `ragcore/tests/integration/test_sample_flow_correlation.py` asserting one identifier is recoverable across both deployables and the asynchronous hop — Boundary: observability | Validates: Spec §SC-DEMO-005
+- [ ] T256 [US6] Write the **edge-traversal end-to-end suite** in `ragcore/tests/e2e/test_sample_flows_through_edge.py` driving all three flows through the deployed Front Door → WAF → APIM path and asserting **0 are accepted on a direct-to-deployable or locally hosted run** — Boundary: cross-cutting | Validates: Spec §FR-DEMO-019, §SC-DEMO-001
+
+### Retained from the previous Stage 13 — session and read-side behaviour, not approval
+
 - [ ] T208 [P] [US5] Implement take-over in `ragcore/src/ragcore/application/takeover.py` as an authenticated state transition resolving concurrently to a single owner — Boundary: Session | Validates: Spec §FR-INTR-013
 - [ ] T209 [P] [US5] Implement `POST /api/staff/v1/work/{workItemId}/cancel` in `ragcore/src/ragcore/api/staff/work.py`, permitted at every suspension point before claim — Boundary: Work | Validates: Spec §FR-INTR-014
 - [ ] T210 [P] [US5] Implement the Audit, Governance and Tenancy read modules in `dotnet/src/Modules/` over `vw_audit_event_v1`, `vw_governance_catalogue_v1`, `vw_tenant_v1` and the reporting rollup — Boundary: read contract | Validates: Contracts §read-views
 - [ ] T211 [P] [US5] Implement Mission Control and Synthia Admin in `apps/web/projects/staff-features/{mission-control,admin}/` with module visibility by role — Boundary: presentation | Validates: Spec §FR-SURF-003
-- [ ] T212 [P] [US2] Approval authorization test in `ragcore/tests/authorization/test_approval_roles.py` asserting `technician` may approve, `administrator` may not, and an empty intersection denies — Boundary: authorization | Validates: Spec §FR-AUTHZ-007
-- [ ] T213 [P] [US2] Checkpoint/resume test in `ragcore/tests/checkpoint/test_suspend_resume.py` asserting suspension survives with no client connected and resumes only under valid authority — Boundary: Agent/RagCore | Validates: Spec §SC-INTR-001
-- [ ] T214 [P] [US2] Expiry test in `ragcore/tests/integration/test_expiry.py` asserting the window elapsing makes work non-executable, is not an error, and surfaces as approved-but-not-executed — Boundary: Work | Validates: Spec §FR-EXEC-001
-- [ ] T215 [P] [US2] No-refire test in `ragcore/tests/integration/test_no_refire.py` asserting a failed authorized action does not retry and requires fresh authorization — Boundary: execution | Validates: Spec §FR-EXEC-006
 - [ ] T216 [P] [US5] Concurrency test in `ragcore/tests/concurrency/test_concurrent_takeover.py` asserting two simultaneous take-overs resolve to one owner — Boundary: Session | Validates: Spec §FR-INTR-013
-- [ ] T217 [P] [US2] Contract test in `ragcore/tests/contracts/test_staff_verdict.py` asserting the verdict endpoint returns before execution and records the role set held at decision time — Boundary: Staff API | Validates: Spec §FR-AUTHZ-011
-- [ ] T218 [US2] End-to-end golden path test in `ragcore/tests/e2e/test_staff_approval_golden_path.py` driving the interrupt, **closing the customer client entirely**, approving, and asserting the work completes — Boundary: cross-cutting | Validates: Stage 13 gate, Spec §SC-EXEC-001
 
-**Checkpoint**: Golden path B validated — approved work survives the client, and consent is an action rather than a sentence. **Both golden paths complete; all four execution treatments demonstrated.**
+**Checkpoint**: Golden path B validated — all three sample flows complete **through the deployed edge**,
+a duplicate delivery produces one effect, the notification is a leaf, the organisation binding survives
+the asynchronous hop, and a gateway bypass fails. **The scaffold is complete when the SC-DEMO group is
+met.**
+
+---
+
+## Withdrawn 2026-09-16 — approval and consent workflow tasks
+
+**Withdrawn from the scaffold, not from the platform.** These task IDs are **permanently retired and
+MUST NOT be reused**. The behaviour each covered remains specified in spec.md and is deferred under
+`FR-DEMO-016`; `FR-DEMO-017` states that the deferral is of a demonstration rather than of a design.
+They return with the stage that implements approval, and are listed so their absence reads as a
+decision rather than an omission.
+
+| Retired | Covered | Returns with |
+|---|---|---|
+| T193–T197 | Approval request use case, interrupt node, verdict endpoint, first-valid-verdict-wins, decision notifications | The approval stage |
+| T198–T201 | Approvals and Work read modules, staff queue endpoints and UI | The approval stage |
+| T202–T204 | Consent interrupt node, consent endpoint, consent prompt UI | The consent stage |
+| T205–T207 | Consent-is-not-chat, consent authority, consent golden path | The consent stage |
+| T212–T215 | Approval role matrix, checkpoint/resume, expiry, no-refire | The approval stage |
+| T217–T218 | Staff verdict contract test, staff approval golden path | The approval stage |
+
+**`FR-DEMO-018` covers the gap in the meantime**: where the gate is unexercised, an operation
+requiring a human decision is refused or routed to manual fallback — **never auto-approved**. T256a
+below asserts it.
+
+- [ ] T256a [P] Write a fail-closed test in `ragcore/tests/governance/test_unexercised_gate_refuses.py` asserting an operation classified `STAFF_APPROVAL` or `END_USER_APPROVAL` is refused or routed to manual fallback and **never auto-approved** while the workflow is unbuilt — Boundary: Governance | Validates: Spec §FR-DEMO-018, §SC-DEMO-014
 
 ---
 
@@ -413,6 +530,9 @@ Phase 1 (tooling)
                                                      └─> Phase 11 (test foundation)
                                                            └─> Phase 12 (golden path A)
                                                                  └─> Phase 13 (golden path B)
+
+Phase 10 (edge: T226-T230a) ═════════════════════════════════════╝
+  provisioned edge gates Phase 13 ACCEPTANCE, not its implementation
 ```
 
 ### Critical path inside the scaffold
@@ -429,6 +549,11 @@ T153 → T154 → T155 (catalogue → gate → fixtures)
 **T155 is a hard prerequisite for both golden paths** — without the reference operations there is no
 operation to propose, and Phases 12–13 cannot be demonstrated.
 
+**T226–T230a are hard prerequisites for Phase 13** *(added 2026-09-16)*. Spec `FR-DEMO-019` makes edge
+traversal part of acceptance, so no Phase 13 task can be *accepted* until Front Door, WAF and APIM are
+provisioned and APIM derives identity. Every flow will pass against the deployables long before that —
+which is exactly why this is stated rather than assumed. **Start the edge provisioning early.**
+
 **T084 is a hard prerequisite for Phase 13** — until the graph is compiled with the PostgreSQL
 checkpointer it suspends only in memory, so no suspension survives a restart and neither
 `STAFF_APPROVAL` nor `END_USER_APPROVAL` can be proven durable.
@@ -442,7 +567,10 @@ checkpointer it suspends only in memory, so no suspension survives a restart and
 - Phase 7: T106 and T107 (retention, erasure) are sequential; T111 and T113 (their tests) are parallel
 - Phase 12: T169–T172 (retrieval pipeline), T180–T183 and T185–T188 are parallel; T184 (feedback
   endpoint) precedes T185 and T186
-- Phase 13: T196–T201 and T208–T218 are parallel once T195 lands; within the consent path T202 → T203
+- Phase 13: T239 and T240 first (fixtures and the inertness guard). The three flow groups — customer
+  (T241, T242), staff (T243, T244) and workload (T245) — are parallel. T246 and T247 depend on the
+  edge tasks T226–T230a. T248 depends on Phase 8. The cross-cutting proofs T254–T256 depend on all
+  three flows. T208–T211 and T216 are parallel throughout and depend on nothing in this phase
   are sequential, then T204–T206 are parallel and T207 is last
 
 ---
@@ -474,11 +602,17 @@ orchestration state (T084) and the removal of data past its retention window (T1
 
 ### Then the golden paths (Phases 12–13)
 
-Golden path A proves the machine works without a human, and that the gate refuses what it must.
-Golden path B proves the hardest guarantee — that a governed human decision survives the requester's
-absence — for both human-decided treatments, since they differ only in who decides and where. Only
-together do they demonstrate that the governance architecture holds, and between them they exercise all
-four execution treatments (`SC-SCOPE-002`).
+Golden path A proves the synchronous machine works without a human, and that the gate refuses what it
+must. Golden path B proves the seams underneath it — the transaction boundary between a state change
+and the message announcing it, the deployable boundary, the organisation binding surviving a hop that
+carries no tenant, and the duplicate delivery that at-least-once guarantees will arrive. Together they
+demonstrate that the **platform** holds.
+
+*Revised 2026-09-16.* Golden path B previously proved a governed human decision. It no longer does, and
+the claim that the two paths exercise all four execution treatments is withdrawn with it: the catalogue
+carries all four and classification is deterministic (`SC-SCOPE-002`, amended), but the two
+human-decided treatments are not exercised (`FR-DEMO-016`). `FR-DEMO-018` is what stops that gap being
+a permission grant — an unexercised gate refuses rather than permits, and T256a asserts it.
 
 ### Only then, use cases
 

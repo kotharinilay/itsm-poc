@@ -16,16 +16,30 @@ Synthia is an autonomous IT service management agent operated by Synoptek for mu
 organisations from one platform. It resolves customer support requests end to end where it can do so
 safely, and diagnoses, informs and assists a human technician the rest of the time.
 
-This specification defines the **initial engineering scaffold**: a real, working product skeleton that
-demonstrates every load-bearing behaviour of the platform end to end, while containing **no resolved
-use cases**. The twelve use cases of the initial product release are represented as placeholders
-UC-01 through UC-12 and are awaiting product definition. Until they are defined, every request falls
-back to manual resolution.
+This specification defines the **initial engineering scaffold**: a real, working platform skeleton
+that proves the load-bearing *infrastructure* of the platform end to end, while containing **no
+resolved use cases**. The twelve use cases of the initial product release are represented as
+placeholders UC-01 through UC-12 and are awaiting product definition. Until they are defined, every
+request falls back to manual resolution.
+
+**What the scaffold proves is architecture, not product workflow.** It demonstrates that the
+representative API, persistence, messaging, notification and service-to-service paths work and are
+authenticated securely — through inert sample flows (FR-DEMO-001 onward). It does **not** implement
+business approval semantics, and it does not need to: an approval workflow exercised against a
+fixture proves that the fixture was wired up, not that the platform underneath it is sound.
 
 **Why build the skeleton before the use cases**: the risky parts of this product are not the use
-cases — they are identity, organisation isolation, deterministic authorization, durable suspension around a
-human decision, and honest reporting of what actually happened. Those must be proven first, because
+cases — they are identity, organisation isolation, deterministic authorization, the integrity of the
+durable store, and honest reporting of what actually happened. Those must be proven first, because
 every use case is built on top of them and none of them can be retrofitted safely.
+
+**Two kinds of requirement live in this document, and the distinction is load-bearing.** Most
+requirements describe the **platform**: what Synthia must do once it carries product. A smaller group
+— `FR-DEMO-*` — describes the **scaffold**: what must be demonstrably working now, before any use
+case exists. Deferring a demonstration is not deferring a requirement. The governance architecture,
+the four execution treatments, durable suspension and the approval and consent models all remain
+fully specified here and are unchanged; what has moved is only the point at which each is *exercised*
+in running code.
 
 ## Clarifications
 
@@ -46,6 +60,36 @@ every use case is built on top of them and none of them can be retrofitted safel
   paths can actually be exercised? → A: A small set of inert reference operations, one per execution
   treatment, clearly marked as scaffold fixtures, producing no real external effect and excluded from
   production configuration.
+
+### Session 2026-09-16 — scaffold scope correction
+
+- Q: Must the scaffold implement working approval and consent workflows in order to be considered
+  complete? → A: No. The scaffold proves **platform infrastructure**, not product workflow. It is
+  complete when the representative customer, staff and workload API paths, the service-to-service
+  path, PostgreSQL persistence, the transactional outbox, Service Bus publish/consume, SignalR
+  notification, correlation and tenant propagation, managed-identity authentication, Key Vault secret
+  binding and OpenAPI contract emission are demonstrably working and authenticated securely.
+- Q: Does deferring the approval and consent demonstration remove the execution-treatment model from
+  the architecture? → A: No. The four treatments, the control gate, durable suspension and the
+  approval and consent authority models remain specified in full and are unchanged. Only the point at
+  which they are exercised in running code has moved.
+- Q: What must the sample flows act upon? → A: Inert, non-production reference operations only. A
+  sample flow MUST NOT implement, stand in for, or be counted as any of UC-01 through UC-12, and MUST
+  NOT produce a real effect in any external system.
+- Q: What is explicitly not built in the scaffold as a result? → A: `STAFF_APPROVAL` and
+  `END_USER_APPROVAL` workflow behaviour, the approval user interface, the consent user interface,
+  real endpoint execution and desktop script execution.
+- Q: What does the required service-to-service flow demonstrate, given that the two deployables meet
+  only at the durable store and the message transport? → A: Service-to-service takes more than one
+  form, and **none of them is a direct call**. Asynchronously, services meet at the message transport
+  and the published views. Synchronously, a service reaches another through the **workload audience**.
+  In every case the call routes **through the API gateway** — a service MUST NOT reach another
+  service directly, bypassing the gateway.
+- Q: Must the sample flows be exercised through a deployed public edge and gateway, or may they be
+  driven against the deployables with the edge verified separately? → A: Through the **real deployed
+  path**. Every sample flow is driven end to end through the public edge, the web application
+  firewall, the API gateway and the container platform in a deployed environment. Configuration
+  review does not substitute for traversal.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -98,6 +142,13 @@ the requesting user has closed their client, gone home, or lost access in the me
 "Agentic, but a human is accountable" is only real if the suspension is durable, the decision is
 authenticated, and approved work survives the requester's absence.
 
+> **Scaffold scope**: this story describes **platform behaviour and is not scaffold acceptance**
+> (Clarifications, Session 2026-09-16). The scaffold does not implement `STAFF_APPROVAL` workflow
+> behaviour or an approval user interface. Everything the story requires — the treatment model, the
+> control gate, durable suspension, first-valid-verdict-wins, the fifteen-minute window, the actor
+> chain — remains specified in full and unchanged below. What is deferred is the demonstration, not
+> the design.
+
 **Independent Test**: Using the staff-approval reference operation, drive a session to the interrupt,
 close the end user's client entirely, approve from the staff portal, and confirm the work resumes and
 completes without the end user present.
@@ -132,6 +183,12 @@ shown exactly what will happen and agrees through an explicit authenticated acti
 **Why this priority**: Consent is a distinct gate from approval, with a different decider and a
 different authority. It must be proven separately, because collapsing the two is a security failure
 that would not be visible from the approval path alone.
+
+> **Scaffold scope**: this story describes **platform behaviour and is not scaffold acceptance**
+> (Clarifications, Session 2026-09-16). The scaffold does not implement `END_USER_APPROVAL` workflow
+> behaviour or a consent user interface. The requirement that consent is a distinct authority, never
+> inferred from chat text, and never a substitute for staff approval, remains specified in full and
+> unchanged below.
 
 **Independent Test**: Using the end-user-approval reference operation, drive a session to the consent
 interrupt, type an affirmative message in the chat, confirm nothing happens, then submit the explicit
@@ -208,6 +265,61 @@ privilege.
 8. **Given** a Synoptek staff member holding `technician` and `administrator`, **When** they sign in to
    a customer surface, **Then** they are treated as an end user with end-user permissions only, their
    staff roles confer nothing, and no staff role check is applied.
+
+---
+
+### User Story 6 - The platform proves its own plumbing before it carries any product (Priority: P1)
+
+An engineer deploys the scaffold and exercises a representative flow on each public audience —
+customer, staff and workload — plus one service-to-service call between the two deployables. Each
+flow acts only on an inert reference operation. Between them the flows write to and read from the
+authoritative store, commit a message to the transactional outbox in the same transaction as the
+state change, publish and consume that message through the queue, deliver a notification to the
+originating client, and carry one correlation identifier and one organisation binding from the public
+edge all the way through. Every hop authenticates as itself; no secret appears in source or
+configuration; the API contract is emitted from the running services rather than hand-written.
+
+**Why this priority**: This is what the scaffold is *for*. The risky parts of the platform are the
+seams — the transaction boundary between a state change and the message announcing it, the identity
+of a service calling another service, the organisation binding surviving an asynchronous hop, the
+secret that turns out to have been in a config file. None of those is exercised by a product
+workflow; all of them are exercised by a flow that does nothing at all. A demonstration built on an
+approval workflow proves that the fixture was wired up. A demonstration built on inert flows proves
+the platform.
+
+**Independent Test**: Can be validated by running each flow against a deployed environment and
+confirming the observable outcome of each, with every hop authenticated and no real effect occurring
+in any external system.
+
+**Acceptance Scenarios**:
+
+1. **Given** a signed-in end user, **When** they exercise the customer sample flow, **Then** the
+   request is accepted only with a validated identity, the response carries the correlation
+   identifier the request was given, and the resulting record is bound to that user's organisation.
+2. **Given** a signed-in staff member, **When** they exercise the staff sample flow against a
+   customer organisation's record, **Then** the target organisation is derived from durable platform
+   state rather than from anything the request asserted.
+3. **Given** the workload principal, **When** it exercises the workload sample flow, **Then** it
+   authenticates as an application rather than as a person, and carries no customer-organisation
+   authority of its own.
+4. **Given** one deployable calling the other, **When** the call is made, **Then** the caller
+   authenticates as itself and the callee rejects an unauthenticated or wrongly-scoped caller.
+5. **Given** a sample flow that changes state, **When** the change commits, **Then** the state change
+   and its outbox message are durable together or not at all, and a crash between them loses neither
+   and duplicates neither.
+6. **Given** a durable outbox message, **When** the dispatcher publishes it, **Then** a consumer
+   receives it, processes it exactly once in effect, and the same message delivered twice produces
+   one outcome.
+7. **Given** a completed sample flow, **When** the originating client is connected, **Then** it
+   receives a notification carrying no authority — and the flow's outcome is unchanged if the client
+   was disconnected throughout.
+8. **Given** any of the flows above, **When** its telemetry is inspected, **Then** one correlation
+   identifier ties the whole journey together across every tier and every asynchronous hop.
+9. **Given** a deployed environment, **When** any component authenticates to a platform resource,
+   **Then** it does so as a managed identity, and every secret it needs is resolved by reference at
+   the point of use.
+10. **Given** a running service, **When** its API contract is requested, **Then** the contract is
+    emitted from the running service and matches what the service actually accepts.
 
 ---
 
@@ -313,8 +425,14 @@ criteria.
 - **FR-SCOPE-003**: The scaffold MUST represent UC-01 through UC-12 as placeholders explicitly marked
   *awaiting product definition*, and MUST NOT contain invented definitions for any of them.
 - **FR-SCOPE-004**: The scaffold MUST include a small set of **reference operations** in the governance
-  catalogue — one for each execution treatment — so that the governance, consent and approval paths
-  are demonstrable end to end before any use case exists.
+  catalogue — one for each execution treatment — so that the catalogue is populated, deterministic
+  treatment classification is exercisable, and the sample flows of FR-DEMO-001 onward have something
+  inert to act upon before any use case exists.
+  *Amended 2026-09-16*: this requirement previously required the consent and approval paths to be
+  demonstrable end to end. That demonstration is no longer scaffold scope (FR-DEMO-016). The
+  reference operations themselves, one per treatment, are unchanged — the catalogue still carries all
+  four treatments, because the treatment a capability is classified under is catalogue data whether
+  or not a workflow acts on it.
 - **FR-SCOPE-005**: Reference operations MUST be inert. They MUST NOT produce any real effect in any external
   system, and MUST NOT modify any account, device or record.
 - **FR-SCOPE-006**: Reference operations MUST be explicitly labelled as scaffold fixtures, MUST NOT be
@@ -328,6 +446,118 @@ criteria.
   conversation back to its service function.
 - **FR-SCOPE-010**: An IT question with no organisational answer MUST be treated as in scope and routed to
   the vendor-documentation fallback, not declined as out of scope.
+
+#### Scaffold demonstration
+
+*Added 2026-09-16 (Clarifications, Session 2026-09-16).* **This group, and only this group, defines
+what must be working before the scaffold is complete.** Every other requirement in this document
+describes the platform Synthia becomes once it carries product; those requirements are unchanged.
+
+The flows below are the acceptance surface of User Story 6. Each is *representative* — the smallest
+flow that genuinely traverses the seam it exists to prove. A flow that does more is not a better
+proof; it is a proof with more places to hide.
+
+**Traceability.** This document describes capabilities rather than products, as it does throughout;
+[plan.md](./plan.md) names the technology each one resolves to. The mapping is one to one, and is
+recorded here so a reviewer can check the scaffold against the component list without inferring it:
+
+| Requirement | Flow | Realised by (plan.md) |
+|---|---|---|
+| FR-DEMO-001 | Customer API sample flow | Customer audience, behind the edge and the API gateway |
+| FR-DEMO-002 | Staff API sample flow | Staff audience |
+| FR-DEMO-003 | Workload API sample flow | Workload audience |
+| FR-DEMO-004 | Service-to-service, both forms | Async: Service Bus + published views. Sync: workload audience **via APIM** |
+| FR-DEMO-004a | No direct service-to-service route | APIM as the sole trust boundary; no pod-to-pod path |
+| FR-DEMO-005 | Persistence flow | PostgreSQL — the authoritative durable store |
+| FR-DEMO-006 | Transactional outbox flow | PostgreSQL outbox table plus its dispatcher |
+| FR-DEMO-007 | Publish and consume flow | Azure Service Bus |
+| FR-DEMO-008 | Notification flow | Azure SignalR |
+| FR-DEMO-009 | Correlation and trace propagation | W3C Trace Context across both deployables |
+| FR-DEMO-010 | Organisation propagation and isolation | Trusted tenant binding, every tier |
+| FR-DEMO-011 | Managed-identity authentication | Entra managed identity to every platform resource |
+| FR-DEMO-012 | Secret binding by reference | Azure Key Vault |
+| FR-DEMO-013 | Contract emission | OpenAPI, generated from the running services |
+
+The audiences, the bounded contexts and the deployable boundaries are **unchanged** by this
+correction. Nothing above introduces a component, a context or a boundary that
+[plan.md](./plan.md) did not already carry.
+
+- **FR-DEMO-001**: The scaffold MUST demonstrate a **customer API sample flow**: a request from an
+  authenticated end user, accepted on the customer audience, producing an observable outcome bound to
+  that user's own organisation.
+- **FR-DEMO-002**: The scaffold MUST demonstrate a **staff API sample flow**: a request from an
+  authenticated staff principal, accepted on the staff audience, whose target organisation is derived
+  from durable platform state and never from a client-supplied value.
+- **FR-DEMO-003**: The scaffold MUST demonstrate a **workload API sample flow**: a request from the
+  application principal, accepted on the workload audience, carrying no customer-organisation
+  authority of its own.
+- **FR-DEMO-004**: The scaffold MUST demonstrate **service-to-service interaction in both of its
+  permitted forms**, in each of which the caller authenticates as itself and the callee refuses an
+  unauthenticated or wrongly-scoped caller:
+  - **Asynchronous** — one service commits a state change, and another observes it through the
+    message transport and the published read views. The two sides share no application dependency in
+    either direction.
+  - **Synchronous** — one service reaches another through the **workload audience**, app-only,
+    carrying no customer-organisation authority of its own.
+- **FR-DEMO-004a**: **A service MUST NOT reach another service directly.** Every synchronous
+  service-to-service call MUST route through the API gateway, which is the platform's trust boundary
+  and the single place identity is derived. A direct route between deployables — pod to pod, container
+  to container, or by any internal address that bypasses the gateway — MUST NOT exist, and the
+  scaffold MUST demonstrate that no such route is reachable.
+  *This is the no-direct-service-to-service rule, and it is why FR-DEMO-004 has the shape it does: an
+  ordinary HTTP call from one deployable to the other would be the single fastest way to lose the
+  boundary that ADR-0001 exists to hold.*
+- **FR-DEMO-005**: The scaffold MUST demonstrate a **persistence flow** against the authoritative
+  durable store: a write, a read back, and a concurrent write that resolves to exactly one outcome.
+- **FR-DEMO-006**: The scaffold MUST demonstrate a **transactional outbox flow** in which a state
+  change and the message announcing it become durable in the same transaction, so that a failure
+  between them loses neither and duplicates neither.
+- **FR-DEMO-007**: The scaffold MUST demonstrate a **publish and consume flow** over the message
+  transport, in which a message delivered more than once produces exactly one effect.
+- **FR-DEMO-008**: The scaffold MUST demonstrate a **notification flow** to a connected client. The
+  notification MUST carry no authority, and the outcome of the originating flow MUST be identical
+  when no client is connected at all.
+- **FR-DEMO-009**: The scaffold MUST demonstrate **correlation propagation**: one identifier,
+  originating at the public edge, appearing on every log record, trace, message and durable record
+  belonging to a single journey, across every tier and every asynchronous hop.
+- **FR-DEMO-010**: The scaffold MUST demonstrate **organisation propagation and isolation**: the
+  organisation binding travelling with the work across every hop, and a request scoped to one
+  organisation returning no other organisation's data on any path.
+- **FR-DEMO-011**: The scaffold MUST demonstrate **managed-identity authentication** to every platform
+  resource it reaches, with no shared key, connection secret or password used to reach any of them.
+- **FR-DEMO-012**: The scaffold MUST demonstrate **secret binding by reference**: every credential
+  resolved from the secret store at the point of use, with no secret value in source, in tests, or in
+  committed configuration.
+- **FR-DEMO-013**: The scaffold MUST demonstrate **contract emission**: the API contract for each
+  audience generated from the running service, matching what that service actually accepts, rather
+  than maintained by hand alongside it.
+- **FR-DEMO-014**: Every sample flow MUST act **only on inert reference operations**. No sample flow
+  may produce a real effect in any external system, or modify any account, device or record.
+- **FR-DEMO-015**: A sample flow MUST NOT implement, stand in for, or be counted as any of UC-01
+  through UC-12, and MUST NOT be presented to any user as product capability.
+- **FR-DEMO-016**: The scaffold MUST NOT implement `STAFF_APPROVAL` workflow behaviour,
+  `END_USER_APPROVAL` workflow behaviour, an approval user interface, a consent user interface, real
+  endpoint execution, or desktop script execution. These are platform behaviours, specified elsewhere
+  in this document and deferred past the scaffold.
+- **FR-DEMO-017**: FR-DEMO-016 defers a **demonstration, not a design**. The four execution
+  treatments, the deterministic control gate, durable suspension and resume, and the approval and
+  consent authority models remain specified requirements of the platform and MUST NOT be removed,
+  weakened or reinterpreted on the strength of that deferral. Any capability reaching the endpoint or
+  an external system arrives through them when it arrives.
+- **FR-DEMO-018**: The absence of an approval or consent workflow MUST NOT be implemented as a
+  permissive default. Where the gate is not yet exercised, an operation requiring a human decision
+  MUST be refused or routed to manual fallback — never auto-approved, and never allowed to proceed
+  because nothing was there to stop it.
+- **FR-DEMO-019**: Every sample flow MUST be exercised **through the real deployed path** — the
+  public edge, the web application firewall, the API gateway and the container platform — in a
+  deployed environment. A flow driven against a deployable directly, or against a locally hosted
+  service, does not satisfy FR-DEMO-001 through FR-DEMO-013.
+  - A flow with an asynchronous tail is **entered** through that path; its continuation over the
+    message transport is the seam FR-DEMO-004 exists to prove and legitimately leaves it. What MUST
+    NOT happen is a flow *entered* by any other route.
+  - **Configuration review does not substitute for traversal.** A gateway policy that is correct in
+    a template and unreached at runtime protects nothing, and the failure it hides — something
+    bypassing the boundary — is invisible to every test that does not actually cross it.
 
 #### Personas and authorization
 
@@ -377,6 +607,23 @@ criteria.
 - **FR-IDENT-010**: Aggregated and derived figures MUST NOT reveal another organisation's data through
   counts, rankings, distributions or any other indirect route. A figure spanning organisations MUST be
   exposed only where no single organisation's contribution is identifiable.
+- **FR-IDENT-011**: Identity MUST be derived exactly once, at the gateway, and stated to services in a
+  **closed header contract of exactly five values**: the identity-provider tenant, the principal object
+  identifier, the complete role set in canonical order, the credential class (`delegated` or `app`), and
+  the client application identifier. A service MUST NOT parse an access token, MUST NOT accept an
+  identity header outside this set, and MUST refuse a contract whose role value is absent, empty,
+  unordered, duplicated, whitespace-padded or outside the canonical set. The gateway MUST delete every
+  inbound copy of these headers before validation and set them on the outbound request.
+  **The audience is NOT among them.** It is fixed by the route the gateway matched, because the surface
+  decides which authorization model applies (FR-SURF-005). An audience carried as a header would be an
+  authority field a client could write — the self-promotion FR-IDENT-002 exists to prevent.
+- **FR-IDENT-012**: A service MUST be able to distinguish a header contract set by the gateway from one
+  supplied by a caller, and MUST refuse any request on an audience path that cannot prove gateway
+  provenance. **Network placement alone MUST NOT be treated as that proof**: an internal-only service is
+  reachable by everything already inside its network boundary, and for a service that consumes the
+  contract as authoritative, reachability *is* the ability to assert any organisation and any role. The
+  request MUST be refused rather than sanitised — stripping the headers and continuing returns success
+  to an attacker and leaves the attempt indistinguishable from an ordinary unauthenticated call.
 
 #### Client surfaces
 
@@ -717,10 +964,58 @@ appended within their group.
 
 - **SC-SCOPE-001**: Because no use case is yet defined, 100% of action-requiring requests route to manual
   resolution — and this is reported honestly rather than presented as a failure.
-- **SC-SCOPE-002**: Each of the four execution treatments can be demonstrated end to end in a running
-  scaffold using the reference operations, with no real effect occurring in any external system.
+- **SC-SCOPE-002**: Each of the four execution treatments is registered in the catalogue against a
+  reference operation, and deterministic classification assigns the treatment the catalogue records
+  in 100% of trials, with no real effect occurring in any external system.
+  *Amended 2026-09-16*: this criterion previously required each treatment to be demonstrated end to
+  end through its workflow. The workflow demonstration is no longer scaffold scope (FR-DEMO-016);
+  what remains measurable now is that the catalogue carries all four and that classification is
+  deterministic.
 - **SC-SCOPE-003**: No reference operation is present in a production configuration, and none is ever
   presented to a user as a product capability.
+
+#### Platform demonstration
+
+*Added 2026-09-16.* **The scaffold is complete when every criterion in this group is met.** Each is
+verified against a deployed environment, not a unit test, because the seams these exist to prove are
+precisely the ones that do not exist in a single process.
+
+- **SC-DEMO-001**: All thirteen sample flows (FR-DEMO-001 through FR-DEMO-013) complete successfully
+  when driven through the deployed public edge, web application firewall, API gateway and container
+  platform, and each is repeatable by an engineer following written steps without recourse to the
+  authors. 0 flows are accepted on the strength of a direct-to-deployable or locally hosted run.
+- **SC-DEMO-002**: 100% of sample-flow requests are rejected when presented without a valid identity,
+  and no flow has an unauthenticated path that succeeds.
+- **SC-DEMO-003**: Every hop in every sample flow — client to service, service to service, service to
+  platform resource — authenticates, and 0 of them rely on a shared key, connection secret or
+  password.
+- **SC-DEMO-003a**: 100% of synchronous service-to-service calls route through the API gateway, and
+  0 direct routes between deployables are reachable — verified by attempting one and observing it
+  fail, not by observing that none is currently used.
+- **SC-DEMO-003b**: A request presented directly to a deployable, bypassing the edge and the gateway,
+  fails in 100% of attempts across every audience — including a request carrying a well-formed but
+  self-supplied gateway header contract, which is the shape a bypass actually takes.
+- **SC-DEMO-004**: A repository scan finds 0 secret values in source, in tests and in committed
+  configuration; every credential is present only as a reference resolved at the point of use.
+- **SC-DEMO-005**: One correlation identifier is recoverable end to end for 100% of sample-flow
+  journeys, including across every asynchronous hop, and identifies every record the journey produced.
+- **SC-DEMO-006**: Across every sample flow, 0 responses contain another organisation's data, and a
+  request scoped to one organisation returns nothing belonging to another on any path.
+- **SC-DEMO-007**: A staff sample flow resolves its target organisation from durable platform state in
+  100% of trials, and 0 flows accept a target organisation from a client-supplied value.
+- **SC-DEMO-008**: A state change and its outbox message are durable together in 100% of trials; an
+  induced failure between the two loses 0 messages and duplicates 0 effects.
+- **SC-DEMO-009**: A message delivered more than once produces exactly 1 effect in 100% of trials.
+- **SC-DEMO-010**: A sample flow reaches the same outcome whether or not a client is connected to
+  receive its notification, in 100% of trials, and 0 notifications carry authority.
+- **SC-DEMO-011**: The emitted API contract matches what each running service accepts for 100% of the
+  operations it publishes, with 0 hand-maintained divergences.
+- **SC-DEMO-012**: 0 sample flows produce an effect in any external system, modify any account,
+  device or record, or are presented to any user as product capability.
+- **SC-DEMO-013**: 0 of UC-01 through UC-12 are implemented, stood in for, or counted as complete by
+  any sample flow.
+- **SC-DEMO-014**: Where an operation requiring a human decision is encountered while the gate is
+  unexercised, it is refused or routed to manual fallback in 100% of cases, and auto-approved in 0.
 
 #### Authorization
 
@@ -869,6 +1164,14 @@ move into Measurable Outcomes and become binding — not before.
   *Revisit when:* the first use case requiring two consequential operations in one session is
   defined. The assumption holds until then and costs nothing, because each scaffold reference
   fixture needs exactly one.
+- **A provisioned platform environment, edge included.** *Added 2026-09-16.* FR-DEMO-019 makes
+  scaffold acceptance depend on a deployed public edge, web application firewall, API gateway and
+  container platform, with identity configured at the gateway. Until that environment exists, the
+  thirteen sample flows can be *written* and can pass against the deployables, but **none of them can
+  be accepted** — SC-DEMO-001 is not satisfiable, and the scaffold is not complete.
+  *Revisit when:* the environment is provisioned and the gateway derives identity. This is the
+  longest-lead dependency in the scaffold and the one most likely to be discovered late, because
+  every flow passes locally right up until the moment it has to cross a boundary that is not there.
 - **Localization retrofit.** *Revisit when:* any customer requires a language other than English. English-only with hardcoded strings is a deliberate choice for the
   scaffold, with string externalization deferred rather than rejected. Adding a second language later
   will require retrofitting externalization across the surfaces already built; this cost is known and
@@ -894,6 +1197,20 @@ move into Measurable Outcomes and become binding — not before.
   *Revisit when:* the hop count on a representative grounded path has been measured.
 
 ## Out of Scope
+
+**Out of scope for the scaffold, specified for the platform** *(added 2026-09-16)*. Each of the
+following remains a requirement of this document and is not built now. Listing them here scopes the
+build; it does not weaken the design, and FR-DEMO-017 says so normatively.
+
+- `STAFF_APPROVAL` workflow behaviour — the treatment, the gate and the authority model stay specified.
+- `END_USER_APPROVAL` workflow behaviour — consent remains a distinct authority, never inferable from
+  chat text and never a substitute for staff approval.
+- The approval user interface.
+- The consent user interface.
+- Real endpoint execution.
+- Desktop script execution.
+
+**Out of scope entirely**:
 
 - Definitions or behaviour for UC-01 through UC-12. The reference operations are path fixtures and are
   explicitly not use cases.

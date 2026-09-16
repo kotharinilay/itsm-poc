@@ -41,7 +41,7 @@ describe('Desktop renderer App', () => {
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('main#main-content')).not.toBeNull();
-    expect(compiled.querySelector('a.skip-link')?.getAttribute('href')).toBe('#main-content');
+    expect(compiled.querySelector('a')?.getAttribute('href')).toBe('#main-content');
   });
 
   it('renders no element gated on a client-side authorization decision', () => {

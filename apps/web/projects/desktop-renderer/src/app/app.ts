@@ -11,8 +11,9 @@
  * re-verified server-side (spec FR-SURF-004).
  */
 
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { SkipLink } from 'design-system';
 
 import { DesktopBridge } from './desktop/desktop-bridge';
 import type { HostEndpoints, SessionBoundaryDescriptor } from './desktop/desktop-bridge.types';
@@ -20,7 +21,7 @@ import type { HostEndpoints, SessionBoundaryDescriptor } from './desktop/desktop
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, SkipLink],
+  imports: [RouterOutlet, SkipLink],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Synthia.Persistence;
 
 namespace Synthia.Modules.Audit;
 
@@ -15,7 +16,9 @@ public static class AuditModuleRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Stage 5 wires read models over vw_*_v1 views. Nothing is registered at Stage 1.
+        services.AddSynthiaReadContext();
+        services.AddScoped<IAuditReadModel, AuditReadModel>();
+
         return services;
     }
 }

@@ -1,0 +1,129 @@
+name: base-image-digests
+
+# A pinned digest is only a control if something re-pins it. This is that something.
+#
+# The process is defined rather than merely required to exist (plan Stage 10):
+#   Owner      the platform team; the re-pin lands as an ordinary reviewed pull request, never an
+#              out-of-band registry change
+#   Triggers   a monthly scheduled check, a High or Critical CVE against either base image, or a
+#              base-image release carrying a runtime patch
+#   Gate       the PR passes the full suite plus an image scan showing no new High or Critical.
+#              A DIGEST NEVER REACHES PRODUCTION ON A GREEN SCAN ALONE.
+#   Emergency  a Critical CVE with a published fix may skip the schedule, but not the gate.
+
+on:
+  schedule:
+    # Monthly, early on the first. Not more often: a re-pin is a reviewed change, and a bot that
+    # opens a pull request every week trains reviewers to close them without reading.
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run was triggered out of schedule (e.g. CVE identifier)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: resolve current digests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Resolve the tracked tags
+        id: digests
+        run: |
+          set -euo pipefail
+
+          # One entry per tracked tag. The .NET runtime is chiseled; RagCore is a slim Python base
+          # (research R-011, R-012). They are tracked together because they are re-pinned together,
+          # not because they share a base family — they do not, and their hardening checks differ.
+          dotnet_tag='mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled'
+          ragcore_tag='python:3.12-slim-bookworm'
+
+          dotnet_digest="$(crane digest "$dotnet_tag")"
+          ragcore_digest="$(crane digest "$ragcore_tag")"
+
+          echo "dotnet_tag=$dotnet_tag"        >> "$GITHUB_OUTPUT"
+          echo "dotnet_digest=$dotnet_digest"  >> "$GITHUB_OUTPUT"
+          echo "ragcore_tag=$ragcore_tag"      >> "$GITHUB_OUTPUT"
+          echo "ragcore_digest=$ragcore_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Re-pin the Dockerfiles
+        id: repin
+        run: |
+          set -euo pipefail
+
+          changed=0
+
+          repin() {
+            local file="$1" image="$2" digest="$3"
+            if [ ! -f "$file" ]; then
+              return 0
+            fi
+            # Replaces whatever follows the image reference, including the placeholder that ships in
+            # the repository before the first real pin.
+            sed -i -E "s#(${image}@sha256:)[A-Za-z0-9_]+#\1${digest#sha256:}#g" "$file"
+            if ! git diff --quiet -- "$file"; then
+              changed=1
+            fi
+          }
+
+          repin build/docker/dotnet.Dockerfile  'mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled' "${{ steps.digests.outputs.dotnet_digest }}"
+          repin build/docker/ragcore.Dockerfile 'python:3.12-slim-bookworm'                           "${{ steps.digests.outputs.ragcore_digest }}"
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Scan the resolved images
+        if: steps.repin.outputs.changed == '1'
+        id: scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.digests.outputs.dotnet_tag }}@${{ steps.digests.outputs.dotnet_digest }}
+          format: table
+          output: vulnerability-diff.txt
+          severity: HIGH,CRITICAL
+          # Reported, not enforced, at this step. The PR carries the diff so a reviewer sees what
+          # changed; the enforcing scan is the one on the pull request itself, alongside the full
+          # suite. A scan that blocked here would just mean the PR never opens and nobody looks.
+          exit-code: '0'
+
+      - name: Open the re-pin pull request
+        if: steps.repin.outputs.changed == '1'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/base-image-digests
+          title: 'chore: re-pin base image digests'
+          commit-message: 'chore: re-pin base image digests'
+          labels: supply-chain
+          body: |
+            Automated base-image re-pin.
+
+            | Image | Tag | Digest |
+            |---|---|---|
+            | .NET runtime | `${{ steps.digests.outputs.dotnet_tag }}` | `${{ steps.digests.outputs.dotnet_digest }}` |
+            | RagCore base | `${{ steps.digests.outputs.ragcore_tag }}` | `${{ steps.digests.outputs.ragcore_digest }}` |
+
+            Trigger: ${{ inputs.reason || 'monthly scheduled check' }}
+
+            **This PR merges only on the full gate**, not on the scan below: both stacks, the
+            architecture tests, the migration tests and the boundary check, plus an image scan
+            showing no new High or Critical. A digest never reaches production on a green scan
+            alone (plan Stage 10).
+
+            <details><summary>Vulnerability diff</summary>
+
+            ```
+            $(cat vulnerability-diff.txt 2>/dev/null || echo 'No scan output produced.')
+            ```
+
+            </details>

@@ -1,0 +1,150 @@
+# Azure Container Apps configuration for the read-only .NET monolith.
+#
+# This is the runtime half of the contract; ContainerAppsOptions in the application is the other
+# half, and the two must agree. The application validates its side at start (research R-019), so a
+# drain configured here that the application cannot honour fails the deployment rather than a
+# request.
+#
+# Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret: every
+# secret arrives as a secret-reference environment variable resolved from Key Vault through the
+# managed identity (constitution §Configuration).
+
+apiVersion: 2024-03-01
+type: Microsoft.App/containerApps
+name: synthia-monolith
+
+identity:
+  # User-assigned managed identity. Zero standing secrets: the application holds nothing that could
+  # be exfiltrated and replayed, because it holds nothing.
+  type: UserAssigned
+  userAssignedIdentities:
+    ${MANAGED_IDENTITY_RESOURCE_ID}: {}
+
+properties:
+  managedEnvironmentId: ${CONTAINER_APP_ENVIRONMENT_ID}
+
+  configuration:
+    activeRevisionsMode: Single
+
+    ingress:
+      # Internal only. Front Door with WAF is the sole public edge and APIM is the API trust
+      # boundary; no application API is reachable by a path that bypasses the gateway
+      # (constitution Principle I). External ingress here would be exactly that path.
+      external: false
+      targetPort: 8080
+      transport: http
+      allowInsecure: false
+
+    secrets:
+      # Key Vault references, resolved through the managed identity at revision start. The values
+      # never appear in this file, in the image, or in a pipeline log.
+      - name: read-database-connection-string
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-read-database-connection-string
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+      - name: applicationinsights-connection-string
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-appinsights-connection-string
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
+    registries:
+      - server: ${CONTAINER_REGISTRY}
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
+  template:
+    # 25 seconds, matching ContainerAppsOptions.ShutdownTimeoutSeconds and the host's own
+    # ShutdownTimeout. THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE (plan Stage 10). On SIGTERM this
+    # API stops accepting requests and finishes those in flight; nothing is claimed here because the
+    # deployable is read-only, so nothing is at risk of the approved-but-not-executed condition that
+    # a draining worker can produce. That case belongs to RagCore.
+    terminationGracePeriodSeconds: 25
+
+    containers:
+      - name: synthia-monolith
+        # Digest-pinned, never a floating tag. A tag is a pointer somebody else can move.
+        image: ${CONTAINER_REGISTRY}/synthia-monolith@${IMAGE_DIGEST}
+
+        resources:
+          # Explicit limits, not defaults. An unbounded container is one that takes the node down
+          # with it rather than failing on its own.
+          cpu: 1.0
+          memory: 2Gi
+
+        env:
+          - name: ASPNETCORE_ENVIRONMENT
+            value: ${ASPNETCORE_ENVIRONMENT}
+          - name: ReadDatabase__ConnectionString
+            secretRef: read-database-connection-string
+          - name: ReadDatabase__CommandTimeoutSeconds
+            value: "30"
+          - name: ReadDatabase__EnableSensitiveDataLogging
+            # Off outside a developer machine, always. Parameter values on a tenant-scoped query are
+            # customer data, and logs MUST NOT leak sensitive customer payloads or any cross-tenant
+            # information (constitution Principle VIII).
+            value: "false"
+          - name: Observability__ServiceName
+            value: synthia-monolith
+          - name: Observability__DeploymentEnvironment
+            value: ${ASPNETCORE_ENVIRONMENT}
+          - name: Observability__AzureMonitorConnectionString
+            secretRef: applicationinsights-connection-string
+          - name: KeyVault__VaultUri
+            value: ${KEY_VAULT_URI}
+          - name: ContainerApps__ShutdownTimeoutSeconds
+            value: "25"
+          - name: ContainerApps__Port
+            value: "8080"
+
+        probes:
+          # Liveness is process-only and performs no dependency check (constitution §Health). A
+          # liveness probe that checked the database would restart every replica when the database
+          # had a bad minute, turning a dependency blip into an outage.
+          - type: Liveness
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Readiness covers the read database and critical dependencies. A replica failing this is
+          # taken out of rotation, not restarted — the correct response to a dependency that is
+          # temporarily unreachable.
+          - type: Readiness
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Startup gives a cold replica room to JIT and open its first connection without the
+          # liveness probe killing it mid-start.
+          - type: Startup
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+
+        volumeMounts:
+          # READ-ONLY ROOT FILESYSTEM, with every writable path named rather than implied. The
+          # runtime needs somewhere to write temporary files; nothing else does, because this
+          # deployable writes no data of any kind.
+          - volumeName: tmp
+            mountPath: /tmp
+
+    volumes:
+      - name: tmp
+        storageType: EmptyDir
+
+    scale:
+      minReplicas: 2
+      maxReplicas: 10
+      rules:
+        - name: http-concurrency
+          http:
+            metadata:
+              concurrentRequests: "50"

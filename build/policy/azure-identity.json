@@ -156,8 +156,8 @@
       "providerLimitation": "Container Apps built-in authentication (Easy Auth), which is what would validate a managed-identity token at the ingress layer, is documented only for external ingress-enabled apps. These backends are internal-only by design, and validating the token in application code instead is prohibited by constitution Principle I — services MUST NOT parse an access token. Mutual TLS is the mechanism Container Apps documents for this case, with no such restriction.",
       "credentialType": "client certificate (mutual TLS), presented by APIM and validated by ingress",
       "storedIn": "keyvault",
-      "owner": "platform-engineering",
-      "reviewBy": "2027-03-16",
+      "owner": "nkothari@synoptek.com",
+      "reviewBy": "2027-09-16",
       "$comment": [
         "WHAT IS ACTUALLY EXEMPTED HERE IS NARROW, and worth stating precisely so the review has",
         "something to review. No component holds a standing secret: the private key is in Key Vault,",
@@ -174,7 +174,19 @@
         "APIM's authentication-managed-identity policy plus an ingress-injected principal check",
         "would remove the certificate entirely, and this entry with it. The backend middleware is",
         "already shaped for that swap: it compares a platform-injected header against an allow-list,",
-        "and only the header name and the allow-list contents would change."
+        "and only the header name and the allow-list contents would change.",
+        "",
+        "ON THE REVIEW DATE. It is a reminder, not a deadline, and the distinction is worth stating",
+        "because every other date in this file could be read as one. This exemption's exit condition",
+        "is EXTERNAL - it ends when Microsoft documents that feature - so no date predicts it. The",
+        "date answers 'when will somebody next look at this', and twelve months is a placeholder",
+        "chosen in the absence of a better anchor.",
+        "",
+        "THERE IS A BETTER ANCHOR ONCE THE CERTIFICATE EXISTS: re-set this to roughly a month before",
+        "its first expiry. Whoever performs that rotation is already reading",
+        "docs/runbooks/rotate-gateway-certificate.md and already has the context loaded, so the",
+        "review costs them almost nothing - whereas a date landing in an arbitrary week is an",
+        "interruption, and an interruption is what gets deferred."
       ]
     }
   ],

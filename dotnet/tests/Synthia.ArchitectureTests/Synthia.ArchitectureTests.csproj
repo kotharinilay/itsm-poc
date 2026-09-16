@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Synthia.Api/Synthia.Api.csproj" />
+    <ProjectReference Include="../../src/Synthia.Contracts/Synthia.Contracts.csproj" />
+    <ProjectReference Include="../../src/Synthia.Persistence/Synthia.Persistence.csproj" />
+    <ProjectReference Include="../../src/Synthia.Observability/Synthia.Observability.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Sessions/Synthia.Modules.Sessions.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Work/Synthia.Modules.Work.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Approvals/Synthia.Modules.Approvals.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Governance/Synthia.Modules.Governance.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Audit/Synthia.Modules.Audit.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Tenancy/Synthia.Modules.Tenancy.csproj" />
+  </ItemGroup>
+
+</Project>

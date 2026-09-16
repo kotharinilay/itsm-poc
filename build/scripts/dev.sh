@@ -82,7 +82,8 @@ check_desktop() {
 check_boundaries() {
   step "Cross-deployable boundary"
   run "boundary check"  bash build/scripts/check-boundaries.sh
-  run "guard verified"  bash build/scripts/verify-boundary-guard.sh
+  run "boundary guard verified"     bash build/scripts/verify-boundary-guard.sh
+  run "architecture guards verified" bash build/scripts/verify-architecture-guards.sh
 }
 
 report() {

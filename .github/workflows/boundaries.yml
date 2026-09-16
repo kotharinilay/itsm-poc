@@ -25,3 +25,29 @@ jobs:
       # guard nobody knows works - and this one silently stopped working once already.
       - name: Verify the guard fails correctly
         run: bash build/scripts/verify-boundary-guard.sh
+
+  architecture-guards:
+    name: architecture guards fail correctly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ragcore/uv.lock
+
+      - name: Sync Python (locked)
+        working-directory: ragcore
+        run: uv sync --all-groups --frozen
+
+      # Phase 2 checkpoint: every architecture test fails when its violation is planted.
+      # ModuleIsolationTests did NOT work when first written - it reflected over compiled metadata,
+      # and the compiler omits a reference whose types are never used. This is what found that.
+      - name: Verify the architecture guards fail correctly
+        run: bash build/scripts/verify-architecture-guards.sh

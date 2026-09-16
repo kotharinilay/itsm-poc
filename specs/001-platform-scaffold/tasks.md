@@ -61,21 +61,21 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 
 **Goal**: Dependency direction and the tests that guard it, before any feature code exists.
 
-- [ ] T023 [P] Implement `TenantId`, `CorrelationId` and `StaffRole` in `dotnet/src/Synthia.SharedKernel/` as explicit domain types, with **no comparison or ordering operator on roles** — Boundary: shared kernel | Validates: Spec §FR-AUTHZ-003
-- [ ] T024 [P] Implement set-intersection authorization in `dotnet/src/Synthia.SharedKernel/Authorization/RoleIntersection.cs` — empty intersection denies — Boundary: authorization | Validates: Spec §FR-AUTHZ-004, §FR-AUTHZ-010
-- [ ] T025 [P] Implement the pure domain model in `ragcore/src/ragcore/domain/` — work item, operation, execution treatment, staff role — importing nothing outside the standard library — Boundary: domain | Validates: Constitution P-V (dependency inward)
-- [ ] T026 [P] Implement set-intersection role evaluation in `ragcore/src/ragcore/domain/roles.py`, mirroring T024 with no ordering — Boundary: authorization | Validates: Spec §FR-AUTHZ-003
-- [ ] T027 Declare application ports as Protocols in `ragcore/src/ragcore/application/ports.py` for retrieval, model, notification, messaging, tool execution, ingestion and each integration — Boundary: ports | Validates: Constitution P-V (ports belong to the consumer)
-- [ ] T028 [P] Define cross-module abstractions and DTOs in `dotnet/src/Synthia.Contracts/` with no implementation — Boundary: module contracts | Validates: Constitution P-V
-- [ ] T029 [P] Define typed IPC channel contracts with schema validators in `apps/desktop/src/ipc-contracts/` — Boundary: IPC | Validates: Constitution P-VII
-- [ ] T030 [P] Unit tests for set intersection in `ragcore/tests/unit/test_roles.py` asserting no ordering exists, no role implies another, and an empty intersection denies — Boundary: authorization | Validates: Spec §FR-AUTHZ-003, §FR-AUTHZ-006
-- [ ] T031 [P] Unit tests for set intersection in `dotnet/tests/Synthia.SharedKernel.Tests/RoleIntersectionTests.cs`, mirroring T030 so both stacks are proven independently — Boundary: authorization | Validates: Spec §FR-AUTHZ-004
-- [ ] T032 Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/ModuleIsolationTests.cs` asserting no module project references another — Boundary: module | Validates: Constitution P-V
-- [ ] T033 Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/NoRagCoreDependencyTests.cs` asserting no assembly reference, type or configured `HttpClient` base address resolves to RagCore — Boundary: cross-deployable | Validates: ADR-0001
-- [ ] T034 [P] Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/BannedApiTests.cs` for `DateTime.Now`, `Thread.Sleep` in async paths, `.Result`, `.Wait()`, `GetAwaiter().GetResult()`, and `catch (Exception)` without rethrow — Boundary: .NET | Validates: Constitution §.NET baseline
-- [ ] T035 [P] Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/CompositionRootTests.cs` asserting no Service Locator usage and no `BuildServiceProvider` call during configuration — Boundary: composition root | Validates: Constitution §Dependency injection
-- [ ] T036 [P] Write import-boundary tests in `ragcore/tests/architecture/test_layering.py` asserting `domain/` imports nothing outside the standard library and no adapter type appears in `domain/` or `application/` — Boundary: layering | Validates: Constitution P-V
-- [ ] T037 [P] Write a test in `ragcore/tests/architecture/test_no_dotnet.py` asserting no import, package or HTTP client targets the monolith — Boundary: cross-deployable | Validates: ADR-0001
+- [X] T023 [P] Implement `TenantId`, `CorrelationId` and `StaffRole` in `dotnet/src/Synthia.SharedKernel/` as explicit domain types, with **no comparison or ordering operator on roles** — Boundary: shared kernel | Validates: Spec §FR-AUTHZ-003
+- [X] T024 [P] Implement set-intersection authorization in `dotnet/src/Synthia.SharedKernel/Authorization/RoleIntersection.cs` — empty intersection denies — Boundary: authorization | Validates: Spec §FR-AUTHZ-004, §FR-AUTHZ-010
+- [X] T025 [P] Implement the pure domain model in `ragcore/src/ragcore/domain/` — work item, operation, execution treatment, staff role — importing nothing outside the standard library — Boundary: domain | Validates: Constitution P-V (dependency inward)
+- [X] T026 [P] Implement set-intersection role evaluation in `ragcore/src/ragcore/domain/roles.py`, mirroring T024 with no ordering — Boundary: authorization | Validates: Spec §FR-AUTHZ-003
+- [X] T027 Declare application ports as Protocols in `ragcore/src/ragcore/application/ports.py` for retrieval, model, notification, messaging, tool execution, ingestion and each integration — Boundary: ports | Validates: Constitution P-V (ports belong to the consumer)
+- [X] T028 [P] Define cross-module abstractions and DTOs in `dotnet/src/Synthia.Contracts/` with no implementation — Boundary: module contracts | Validates: Constitution P-V
+- [X] T029 [P] Define typed IPC channel contracts with schema validators in `apps/desktop/src/ipc-contracts/` — Boundary: IPC | Validates: Constitution P-VII
+- [X] T030 [P] Unit tests for set intersection in `ragcore/tests/unit/test_roles.py` asserting no ordering exists, no role implies another, and an empty intersection denies — Boundary: authorization | Validates: Spec §FR-AUTHZ-003, §FR-AUTHZ-006
+- [X] T031 [P] Unit tests for set intersection in `dotnet/tests/Synthia.SharedKernel.Tests/RoleIntersectionTests.cs`, mirroring T030 so both stacks are proven independently — Boundary: authorization | Validates: Spec §FR-AUTHZ-004
+- [X] T032 Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/ModuleIsolationTests.cs` asserting no module project references another — Boundary: module | Validates: Constitution P-V
+- [X] T033 Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/NoRagCoreDependencyTests.cs` asserting no assembly reference, type or configured `HttpClient` base address resolves to RagCore — Boundary: cross-deployable | Validates: ADR-0001
+- [X] T034 [P] Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/BannedApiTests.cs` for `DateTime.Now`, `Thread.Sleep` in async paths, `.Result`, `.Wait()`, `GetAwaiter().GetResult()`, and `catch (Exception)` without rethrow — Boundary: .NET | Validates: Constitution §.NET baseline
+- [X] T035 [P] Write architecture tests in `dotnet/tests/Synthia.ArchitectureTests/CompositionRootTests.cs` asserting no Service Locator usage and no `BuildServiceProvider` call during configuration — Boundary: composition root | Validates: Constitution §Dependency injection
+- [X] T036 [P] Write import-boundary tests in `ragcore/tests/architecture/test_layering.py` asserting `domain/` imports nothing outside the standard library and no adapter type appears in `domain/` or `application/` — Boundary: layering | Validates: Constitution P-V
+- [X] T037 [P] Write a test in `ragcore/tests/architecture/test_no_dotnet.py` asserting no import, package or HTTP client targets the monolith — Boundary: cross-deployable | Validates: ADR-0001
 
 **Checkpoint**: Every architecture test fails when its violation is planted and passes otherwise.
 

@@ -66,15 +66,23 @@ echo "Checking cross-deployable boundary (ADR-0001)..."
 check ".NET build files reference RagCore" \
   'ragcore' dotnet '*.csproj' '*.sln' '*.props' '*.targets'
 
-check ".NET source references RagCore" \
-  'ragcore' dotnet '*.cs'
+# A `using` directive or a URL naming the other deployable. NOT a bare word match: the
+# architecture tests and their own documentation legitimately name RagCore in prose, and a guard
+# that flags the test guarding it is a guard somebody disables.
+check ".NET source has a using directive or URL naming RagCore" \
+  '(^[[:space:]]*using[[:space:]]+[A-Za-z.]*[Rr]agcore|https?://[^"]*ragcore)' dotnet '*.cs'
 
 # ---------------------------------------------------------------- RagCore -> .NET
+# Anchored at statement position. An unanchored match hits docstrings that describe the rule -
+# `"""No ``import Synthia...`` anywhere"""` is documentation, not an import.
 check "RagCore imports a Synthia (.NET) module" \
-  '(^|[^A-Za-z_])(import|from)[[:space:]]+Synthia' ragcore '*.py'
+  '^[[:space:]]*(from|import)[[:space:]]+Synthia([.[:space:]]|$)' ragcore '*.py'
 
-check "RagCore names a .NET assembly" \
-  'Synthia\.(Api|Modules|Contracts|Persistence|SharedKernel|Observability)' ragcore '*.py' '*.toml'
+# Dependency manifests only. Prose in .py files is handled by
+# ragcore/tests/architecture/test_no_dotnet.py, which parses the AST and can tell a docstring from
+# a string literal - a distinction grep cannot make.
+check "RagCore declares a .NET dependency" \
+  'Synthia\.(Api|Modules|Contracts|Persistence|SharedKernel|Observability)' ragcore '*.toml'
 
 # --------------------------------------------- an HTTP client in either targeting the other
 # Specification 13.4: there is no direct service-to-service path. A base address naming the other

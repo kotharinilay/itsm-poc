@@ -82,6 +82,23 @@ class MessagingSettings(BaseSettings):
     max_delivery_count: int = Field(default=10, ge=1)
     """The dispatch ceiling. A row past it is marked undispatchable and surfaced to a human."""
 
+    message_time_to_live_seconds: int = Field(default=900, ge=1, le=900)
+    """Message expiry, bounded **above** at the execution window's fifteen minutes.
+
+    A trigger that outlives the window can no longer lead to a valid execution, so it must expire to
+    the dead-letter queue rather than wake a consumer that would only refuse it. Bounded by the type
+    rather than by a comment: a longer TTL would create the appearance of pending work that can
+    never complete, which is the failure mode the ceiling exists to prevent
+    (``contracts/triggers.md`` §Delivery semantics).
+    """
+
+    dispatch_batch_size: int = Field(default=50, ge=1, le=500)
+    """How many undispatched rows one dispatcher pass claims.
+
+    Bounded so a backlog is drained in bounded passes rather than one unbounded query that holds a
+    transaction open across thousands of rows.
+    """
+
 
 class ModelGatewaySettings(BaseSettings):
     """The AI Gateway — the sole model egress.
@@ -103,6 +120,54 @@ class ModelGatewaySettings(BaseSettings):
     Specific to this platform rather than general hygiene: one call without a timeout can hold
     work past its fifteen-minute expiry, turning a slow dependency into an expired approval.
     """
+
+
+class NotificationSettings(BaseSettings):
+    """Azure SignalR — the realtime leaf.
+
+    **There is no access-key field here, and there will not be one.** The data plane is reached with
+    an Entra token for ``https://signalr.azure.com/.default``, obtained through managed identity
+    (``build/policy/azure-identity.json``, resource ``signalr``, which names ``AccessKey`` as
+    forbidden configuration). A key would also be a standing credential that grants the ability to
+    push to every client of the service, which is a wide blast radius for a channel that is supposed
+    to carry no authority at all.
+
+    The endpoint is an address, not a credential: knowing it permits nothing without a token.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SYNTHIA_SIGNALR_", extra="forbid", frozen=True)
+
+    endpoint: str = ""
+    """The service endpoint, for example ``https://synthia.service.signalr.net``.
+
+    Empty disables realtime delivery rather than failing: a notification is a leaf on every
+    consequential path, so a scaffold without one still reaches every outcome — the client learns
+    it by reading back through the API instead. That is the same property the platform promises
+    users, exercised by configuration.
+    """
+
+    hub: str = "synthia"
+
+    @field_validator("endpoint")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        """Refuse a plaintext endpoint at startup.
+
+        Raises:
+            ValueError: When set and not ``https``. The token is a bearer credential in transit;
+                sending it over plaintext hands it to anyone watching.
+        """
+        if value and not value.startswith("https://"):
+            raise ValueError(
+                f"endpoint must be an absolute https URI, got {value!r}. The data-plane token is "
+                "a bearer credential and is not sent over plaintext."
+            )
+        return value
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether realtime delivery is available in this process."""
+        return bool(self.endpoint)
 
 
 class ObservabilitySettings(BaseSettings):
@@ -242,6 +307,7 @@ class Settings(BaseSettings):
     edge_trust: EdgeTrustSettings = EdgeTrustSettings()
     key_vault: KeyVaultSettings = KeyVaultSettings()
     messaging: MessagingSettings = MessagingSettings()
+    notifications: NotificationSettings = NotificationSettings()
     gateway: ModelGatewaySettings = ModelGatewaySettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 

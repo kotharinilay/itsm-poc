@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ragcore.domain.audit import ActorChain, AuditFacts
 from ragcore.domain.decisions import EndUserConsent, StaffVerdict
@@ -141,6 +141,14 @@ class WorkItemRepositoryPort(Protocol):
         Returns:
             ``False`` when the version no longer matches — the caller re-reads rather than blocks.
             There is no distributed lock anywhere in this platform.
+        """
+        ...
+
+    async def list_expired(self, tenant: TenantContext, now: datetime, limit: int) -> list[Any]:
+        """Work whose window has passed with no successful claim.
+
+        For the expiry sweeper. Bounded by ``limit`` so a backlog drains in bounded passes rather
+        than one query holding a transaction open across everything that ever timed out.
         """
         ...
 
@@ -392,8 +400,20 @@ class RetrievedChunk(Protocol):
 class IdempotencyStorePort(Protocol):
     """Idempotency boundary 2 — protecting the **external** system."""
 
-    async def remember(self, tenant: TenantContext, key: IdempotencyKey, outcome: object) -> None:
-        """Record the outcome for a key, so a repeat replays rather than acting again."""
+    async def remember(
+        self,
+        tenant: TenantContext,
+        key: IdempotencyKey,
+        operation_id: OperationId,
+        outcome: dict[str, Any],
+    ) -> None:
+        """Record the outcome for a key, so a repeat replays rather than acting again.
+
+        **Updates a row the operation already created**, rather than inserting one. The key is
+        reserved when the operation is recorded, so the window between "started" and "finished" is
+        a row with a null outcome — which :meth:`replay` reports as ``None``, meaning *do not act*
+        rather than *never seen*. An insert here would lose that distinction.
+        """
         ...
 
     async def replay(self, tenant: TenantContext, key: IdempotencyKey) -> object | None:

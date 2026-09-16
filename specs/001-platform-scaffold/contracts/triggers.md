@@ -33,6 +33,7 @@ reads the authority from the durable work record either way, and a consumer that
 | `approval.rejected` | A staff verdict refused it | As above | Closure |
 | `consent.granted` | The work item's own requester consented | The work item's `requested_by_oid`, and no one else | Execution |
 | `consent.refused` | That requester refused | As above | Closure |
+| `sample.flow` | The scaffold is proving the seam itself | Nobody — no decision was made | Inert sample execution |
 
 The values mirror the `verdict` enums in `data-model.md` — `approved`/`rejected` for approval,
 `granted`/`refused` for consent — so the message never introduces vocabulary the database does not
@@ -41,6 +42,18 @@ than leaving it suspended until it expires; they resume the graph but never reac
 
 This is a closed set. Adding a kind is a contract change, and no kind may imply an authority the work
 record does not independently carry.
+
+**`sample.flow` is the scaffold's own kind, added 2026-09-16**, and it is the exception that proves
+the rule rather than a hole in it. No human decided anything, so it grants nothing; it exists so the
+outbox-to-bus-to-consumer seam can be exercised end to end before any governed operation crosses it.
+It resumes to an execution that acts only on an inert reference fixture and reaches no external
+system (spec FR-DEMO-007, FR-DEMO-014). It MUST NOT be raised for, stand in for, or be counted as
+any of UC-01 through UC-12.
+
+The four decision kinds above remain specified in full; **their handlers are deferred** (spec
+FR-DEMO-016). Until they land, a consumer receiving one dead-letters it with an alert — which is the
+correct behaviour under the rule below, not a gap in it: an unhandled kind is never treated as
+authorization to proceed.
 
 ## Why the queue exists at all
 

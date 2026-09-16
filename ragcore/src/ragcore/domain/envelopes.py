@@ -25,13 +25,30 @@ class TriggerKind(Enum):
     CONSENT_GRANTED = "consent.granted"
     CONSENT_REFUSED = "consent.refused"
 
+    SAMPLE_FLOW = "sample.flow"
+    """The scaffold's inert platform demonstration. **Never a product capability.**
+
+    It exists so the outbox-to-bus-to-consumer seam can be proven end to end before any governed
+    operation runs across it, and it resumes to an execution that reaches no external system
+    (spec FR-DEMO-007, FR-DEMO-014). The four kinds above are the real ones; their handlers are
+    deferred (spec FR-DEMO-016), and an unhandled kind dead-letters rather than proceeding.
+    """
+
     @property
     def resumes_to_execution(self) -> bool:
         """Whether this kind can lead to execution, or only to honest closure."""
         return self in _GRANTING_TRIGGER_KINDS
 
 
-_GRANTING_TRIGGER_KINDS = frozenset({TriggerKind.APPROVAL_GRANTED, TriggerKind.CONSENT_GRANTED})
+_GRANTING_TRIGGER_KINDS = frozenset(
+    {TriggerKind.APPROVAL_GRANTED, TriggerKind.CONSENT_GRANTED, TriggerKind.SAMPLE_FLOW}
+)
+"""Kinds that resume towards execution rather than to closure.
+
+``SAMPLE_FLOW`` is here because the seam it proves is the one that ends in execution — but what it
+executes is an inert reference fixture, so "resumes to execution" and "has an effect" remain
+different statements. The refusal kinds resume too; they just resume to honest closure.
+"""
 
 
 @dataclass(frozen=True, slots=True)

@@ -46,6 +46,13 @@ CUSTOMER_ROUTES = {
     ("PUT", "/api/customer/v1/messages/{messageId}/feedback"),
     ("DELETE", "/api/customer/v1/messages/{messageId}/feedback"),
     ("POST", "/api/customer/v1/realtime/negotiate"),
+    # The inert sample flow (Stage 8). Platform plumbing, never a product capability: it opens a
+    # durable record and its outbox row in one transaction, reads the outcome back — which is the
+    # recovery path that keeps the realtime notification a leaf — and demonstrates the
+    # Customer-to-Workload hop through the gateway.
+    ("POST", "/api/customer/v1/sample-flows/round-trip"),
+    ("GET", "/api/customer/v1/sample-flows/round-trip/{workItemId}"),
+    ("POST", "/api/customer/v1/sample-flows/service-hop"),
 }
 """contracts/customer-api.md, RagCore section. Every row, and only those rows."""
 

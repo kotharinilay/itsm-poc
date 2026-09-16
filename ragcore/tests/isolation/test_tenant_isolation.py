@@ -75,6 +75,11 @@ PLATFORM_WIDE = frozenset(
         # tenant-bearing content: the payload is opaque identifiers and correlation only.
         "undispatched",
         "mark_dispatched",
+        # Same dispatcher, same reason, and narrowed by primary key. It increments an attempt
+        # counter on a row the dispatcher has already read; adding a tenant predicate would mean
+        # either a dispatcher per organisation, or one that silently stopped counting failures for
+        # whichever organisation it was not scoped to.
+        "record_failure",
     }
 )
 

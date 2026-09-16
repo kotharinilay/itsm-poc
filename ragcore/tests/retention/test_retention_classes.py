@@ -24,7 +24,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from workers.retention_sweep import sweep_chat_content
+from workers.retention_sweep import sweep_chat_content, sweep_tenant
 
 from ragcore.domain.governance import ExecutionMethod
 from ragcore.domain.identifiers import EntraTenantId, TenantId
@@ -393,3 +393,198 @@ class TestAuditIsBeyondTheRuntimesReach:
 
         assert through_view == 0
         assert in_table == 1
+
+
+class RecordingPruner:
+    """A checkpointer narrowed to its delete verb, recording what it was asked to remove.
+
+    A fake rather than a real ``AsyncPostgresSaver``: the property under test is *which threads
+    this worker selects, and that it asks once per thread*, which is a property of this worker.
+    A real saver would test langgraph's delete instead, and would pull the ``langgraph`` schema
+    into a suite that exists partly to prove this worker stays out of it.
+    """
+
+    def __init__(self) -> None:
+        self.deleted: list[str] = []
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        self.deleted.append(thread_id)
+
+
+@pytest.mark.integration
+class TestCheckpointsArePrunedThroughTheCheckpointer:
+    """The class this worker identifies but must not delete directly."""
+
+    async def test_a_completed_work_items_checkpoints_are_pruned(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """Thirty days after the work completes, the thread is offered to the checkpointer."""
+        async with sessions() as session, session.begin():
+            await session.execute(
+                update(models.WORK_ITEM).values(updated_at=datetime.now(UTC) - timedelta(days=31))
+            )
+
+        pruner = RecordingPruner()
+        async with sessions() as session, session.begin():
+            result = await sweep_tenant(
+                session, pruner, organisation["tenant"], datetime.now(UTC), None
+            )
+
+        assert pruner.deleted == [str(organisation["work_item_id"])]
+        assert result.checkpoints_eligible == 1
+        assert result.checkpoints_pruned == 1
+
+    async def test_work_inside_its_window_is_not_pruned(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """The fixture's work item completed just now, so nothing is eligible yet."""
+        pruner = RecordingPruner()
+        async with sessions() as session, session.begin():
+            result = await sweep_tenant(
+                session, pruner, organisation["tenant"], datetime.now(UTC), None
+            )
+
+        assert pruner.deleted == []
+        assert result.checkpoints_pruned == 0
+
+    async def test_an_organisation_override_shortens_the_checkpoint_window(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """A seven-day override makes eligible what the thirty-day default would not."""
+        async with sessions() as session, session.begin():
+            await session.execute(
+                update(models.WORK_ITEM).values(updated_at=datetime.now(UTC) - timedelta(days=8))
+            )
+
+        pruner = RecordingPruner()
+        async with sessions() as session, session.begin():
+            result = await sweep_tenant(
+                session,
+                pruner,
+                organisation["tenant"],
+                datetime.now(UTC),
+                {"graph_checkpoint": 7},
+            )
+
+        assert result.checkpoints_pruned == 1
+
+    async def test_pruning_is_scoped_to_one_organisation(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """A second organisation's completed work is never offered to the pruner.
+
+        The negative that matters: a defect in the predicate must cost one organisation's data
+        rather than everyone's.
+        """
+        other_tenant, other_entra = uuid4(), uuid4()
+        other_session, other_work, other_requester = uuid4(), uuid4(), uuid4()
+        async with sessions() as session, session.begin():
+            await session.execute(
+                insert(models.TENANT_MAPPING).values(
+                    tenant_id=other_tenant,
+                    entra_tid=other_entra,
+                    display_name="Fabrikam",
+                    status=TenantStatus.ACTIVE.value,
+                )
+            )
+            # Work always belongs to a conversation — `work_item.session_id` is NOT NULL, because a
+            # work item with no originating session would be an action nobody asked for.
+            await session.execute(
+                insert(models.CHAT_SESSION).values(
+                    session_id=other_session,
+                    tenant_id=other_tenant,
+                    requester_oid=other_requester,
+                    state=SessionState.RESOLVED.value,
+                )
+            )
+            await session.execute(
+                insert(models.WORK_ITEM).values(
+                    work_item_id=other_work,
+                    tenant_id=other_tenant,
+                    session_id=other_session,
+                    requested_by_oid=other_requester,
+                    state=WorkItemState.EXECUTED.value,
+                    approval_state=ApprovalState.APPROVED.value,
+                    updated_at=datetime.now(UTC) - timedelta(days=400),
+                )
+            )
+            await session.execute(
+                update(models.WORK_ITEM)
+                .where(models.WORK_ITEM.c.work_item_id == organisation["work_item_id"])
+                .values(updated_at=datetime.now(UTC) - timedelta(days=400))
+            )
+
+        pruner = RecordingPruner()
+        async with sessions() as session, session.begin():
+            await sweep_tenant(session, pruner, organisation["tenant"], datetime.now(UTC), None)
+
+        assert pruner.deleted == [str(organisation["work_item_id"])]
+
+
+@pytest.mark.integration
+class TestTheSweepIsSafeToRerun:
+    """Nothing here is driven by a cursor, a high-water mark or a swept flag."""
+
+    async def test_a_second_pass_removes_nothing_further(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """The first pass removes the conversation; the second finds nothing and raises nothing.
+
+        A sweeper that cannot be rerun is one that cannot be retried after a crash — which for a
+        deletion job means either running it twice is unsafe, or running it once is not guaranteed.
+        """
+        now = datetime.now(UTC)
+        pruner = RecordingPruner()
+
+        async with sessions() as session, session.begin():
+            first = await sweep_tenant(session, pruner, organisation["tenant"], now, None)
+        async with sessions() as session, session.begin():
+            second = await sweep_tenant(session, pruner, organisation["tenant"], now, None)
+
+        assert first.sessions_removed == 1
+        assert second.sessions_removed == 0
+        assert second.removed_anything is False
+
+    async def test_rerunning_still_leaves_the_audit_record_intact(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """Repetition must not erode the negative property either.
+
+        Asserted separately because "the second pass deleted nothing" and "the second pass deleted
+        nothing it must not" are different claims, and only the second is the guarantee.
+        """
+        now = datetime.now(UTC)
+        pruner = RecordingPruner()
+
+        for _ in range(3):
+            async with sessions() as session, session.begin():
+                await sweep_tenant(session, pruner, organisation["tenant"], now, None)
+
+        async with sessions() as session:
+            assert await _count(session, models.AUDIT_EVENT) == 1
+            assert await _count(session, models.WORK_ITEM) == 1
+            assert await _count(session, models.CHAT_SESSION) == 0
+
+    async def test_pruning_the_same_thread_twice_is_a_no_op(
+        self, sessions: async_sessionmaker[AsyncSession], organisation: dict[str, Any]
+    ) -> None:
+        """The work item outlives its checkpoints, so the thread stays eligible for years.
+
+        Every pass after the first therefore asks the checkpointer to delete a thread that is
+        already gone. Wasteful rather than wrong, and it is the documented trade: the alternatives
+        were a marker column this task does not own, or probing the ``langgraph`` tables, which is
+        the cross-schema reach the whole arrangement exists to avoid.
+        """
+        async with sessions() as session, session.begin():
+            await session.execute(
+                update(models.WORK_ITEM).values(updated_at=datetime.now(UTC) - timedelta(days=31))
+            )
+
+        now = datetime.now(UTC)
+        pruner = RecordingPruner()
+        for _ in range(2):
+            async with sessions() as session, session.begin():
+                await sweep_tenant(session, pruner, organisation["tenant"], now, None)
+
+        thread = str(organisation["work_item_id"])
+        assert pruner.deleted == [thread, thread]

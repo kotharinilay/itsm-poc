@@ -30,7 +30,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from ragcore.api.customer.negotiate import router as negotiate_router
 from ragcore.api.customer.routes import router as customer_router
+from ragcore.api.customer.sample_flows import router as sample_flow_router
 from ragcore.api.health import router as health_router
 from ragcore.api.middleware.correlation import CorrelationIdMiddleware
 from ragcore.api.middleware.identity import IdentityHeaderMiddleware
@@ -158,6 +160,11 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
     app.include_router(health_router)
 
     app.include_router(customer_router)
+    # Realtime negotiation and the inert sample flow. Both sit on the customer audience: the
+    # group a client receives on is derived from trusted identity, and the sample flow is
+    # platform plumbing rather than product capability.
+    app.include_router(negotiate_router)
+    app.include_router(sample_flow_router)
     app.include_router(staff_router)
     app.include_router(workload_router)
 

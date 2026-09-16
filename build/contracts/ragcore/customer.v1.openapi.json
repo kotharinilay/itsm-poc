@@ -95,6 +95,26 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "NegotiateResponse": {
+        "additionalProperties": false,
+        "description": "Where to connect, and on what.\n\nCarries no tenant, no role and no approval state. It names an endpoint and a group — both of\nwhich the platform chose — and nothing a client could act on as authority.",
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "group"
+        ],
+        "title": "NegotiateResponse",
+        "type": "object"
+      },
       "StartSessionResponse": {
         "additionalProperties": false,
         "description": "The identifier of a newly started session.",
@@ -270,8 +290,30 @@
     },
     "/api/customer/v1/realtime/negotiate": {
       "post": {
-        "description": "Obtain a realtime connection token.\n\n**Group membership is derived from trusted identity, never requested by the client**\n(contracts/notifications.md). There is no request body here, and that absence is the control:\na client that could name its group could name somebody else's.",
-        "operationId": "negotiate_realtime_api_customer_v1_realtime_negotiate_post",
+        "description": "Tell an authenticated client where to connect.\n\n**Takes no request body and no query parameters**, which is the point: there is nothing for a\nclient to supply, so there is nothing for this endpoint to have to refuse. The principal comes\nfrom the closed gateway-derived header contract, which the client cannot write.\n\nA client that never calls this, or never connects, still reaches every outcome — the\nnotification is a leaf, and state is read back through the API.",
+        "operationId": "negotiate_api_customer_v1_realtime_negotiate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NegotiateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Negotiate",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sample-flows/round-trip": {
+      "post": {
+        "description": "Open the durable record and enqueue its trigger **in one transaction**.\n\nThe two writes share a unit of work, which is the property this endpoint exists to prove: a\ncrash between them cannot leave a state change nobody was told about, nor a message for a state\nchange that rolled back.\n\n**Returns 501 until the work-item write lands.** The messaging machinery beneath it —\n:func:`~ragcore.messaging.outbox.enqueue_trigger`, the dispatcher, the consumer — is implemented\nand tested at Stage 8; the durable record this trigger points at is opened by the session and\nwork-item write that belongs with the customer surface. Wiring this to create work items now\nwould be inventing product behaviour the scaffold is specifically not allowed to have.",
+        "operationId": "begin_round_trip_api_customer_v1_sample_flows_round_trip_post",
         "responses": {
           "501": {
             "content": {
@@ -280,7 +322,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Negotiate Realtime Api Customer V1 Realtime Negotiate Post",
+                  "title": "Response Begin Round Trip Api Customer V1 Sample Flows Round Trip Post",
                   "type": "object"
                 }
               }
@@ -288,7 +330,83 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Negotiate Realtime",
+        "summary": "Begin Round Trip",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sample-flows/round-trip/{workItemId}": {
+      "get": {
+        "description": "Read the outcome back — **the recovery path for a missed notification**.\n\nA client that never connected to the realtime channel, or that missed the push, reaches the\nsame answer here. That is what keeps the notification a leaf rather than a link.",
+        "operationId": "read_round_trip_api_customer_v1_sample_flows_round_trip__workItemId__get",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Read Round Trip Api Customer V1 Sample Flows Round Trip  Workitemid  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Round Trip",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sample-flows/service-hop": {
+      "post": {
+        "description": "Reach the workload audience **through the gateway**, and report what it saw.\n\n**There is no private peer route, and this endpoint must never acquire one.** The call leaves\nthrough the approved egress path, re-enters at Front Door, is re-authenticated at APIM as an\napp-only principal, and arrives at the workload audience with a fresh identity contract (spec\n§13.4). A direct in-cluster call would be faster and would prove nothing — the identity would be\nwhatever this process chose to send.\n\nRequires the deployed edge, which is why it reports rather than executes here: driving it\nagainst a locally hosted process would demonstrate the opposite of the property.",
+        "operationId": "service_hop_api_customer_v1_sample_flows_service_hop_post",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Service Hop Api Customer V1 Sample Flows Service Hop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service Hop",
         "tags": [
           "customer"
         ]

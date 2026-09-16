@@ -866,6 +866,34 @@ class Outbox(_TenantScoped):
             )
         )
 
+    async def record_failure(self, outbox_id: UUID) -> int:
+        """Record a failed publication attempt, and report the new attempt count.
+
+        **The row is left in place and ``dispatched_at`` stays null**, so the next pass picks it up
+        again — up to the ceiling. Nothing is deleted and nothing is silently dropped: an outbox row
+        that cannot publish is a state change the world was never told about, which for a granted
+        decision is a governance failure rather than a lost message.
+
+        There is no ``undispatchable`` column, and none is needed: ``attempts >= ceiling`` *is* the
+        condition. A second boolean would be a fact derivable from the first, and the two would
+        eventually disagree.
+
+        Returns:
+            The attempt count after this failure, so the caller can compare it with the ceiling.
+        """
+        table = models.OUTBOX_MESSAGE
+        result = await current_session().execute(
+            update(table)
+            .where(table.c.outbox_id == outbox_id)
+            .values(
+                attempts=table.c.attempts + 1,
+                updated_at=func.now(),
+                version=table.c.version + 1,
+            )
+            .returning(table.c.attempts)
+        )
+        return int(result.scalar_one())
+
 
 # ---------------------------------------------------------------------------
 # Audit

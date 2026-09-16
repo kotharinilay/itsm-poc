@@ -1,35 +1,81 @@
-<ds-skip-link targetId="main-content" />
+<!--
+  The desktop shell. Landmarks and headings are present from the start rather than retrofitted —
+  an accessible structure added later is an accessible structure that never quite arrives
+  (spec FR-SURF-010, FR-SURF-013).
+-->
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
 <header class="app-header">
-  <p class="app-header__brand">Synthia</p>
+  <h1 class="app-title">Synthia</h1>
+  <p class="app-subtitle">Desktop</p>
+</header>
 
-  <nav class="app-nav" aria-label="Primary">
-    <ul class="app-nav__list">
-      <li>
-        <a routerLink="/sessions" routerLinkActive="app-nav__link--active">Your sessions</a>
-      </li>
-    </ul>
-  </nav>
+<main id="main-content" class="app-main" tabindex="-1">
+  <router-outlet />
 
-  <p class="app-header__identity">
-    @if (auth.isSignedIn()) {
-      Signed in as {{ auth.session()?.displayName }}
-    } @else {
-      Not signed in
+  <section class="host-status" aria-labelledby="host-status-heading">
+    <h2 id="host-status-heading">Host</h2>
+
+    <!--
+      `aria-live` so the status is announced when it resolves rather than only being visible.
+      The state is conveyed by text, never by colour alone (spec FR-SURF-013).
+    -->
+    <dl class="status-grid" aria-live="polite">
+      <div class="status-row">
+        <dt>Environment</dt>
+        <dd>{{ isDesktopHost() ? 'Desktop host' : 'Browser (no desktop host)' }}</dd>
+      </div>
+      <div class="status-row">
+        <dt>Version</dt>
+        <dd>{{ hostVersion() }}</dd>
+      </div>
+      <div class="status-row">
+        <dt>Platform</dt>
+        <dd>{{ hostPlatform() }}</dd>
+      </div>
+    </dl>
+
+    @if (endpoints(); as configured) {
+      <h3>Configured origins</h3>
+      <dl class="status-grid">
+        <div class="status-row">
+          <dt>Gateway</dt>
+          <dd>{{ configured.gatewayOrigin }}</dd>
+        </div>
+        <div class="status-row">
+          <dt>Realtime</dt>
+          <dd>{{ configured.realtimeOrigin }}</dd>
+        </div>
+        <div class="status-row">
+          <dt>Sign-in authority</dt>
+          <dd>{{ configured.authorityOrigin }}</dd>
+        </div>
+      </dl>
     }
   </p>
 </header>
 
-<main id="main-content" tabindex="-1" class="app-main">
-  <router-outlet />
-</main>
-
-<footer class="app-footer">
-  <p role="status">
-    @if (desktop.isAvailable()) {
-      Desktop host connected.
-    } @else {
-      Running outside the desktop host — host actions are unavailable.
+    @if (sessionBoundary(); as boundary) {
+      <h3>Session boundary</h3>
+      <!--
+        Rendered because it is the load-bearing fact about this surface: the host holds no
+        credential and makes no decision. Showing it keeps the claim visible to anyone who opens
+        the app, not only to anyone who reads the source.
+      -->
+      <dl class="status-grid">
+        <div class="status-row">
+          <dt>Credential held by</dt>
+          <dd>{{ boundary.tokenCustody }}</dd>
+        </div>
+        <div class="status-row">
+          <dt>Authority held by</dt>
+          <dd>{{ boundary.authorityHolder }}</dd>
+        </div>
+        <div class="status-row">
+          <dt>Main process stores session</dt>
+          <dd>{{ boundary.mainProcessPersistsSession ? 'Yes' : 'No' }}</dd>
+        </div>
+      </dl>
     }
-  </p>
-</footer>
+  </section>
+</main>

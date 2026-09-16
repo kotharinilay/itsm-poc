@@ -20,6 +20,11 @@
     "sourceMap": true,
     "types": ["node"]
   },
+  // The preload is excluded from this emit on purpose. A **sandboxed** preload is loaded by
+  // Electron's own CommonJS loader, not Node's: it cannot use ESM, and its `require` is a polyfill
+  // that resolves only a short list of built-ins — never a relative file. So the preload must be a
+  // single self-contained CommonJS file, which `tsc` cannot produce. `npm run build:preload`
+  // bundles it with esbuild instead, and `tsconfig.preload.json` type-checks it.
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "tests"]
+  "exclude": ["dist", "node_modules", "tests", "src/preload"]
 }

@@ -9,6 +9,10 @@ on:
   pull_request:
     paths:
       - 'apps/desktop/**'
+      # The renderer-contract suite reads the Angular bridge declaration, so a change there can
+      # break this workflow. It must run when that file moves or its shape changes.
+      - 'apps/web/projects/desktop-renderer/**'
+      - 'build/scripts/verify-desktop-security-guard.sh'
       - '.github/workflows/desktop.yml'
   workflow_dispatch:
 
@@ -38,12 +42,23 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npx tsc -p tsconfig.json --noEmit
+        run: npm run typecheck
+
+      # Catches the class of mistake a test cannot see coming: an API that must never appear
+      # anywhere in this package, on any code path, including one nobody has written yet.
+      - name: Lint
+        run: npm run lint
 
       # Asserts configuration rather than driving a window, so it runs on a machine with no
       # display. A security control that needs a real window is one CI skips.
       - name: Security suite
         run: npx vitest run
+
+      # Plan Stage 4's gate is not "the suite passes" - it is "the suite passes AND fails
+      # correctly when a setting is flipped". A suite that would stay green with sandbox off is
+      # not evidence of anything, and nobody finds out until it matters. REQUIRED CHECK.
+      - name: Verify the security suite fails correctly
+        run: bash ../../build/scripts/verify-desktop-security-guard.sh
 
       - name: Build
         run: npm run build

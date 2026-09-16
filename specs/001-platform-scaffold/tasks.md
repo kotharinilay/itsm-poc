@@ -114,6 +114,17 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 - [X] T055 [P] Write the Electron security suite in `apps/desktop/tests/security.spec.ts` asserting each switch, that IPC rejects an unvalidated sender and an unvalidated argument, and that navigation outside the allow-list is blocked — Boundary: desktop host | Validates: Stage 4 gate
 - [X] T056 [P] Write a test in `apps/desktop/tests/no-policy.spec.ts` asserting no business authorization decision exists in the renderer **or** the main process — Boundary: desktop host | Validates: Constitution P-VII
 
+*Added during Stage 4 implementation. The seven tasks above harden the host; these seven make it a
+host that actually renders something, and record the two boundaries the desktop path must not cross.*
+
+- [X] T056a Implement host origin configuration in `apps/desktop/src/main/config.ts` — one validated, frozen source for the gateway, realtime and Entra origins that the allow-list, the CSP and the reported endpoints all derive from; rejects a non-HTTPS/WSS origin, credentials, a path or a query at startup — Boundary: desktop host | Validates: Spec §FR-SURF-017, Constitution P-VII
+- [X] T056b Implement renderer integration in `apps/desktop/src/main/renderer-protocol.ts` — the Angular bundle served over a standard, secure scheme with an assertable origin instead of `file://`, with path-traversal containment — Boundary: desktop host | Validates: Constitution P-VII (`file://` avoided where a safer protocol strategy applies)
+- [X] T056c Implement the application shell in `apps/desktop/src/main/app-shell.ts` — the guarded IPC handler table, permissions denied by default, certificate errors never trusted, and a refusal to start under a switch that would disable a control — Boundary: desktop host | Validates: Constitution P-VII
+- [X] T056d Implement the desktop session integration boundary in `apps/desktop/src/main/session-boundary.ts` — a descriptor, not a session: token custody is the renderer's, authority is the platform's, the main process persists nothing — Boundary: desktop session | Validates: Constitution P-VII, Spec §FR-SURF-004
+- [X] T056e Implement the endpoint execution boundary **placeholder** in `apps/desktop/src/main/endpoint-execution-boundary.ts` — the four required bindings declared as a type, execution and verification both refusing unconditionally, reachable from no IPC channel — Boundary: endpoint execution | Validates: Constitution P-III, P-VII, ADR-0004 (deferred)
+- [X] T056f Implement the Angular desktop bridge in `apps/web/projects/desktop-renderer/src/app/desktop/` and the renderer shell that consumes it, degrading to browser mode when no host is present — Boundary: desktop surface | Validates: Plan Stage 3 (T046, bridge service only)
+- [X] T056g [P] Write `apps/desktop/tests/bridge-surface.spec.ts`, `tests/renderer-contract.spec.ts` and `build/scripts/verify-desktop-security-guard.sh` — the bridge stays narrow, the two hand-maintained declarations of it cannot drift, and the security suite is proven to fail when each control is weakened — Boundary: desktop host | Validates: Stage 4 gate, Plan Stage 11
+
 **Checkpoint**: The security suite passes, and fails correctly when a setting is flipped.
 
 ---

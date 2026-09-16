@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Synthia — Desktop</title>
+    <title>Synthia Desktop</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      No CSP <meta> tag here, deliberately. The policy is delivered as a response header from the
+      Electron main process (apps/desktop/src/main/csp.ts) so the renderer cannot weaken it and
+      injected markup cannot strip it (plan Stage 3, Stage 4).
+    -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
   </head>
   <body>

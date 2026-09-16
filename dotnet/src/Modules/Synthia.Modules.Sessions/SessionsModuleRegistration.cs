@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Synthia.Persistence;
 
 namespace Synthia.Modules.Sessions;
 
@@ -15,7 +16,15 @@ public static class SessionsModuleRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Stage 5 wires read models over vw_*_v1 views. Nothing is registered at Stage 1.
+        services.AddSynthiaReadContext();
+
+        // One implementation, two audience-shaped interfaces. The split is not ceremony: it is
+        // what stops a customer endpoint reaching a staff query by autocomplete, and it keeps each
+        // audience's surface readable on its own.
+        services.AddScoped<SessionReadModel>();
+        services.AddScoped<ICustomerSessionReadModel>(provider => provider.GetRequiredService<SessionReadModel>());
+        services.AddScoped<IStaffSessionReadModel>(provider => provider.GetRequiredService<SessionReadModel>());
+
         return services;
     }
 }

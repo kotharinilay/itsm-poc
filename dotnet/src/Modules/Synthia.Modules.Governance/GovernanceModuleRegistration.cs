@@ -6,6 +6,17 @@ namespace Synthia.Modules.Governance;
 /// Registration surface for the Governance module. The composition root
 /// (<c>Synthia.Api/Program.cs</c>) is the only caller; a module never registers another.
 /// </summary>
+/// <remarks>
+/// <b>This module registers nothing yet, and that is the honest state.</b> The catalogue has a
+/// published view — <c>vw_governance_catalogue_v1</c>, mapped in <c>SynthiaReadContext</c> — but no
+/// route in the frozen API contracts reads it, and the catalogue holds only inert reference
+/// fixtures until Stage 11 seeds them.
+/// <para>
+/// Nothing decided here in any case: <b>deterministic governance lives in RagCore and the model
+/// only proposes</b> (constitution Principle III). This module is a read model for a catalogue,
+/// never a place a treatment is chosen. Its read surface arrives when a route needs one.
+/// </para>
+/// </remarks>
 public static class GovernanceModuleRegistration
 {
     /// <summary>Registers this module's services. Read-only: no write path exists here.</summary>
@@ -15,7 +26,6 @@ public static class GovernanceModuleRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Stage 5 wires read models over vw_*_v1 views. Nothing is registered at Stage 1.
         return services;
     }
 }

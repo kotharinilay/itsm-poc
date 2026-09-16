@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Synthia.Persistence;
 
 namespace Synthia.Modules.Tenancy;
 
@@ -15,7 +16,13 @@ public static class TenancyModuleRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Stage 5 wires read models over vw_*_v1 views. Nothing is registered at Stage 1.
+        services.AddSynthiaReadContext();
+
+        services.AddScoped<ITenantRegistry, TenantRegistry>();
+        services.AddScoped<TenantReadModel>();
+        services.AddScoped<ITenantReadModel>(provider => provider.GetRequiredService<TenantReadModel>());
+        services.AddScoped<IDashboardReadModel>(provider => provider.GetRequiredService<TenantReadModel>());
+
         return services;
     }
 }

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Synthia.Contracts/Synthia.Contracts.csproj" />
+    <ProjectReference Include="../../src/Synthia.Persistence/Synthia.Persistence.csproj" />
+    <ProjectReference Include="../../src/Modules/Synthia.Modules.Tenancy/Synthia.Modules.Tenancy.csproj" />
+  </ItemGroup>
+
+</Project>

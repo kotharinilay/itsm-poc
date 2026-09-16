@@ -13,6 +13,11 @@
 # grep depending on what was installed, and the two disagreed — it passed a planted violation.
 # A guard that can silently stop guarding is worse than no guard, so this one has a single path.
 #
+# Second implementation note, learned the same way: THIS GUARD MUST NOT FIRE ON PROSE. Every check
+# below either anchors at statement position or runs over comment-stripped lines, because a guard
+# that flags the comment explaining the rule — or the test enforcing it — is a guard that gets
+# suppressed, and then the rule has nothing behind it at all.
+#
 # Exit 0 = boundary intact. Exit 1 = violation(s), with the offending lines printed.
 
 set -uo pipefail
@@ -39,13 +44,20 @@ sources() {
 }
 
 # Grep a pattern across a file list. Prints matches; returns 0 if any were found.
+#
+# Whole-line comments are dropped first. This is line-based rather than a real parser, so it does
+# not understand a comment that trails code — which is the right trade here: a trailing comment
+# cannot introduce a dependency, and a parser per language is what the in-language architecture
+# tests are for.
 scan() {
   local pattern="$1"
   shift
   local files
   files="$(cat)"
   [ -n "$files" ] || return 1
-  printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -nIE "$pattern" 2>/dev/null
+  printf '%s\n' "$files" | tr '\n' '\0' \
+    | xargs -0 grep -nIE "$pattern" 2>/dev/null \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|#)'
 }
 
 check() {
@@ -94,8 +106,14 @@ check "RagCore configures an HTTP client targeting the monolith" \
   '(BaseAddress|base_?[Uu]rl).{0,80}(synthia-api|synthia\.api)' ragcore '*.py' '*.toml' '*.json'
 
 # ------------------------------------------- the monolith owns no schema (ADR-0001, ADR-0003)
+#
+# Scoped to dotnet/src, and that is the same deferral this script already makes for RagCore prose
+# above. dotnet/tests/Synthia.ArchitectureTests/NoMigrationTests.cs names these APIs in a string
+# array — it is the test that ENFORCES this rule, and it strips comments before matching so it can
+# tell the rule from a description of it. grep cannot tell a call from a string literal; that test
+# can, so the .cs enforcement is its job and this check guards the shipping code.
 check ".NET calls a schema-owning EF API - Alembic owns every migration" \
-  '(Database\.Migrate|EnsureCreated)[[:space:]]*\(' dotnet '*.cs'
+  '(Database\.Migrate|EnsureCreated)[[:space:]]*\(' dotnet/src '*.cs'
 
 migration_dirs="$(find dotnet -type d -name Migrations \
   \( -path '*/bin/*' -o -path '*/obj/*' \) -prune -o -type d -name Migrations -print 2>/dev/null)"

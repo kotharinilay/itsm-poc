@@ -16,6 +16,7 @@ Each record distinguishes three things and never blurs them: **what the source r
 | [0003](./0003-database-migrations-and-rollback.md) | Database migrations: Alembic, CI-gated execution, and the rollback policy | **Accepted** | Alembic owns every migration; migrations run as a gated job, never at startup; expand/contract rather than rollback |
 | [0004](./0004-endpoint-script-integrity-privilege-and-attestation.md) | Endpoint script distribution, privilege level, and result attestation | **Accepted** | Answers specification OQ-03, OQ-04, OQ-05 — fetch per execution with hash verification, no elevation in Alpha, a client result is a claim not proof |
 | [0005](./0005-third-party-target-systems.md) | Third-party target systems: OneLogin, Duo and the extensible set | **Accepted** | They are target systems reached as MCP servers, not identity providers; the set is open |
+| [0006](./0006-desktop-renderer-origin-and-csp-nonce.md) | The desktop renderer origin: a privileged custom scheme, not `file://` | **Accepted** | The renderer is served over `app://renderer` so CSP, IPC sender validation and gateway `Origin` work as written; the remote allow-list stays HTTPS/WSS-only; a per-response nonce keeps `'unsafe-inline'` out of every directive |
 
 ## Open items these records do not close
 
@@ -26,6 +27,7 @@ Recorded so they are met as decisions rather than discovered mid-implementation.
 | **OQ-08** — reconciliation when a trigger arrives at an unexpected checkpoint position | ADR-0002 §Unresolved | Phase 13 (T117, resume worker) |
 | **OQ-01** — second consequential operation in one session | Specification §40; `spec.md` §Dependencies | Stage 14 |
 | Script signing for GA; the "destructive" taxonomy | ADR-0004 §Unresolved | Before endpoint execution expands beyond Alpha |
+| Whether the renderer bundle is served from an ASAR archive once packaging lands | ADR-0006 §Unresolved | Packaging |
 
 > ADR-0002's §Unresolved section still lists OQ-03, OQ-04 and OQ-05 as open. **ADR-0004 answers all
 > three** and is the later record. Read ADR-0004 as governing.

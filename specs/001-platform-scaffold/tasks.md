@@ -143,19 +143,19 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 
 **Goal**: A FastAPI application and LangGraph skeleton with the three interrupts, ports declared, adapters absent.
 
-- [ ] T069 Implement typed settings in `ragcore/src/ragcore/config/settings.py` using Pydantic Settings, resolving secrets from Key Vault via managed identity, with no scattered environment reads — Boundary: configuration | Validates: Constitution §Python (Pydantic Settings)
-- [ ] T070 Implement the identity header middleware in `ragcore/src/ragcore/api/middleware/identity.py` — no token parsing; reject any request supplying tenant or role — Boundary: identity | Validates: Spec §FR-IDENT-002
-- [ ] T071 [P] Implement correlation middleware in `ragcore/src/ragcore/api/middleware/correlation.py` binding the identifier to the logging context — Boundary: observability | Validates: Spec §FR-OPS-001
-- [ ] T072 [P] Implement RFC 9457 problem-details handling in `ragcore/src/ragcore/api/middleware/problems.py` matching the .NET shape — Boundary: API | Validates: Contracts §README
-- [ ] T073 Scaffold the customer, staff and workload routers in `ragcore/src/ragcore/api/{customer,staff,workload}/` with explicit Pydantic request/response schemas and **no business policy in endpoints** — Boundary: API | Validates: Constitution §FastAPI
-- [ ] T074 Wire dependency injection via FastAPI `Depends` at HTTP boundaries only in `ragcore/src/ragcore/api/deps.py` — Boundary: composition root | Validates: Constitution §Dependency injection
-- [ ] T075 Implement the LangGraph state and builder in `ragcore/src/ragcore/graph/{state.py,builder.py}` with the three interrupt points: clarification, consent, approval — Boundary: orchestration | Validates: Spec §FR-INTR-001
-- [ ] T076 [P] Implement the session state machine in `ragcore/src/ragcore/domain/session_state.py` covering the nine states, with the three `awaiting_*` states persisting indefinitely — Boundary: domain | Validates: Spec §FR-SESS-015, §FR-SESS-016
-- [ ] T077 [P] Scaffold `ragcore/src/ragcore/ingestion/` — the twelfth bounded context: acquisition, normalisation, chunking, embedding, indexing — with no behaviour — Boundary: Ingestion context | Validates: Plan §Project Structure, research R-021
-- [ ] T078 [P] Implement the SSE streaming envelope in `ragcore/src/ragcore/api/customer/streaming.py` with event kinds `token`, `step`, `interrupt`, `done`, `error` — Boundary: API | Validates: Contracts §customer-api
-- [ ] T079 [P] Write contract tests in `ragcore/tests/contracts/test_api_surface.py` for the three audiences and the SSE envelope — Boundary: API | Validates: Stage 6 gate
-- [ ] T080 [P] Write async cancellation tests in `ragcore/tests/unit/test_cancellation.py` asserting `asyncio.CancelledError` propagates and is never swallowed — Boundary: async | Validates: Constitution §Python (cancellation)
-- [ ] T081 [P] Write a test in `ragcore/tests/unit/test_graph_interrupts.py` asserting the graph suspends and resumes in memory at all three interrupt points — Boundary: orchestration | Validates: Stage 6 gate
+- [X] T069 Implement typed settings in `ragcore/src/ragcore/config/settings.py` using Pydantic Settings, resolving secrets from Key Vault via managed identity, with no scattered environment reads — Boundary: configuration | Validates: Constitution §Python (Pydantic Settings)
+- [X] T070 Implement the identity header middleware in `ragcore/src/ragcore/api/middleware/identity.py` — no token parsing; reject any request supplying tenant or role — Boundary: identity | Validates: Spec §FR-IDENT-002
+- [X] T071 [P] Implement correlation middleware in `ragcore/src/ragcore/api/middleware/correlation.py` binding the identifier to the logging context — Boundary: observability | Validates: Spec §FR-OPS-001
+- [X] T072 [P] Implement RFC 9457 problem-details handling in `ragcore/src/ragcore/api/middleware/problems.py` matching the .NET shape — Boundary: API | Validates: Contracts §README
+- [X] T073 Scaffold the customer, staff and workload routers in `ragcore/src/ragcore/api/{customer,staff,workload}/` with explicit Pydantic request/response schemas and **no business policy in endpoints** — Boundary: API | Validates: Constitution §FastAPI
+- [X] T074 Wire dependency injection via FastAPI `Depends` at HTTP boundaries only in `ragcore/src/ragcore/api/deps.py` — Boundary: composition root | Validates: Constitution §Dependency injection
+- [X] T075 Implement the LangGraph state and builder in `ragcore/src/ragcore/graph/{state.py,builder.py}` with the three interrupt points: clarification, consent, approval — Boundary: orchestration | Validates: Spec §FR-INTR-001
+- [X] T076 [P] Implement the session state machine in `ragcore/src/ragcore/domain/session_state.py` covering the nine states, with the three `awaiting_*` states persisting indefinitely — Boundary: domain | Validates: Spec §FR-SESS-015, §FR-SESS-016
+- [X] T077 [P] Scaffold `ragcore/src/ragcore/ingestion/` — the twelfth bounded context: acquisition, normalisation, chunking, embedding, indexing — with no behaviour — Boundary: Ingestion context | Validates: Plan §Project Structure, research R-021
+- [X] T078 [P] Implement the SSE streaming envelope in `ragcore/src/ragcore/api/customer/streaming.py` with event kinds `token`, `step`, `interrupt`, `done`, `error` — Boundary: API | Validates: Contracts §customer-api
+- [X] T079 [P] Write contract tests in `ragcore/tests/contracts/test_api_surface.py` for the three audiences and the SSE envelope — Boundary: API | Validates: Stage 6 gate
+- [X] T080 [P] Write async cancellation tests in `ragcore/tests/unit/test_cancellation.py` asserting `asyncio.CancelledError` propagates and is never swallowed — Boundary: async | Validates: Constitution §Python (cancellation)
+- [X] T081 [P] Write a test in `ragcore/tests/unit/test_graph_interrupts.py` asserting the graph suspends and resumes in memory at all three interrupt points — Boundary: orchestration | Validates: Stage 6 gate
 
 **Checkpoint**: `mypy --strict` and `ruff` clean; the graph suspends and resumes in memory.
 

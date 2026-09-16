@@ -1,1 +1,1 @@
-"""Staff audience. Target organisation comes from the platform object, never the caller."""
+"""Staff audience. Reachable only from the staff portal; the target organisation is derived."""

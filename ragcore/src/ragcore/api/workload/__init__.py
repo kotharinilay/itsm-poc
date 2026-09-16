@@ -1,1 +1,1 @@
-"""Workload audience. App-only; tenant resolved from the work item alone."""
+"""Workload audience. The non-human execution principal, app-only authorization."""

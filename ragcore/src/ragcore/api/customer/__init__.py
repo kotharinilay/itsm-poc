@@ -1,1 +1,1 @@
-"""Customer audience. Every caller is an end user, staff included."""
+"""Customer audience. Every caller is an ``end_user``, including a Synoptek staff member."""

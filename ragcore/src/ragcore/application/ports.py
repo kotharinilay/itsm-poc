@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
+from ragcore.domain.decisions import EndUserConsent, StaffVerdict
 from ragcore.domain.envelopes import NotificationEnvelope, TriggerEnvelope
 from ragcore.domain.governance import CapabilityKind, ExecutionTreatment, VerificationOutcome
 from ragcore.domain.identifiers import (
@@ -177,6 +178,21 @@ class ApprovalRepositoryPort(Protocol):
         """
         ...
 
+    async def decision_for(
+        self, tenant: TenantContext, work_item_id: WorkItemId
+    ) -> StaffVerdict | None:
+        """Read back the decision that actually stands for this work item.
+
+        **This is where authority is read**, and it is the reason a resume worker does not need
+        to trust the trigger that woke it. The message says a verdict happened; this says what
+        the verdict was, who made it, and which roles they held — from the durable row.
+
+        Returns:
+            The standing verdict, or ``None`` when no decision has been recorded. ``None`` means
+            *undecided*, never *approved*.
+        """
+        ...
+
 
 @runtime_checkable
 class ConsentRepositoryPort(Protocol):
@@ -198,6 +214,17 @@ class ConsentRepositoryPort(Protocol):
         ``verdict`` is an enum rather than a boolean: ``record(..., True)`` says nothing at a call
         site, and the constitution prohibits a boolean parameter flag that hides behaviour
         (Principle VI).
+        """
+        ...
+
+    async def decision_for(
+        self, tenant: TenantContext, work_item_id: WorkItemId
+    ) -> EndUserConsent | None:
+        """Read back the consent recorded for this work item.
+
+        Returns:
+            The consent, or ``None`` when none has been recorded. An affirmative chat message is
+            not a consent and never produces a value here (spec FR-SESS-011).
         """
         ...
 

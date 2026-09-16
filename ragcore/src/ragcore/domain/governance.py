@@ -26,6 +26,48 @@ class ExecutionTreatment(Enum):
     NOT_ALLOWED = "NOT_ALLOWED"
     """Refused at the gate. Never surfaced as an approvable proposal; recorded as a denial."""
 
+    @property
+    def strictness(self) -> int:
+        """How much human decision this treatment demands.
+
+        **Not a hierarchy that permits substitution.** Consent MUST NOT satisfy a requirement for
+        staff approval (spec FR-INTR-007), and nothing here lets it: this ordering exists solely
+        so :func:`is_narrowing` can tell a safe re-assignment from a dangerous one. It is also
+        unrelated to staff roles, which have no hierarchy, ranking or precedence
+        (spec FR-AUTHZ-003).
+        """
+        return _STRICTNESS[self]
+
+
+_STRICTNESS: dict[ExecutionTreatment, int] = {
+    ExecutionTreatment.AUTO: 0,
+    ExecutionTreatment.END_USER_APPROVAL: 1,
+    ExecutionTreatment.STAFF_APPROVAL: 2,
+    ExecutionTreatment.NOT_ALLOWED: 3,
+}
+
+
+def is_narrowing(before: ExecutionTreatment, after: ExecutionTreatment) -> bool:
+    """Whether re-assigning ``before`` to ``after`` demands at least as much human decision.
+
+    **The one direction a treatment is allowed to move.** Re-evaluation happens for real: the
+    gate runs again every time a suspended run resumes, and between the two evaluations an
+    organisation can be suspended or a capability de-entitled. Both make the treatment stricter,
+    both are the correct outcome, and both must be permitted.
+
+    What must never happen is the reverse. A treatment that became *more* permissive between the
+    evaluation a human saw and the one that executes is the failure the gate exists to prevent —
+    whether it came from a policy bug or from something that reached the state channel.
+
+    Args:
+        before: The treatment already assigned.
+        after: The treatment a later evaluation produced.
+
+    Returns:
+        ``True`` when ``after`` is the same or stricter.
+    """
+    return after.strictness >= before.strictness
+
 
 class CapabilityKind(Enum):
     """Whether a capability reads state or changes it.

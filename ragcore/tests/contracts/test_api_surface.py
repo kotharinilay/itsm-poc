@@ -239,7 +239,12 @@ class TestIdentityIsDerivedNeverParsed:
         traverse APIM, so it carries neither identity nor a gateway certificate.
         """
         assert client.get("/health/live").status_code == 200
-        assert client.get("/health/ready").status_code == 200
+
+        # Readiness is REACHED rather than refused, which is what this test is about. Its answer is
+        # 503 here because the probe genuinely checks the platform database and this client has
+        # none — a served verdict, not a rejection. Asserting 200 would have quietly turned this
+        # into a test that readiness performs no dependency check.
+        assert client.get("/health/ready").status_code not in (401, 403)
 
 
 class TestProblemDetails:

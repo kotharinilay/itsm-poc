@@ -18,7 +18,7 @@ Scaffold honestly; do not invent product (constitution Principle IX).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -47,6 +47,7 @@ from ragcore.config.secrets import (
     SecretValue,
 )
 from ragcore.config.settings import Settings, get_settings
+from ragcore.infrastructure.cache import NullCache, RedisTransientCache, TransientCachePort
 from ragcore.infrastructure.clock import SystemClock
 from ragcore.integrations.credentials import TenantCredentialResolver
 from ragcore.integrations.graph.adapter import MicrosoftGraphAdapter
@@ -117,6 +118,12 @@ class Container:
             ``catalogue`` on purpose: discovery confers no entitlement, and one port returning both
             would make the two indistinguishable at the call site.
         notifications: Realtime delivery. ``None`` until Stage 8.
+        cache: The transient cache. **Stage 10 — always bound**, to Redis when a host is configured
+            and to :class:`~ragcore.infrastructure.cache.NullCache` otherwise. Never ``None``,
+            unlike every other optional binding above, and the difference is deliberate: a caller
+            must never branch on whether a cache exists. A cache miss and an absent cache lead to
+            the same code path — do the work — so an always-missing cache is the honest
+            representation of "no cache", and nothing can come to depend on one being there.
     """
 
     settings: Settings
@@ -138,6 +145,7 @@ class Container:
     outbox: OutboxPort | None = None
     notifications: NotificationPort | None = None
     audit: AuditSinkPort | None = None
+    cache: TransientCachePort = field(default_factory=NullCache)
 
     async def aclose(self) -> None:
         """Release what this container owns.
@@ -216,6 +224,11 @@ def build_container(settings: Settings | None = None) -> Container:
             AzureAiSearchRetrieval(resolved.retrieval, caller)
             if resolved.retrieval.is_configured
             else None
+        ),
+        # Always bound, never `None`. Redis is transient only: it is never an authority and never
+        # a durable record, so a process without one is fully correct and simply slower.
+        cache=(
+            RedisTransientCache(resolved.cache) if resolved.cache.is_configured else NullCache()
         ),
         case_system=(
             ServiceNowAdapter(

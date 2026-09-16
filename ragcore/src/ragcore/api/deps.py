@@ -37,6 +37,7 @@ from ragcore.domain.principal import (
 )
 from ragcore.domain.roles import RoleSet, StaffRole
 from ragcore.domain.tenancy import TenantContext
+from ragcore.observability.context import bind_tenant
 
 
 def get_container(request: Request) -> Container:
@@ -164,6 +165,14 @@ async def get_tenant(container: ContainerDep, principal: PrincipalDep) -> Tenant
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This organisation is not currently admitted.",
         )
+
+    # Tag this task's telemetry with the organisation, from the one place admission actually
+    # happens. Traces, metrics and logs are each tagged from trusted context and never from a
+    # supplied header or from message content (spec FR-OPS-002) — binding it here rather than in
+    # middleware is what makes that true, because middleware runs before the registry has been
+    # consulted and would be tagging with an unadmitted claim.
+    bind_tenant(tenant)
+
     return tenant
 
 

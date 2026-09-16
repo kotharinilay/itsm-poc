@@ -48,6 +48,8 @@ expect_fail() {
 py_arch() { (cd ragcore && uv run pytest tests/architecture -q); }
 py_leak() { (cd ragcore && uv run pytest tests/integrations/test_no_provider_leak.py -q); }
 py_isolation() { (cd ragcore && uv run pytest tests/isolation -q -m 'not integration'); }
+py_leakage() { (cd ragcore && uv run pytest tests/security/test_no_leakage.py -q); }
+py_config()  { (cd ragcore && uv run pytest tests/unit/test_settings.py tests/unit/test_cache.py -q); }
 net_arch() { (cd dotnet && dotnet test tests/Synthia.ArchitectureTests --nologo -v quiet); }
 net_build() { (cd dotnet && dotnet build Synthia.sln --nologo -v quiet -warnaserror); }
 
@@ -163,6 +165,68 @@ sed -i 's#    async def search(self, tenant: TenantContext, query: str, limit: i
 expect_fail "a caller-supplied filter on the retrieval boundary" py_isolation
 cp /tmp/synthia-search.bak ragcore/src/ragcore/retrieval/search.py
 rm -f /tmp/synthia-search.bak
+
+# --- 11: a payload or header collection reaches a log sink ---------------------
+# Logs leak no secret, token, authorization header or sensitive payload (plan Stage 10 security).
+# The redacting filter is the backstop; this is the shape that defeats a backstop, because a dict
+# of headers renders as text the filter has to recognise rather than being handed the value.
+cat > ragcore/src/ragcore/__planted_leak.py <<'PLANTED'
+"""Planted by verify-architecture-guards.sh."""
+
+import logging
+
+_log = logging.getLogger(__name__)
+
+
+def report(headers: dict[str, str]) -> None:
+    """Planted."""
+    _log.info("inbound %s", headers)
+PLANTED
+restore+=("RM:ragcore/src/ragcore/__planted_leak.py")
+expect_fail "a header collection passed to a log call" py_leakage
+rm -f ragcore/src/ragcore/__planted_leak.py
+
+# --- 12: a log message built with an f-string ----------------------------------
+# Two defects in one: the message stops being aggregatable, and the value is spliced into free text
+# where the redactor must find it by shape rather than being handed it as an argument.
+cat > ragcore/src/ragcore/__planted_fstring.py <<'PLANTED'
+"""Planted by verify-architecture-guards.sh."""
+
+import logging
+
+_log = logging.getLogger(__name__)
+
+
+def report(value: str) -> None:
+    """Planted."""
+    _log.info(f"value is {value}")
+PLANTED
+restore+=("RM:ragcore/src/ragcore/__planted_fstring.py")
+expect_fail "a log message built with an f-string" py_leakage
+rm -f ragcore/src/ragcore/__planted_fstring.py
+
+# --- 13: telemetry retention drifting from the workspace -----------------------
+# Two places hold the same number (FR-OPS-011). The drift would be invisible, and the weaker of the
+# two is the one that would matter: a workspace retaining for months makes it plausible to answer an
+# audit question from a dashboard, which FR-OPS-004 prohibits.
+SETTINGS=ragcore/src/ragcore/config/settings.py
+cp "$SETTINGS" /tmp/synthia-settings.bak
+restore+=("/tmp/synthia-settings.bak:$SETTINGS")
+sed -i 's/    retention_days: int = Field(default=30, ge=1, le=90)/    retention_days: int = Field(default=180, ge=1, le=365)/' "$SETTINGS"
+expect_fail "telemetry retention drifting from the workspace policy" py_config
+cp /tmp/synthia-settings.bak "$SETTINGS"
+rm -f /tmp/synthia-settings.bak
+
+# --- 14: a cache entry that can be written without an expiry -------------------
+# Redis is transient only (Principle IV). An entry with no TTL is a durable record, and this is the
+# single edit that turns the cache into one - a default on a parameter nobody would think to pass.
+CACHE=ragcore/src/ragcore/infrastructure/cache.py
+cp "$CACHE" /tmp/synthia-cache.bak
+restore+=("/tmp/synthia-cache.bak:$CACHE")
+sed -i 's/    async def put(self, tenant: TenantContext, key: str, value: str, \*, ttl_seconds: int) -> None:/    async def put(self, tenant: TenantContext, key: str, value: str, ttl_seconds: int = 0) -> None:/' "$CACHE"
+expect_fail "a cache write with an optional TTL" py_config
+cp /tmp/synthia-cache.bak "$CACHE"
+rm -f /tmp/synthia-cache.bak
 
 # --- clean tree must pass --------------------------------------------------
 (cd dotnet && dotnet build Synthia.sln --nologo -v quiet >/dev/null 2>&1)

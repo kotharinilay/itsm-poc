@@ -1,0 +1,130 @@
+{
+  "$comment": [
+    "TELEMETRY RETENTION AND SAMPLING. The workspace half of FR-OPS-011 and FR-OPS-012.",
+    "",
+    "The application configures what it can (ragcore/src/ragcore/observability/) and this file",
+    "configures what only the workspace can. Both halves are needed, and the application half is",
+    "the weaker one: a workspace quietly retaining telemetry for two years would defeat FR-OPS-004",
+    "from outside the application, with nothing in the codebase to show for it.",
+    "",
+    "WHY RETENTION IS A CONTROL AND NOT A COST DECISION. Telemetry MUST NOT answer a question audit",
+    "is responsible for (FR-OPS-004). That is unenforceable as a rule about intent - somebody will",
+    "always be able to answer an audit question from a trace if the trace is still there. Thirty",
+    "days against audit's seven years makes it enforceable as a matter of fact: after a month the",
+    "question demonstrably cannot be answered from here, whatever anybody intended.",
+    "",
+    "WHY SAMPLING IS TAIL-BASED. A journey suspends for a human decision and resumes hours later in",
+    "a different process. Head sampling decides at the first span, before the journey is known to be",
+    "interesting, and routinely keeps the request half of an approval and discards the resume half -",
+    "which defeats SC-OPS-001 exactly. It is prohibited here rather than merely discouraged."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "retention": {
+    "$comment": [
+      "Thirty days, and the application reports the same number from SYNTHIA_OTEL_RETENTION_DAYS.",
+      "ragcore/tests/unit/test_settings.py asserts the two agree, because two places holding the",
+      "same number is two places for them to stop agreeing - and the drift would be invisible.",
+      "",
+      "The 'class-based mechanism' FR-OPS-011 refers to is the same one governing every other data",
+      "class (data-model.md retention classes). Telemetry is one class among several; it is not a",
+      "special case with its own lifecycle."
+    ],
+    "workspaceRetentionDays": 30,
+    "dataClass": "telemetry",
+    "overridable": true,
+    "contrastWith": {
+      "auditRetentionYears": 7,
+      "why": "The gap is the control. See FR-OPS-004 and FR-AUDIT-004."
+    }
+  },
+
+  "sampling": {
+    "$comment": [
+      "TWO LAYERS, and neither is sufficient alone.",
+      "",
+      "In-process (CorrelationJourneySampler) makes the decision CONSISTENT: it is derived from the",
+      "correlation identifier, so every span of one journey reaches the same answer independently,",
+      "in processes that never spoke to each other and hours apart. That is what makes the",
+      "suspend-and-resume case work without coordination.",
+      "",
+      "In the collector, tail sampling makes the decision INFORMED: it happens after the spans are",
+      "in, so 'this journey contained an error' is a fact rather than a prediction.",
+      "",
+      "The in-process layer exists so the collector is never handed a half-sampled journey, which it",
+      "could not repair."
+    ],
+    "strategy": "tail",
+    "headSamplingPermitted": false,
+    "decisionKey": "correlationId",
+    "decisionKeyAttribute": "synthia.correlation_id",
+
+    "alwaysRetain": {
+      "$comment": [
+        "Retained whatever the ratio says. Each entry is a thing an operator goes looking for, and",
+        "a sampled-away denial is a question that cannot be answered at all - unlike a sampled-away",
+        "successful request, which is one of thousands that look the same.",
+        "",
+        "The application marks these with the synthia.retain span attribute",
+        "(ragcore/src/ragcore/observability/sampling.py), so the two layers agree on what counts as",
+        "interesting rather than each deciding separately."
+      ],
+      "spanAttribute": "synthia.retain",
+      "conditions": [
+        { "condition": "error", "why": "A trace nobody kept is a failure nobody can explain." },
+        { "condition": "governance denial", "why": "The record of the platform refusing something. Never ordinary." },
+        { "condition": "approval", "why": "A human decided. The journey around that decision is the one that gets reviewed." }
+      ]
+    },
+
+    "ordinaryJourneyRatio": {
+      "setting": "SYNTHIA_OTEL_TRACE_SAMPLE_RATIO",
+      "default": 1.0,
+      "$comment": "Applies ONLY to journeys carrying none of the conditions above. A low value here discards the ordinary and nothing else."
+    }
+  },
+
+  "ingestion": {
+    "$comment": [
+      "Entra-authenticated ingestion, so the connection string contributes the ENDPOINT rather than",
+      "the AUTHORITY. The instrumentation key inside a connection string is a write credential for",
+      "the workspace: hold it and you can inject telemetry into somebody else's dashboards. It is",
+      "therefore a Key Vault reference in both container manifests and never a plain value.",
+      "",
+      "The role is Monitoring Metrics Publisher on the workspace, held by both deployables",
+      "(build/infra/identity/managed-identities.json). Publisher, not Contributor: neither",
+      "deployable reads telemetry back, and neither configures the workspace."
+    ],
+    "authentication": "entra-managed-identity",
+    "role": "Monitoring Metrics Publisher",
+    "connectionStringSource": "keyvault",
+    "connectionStringSecretName": "synthia-appinsights-connection-string"
+  },
+
+  "leakage": {
+    "$comment": [
+      "WHAT MUST NEVER REACH A SINK (plan Stage 10 security). Enforced in the application by",
+      "ragcore/src/ragcore/observability/logging.py - a redacting filter on every record, plus a",
+      "formatter with an ALLOW-LIST of fields, so an attribute nobody named is not serialised at",
+      "all. Asserted by ragcore/tests/security/test_no_leakage.py.",
+      "",
+      "Listed here as well because the workspace is the other end of the same pipe, and a diagnostic",
+      "setting added there could re-open what the application closed."
+    ],
+    "prohibited": [
+      "secret values",
+      "bearer tokens and JWTs",
+      "the Authorization header",
+      "the X-Idp-* identity contract",
+      "request and response payloads",
+      "another organisation's identifiers or content"
+    ],
+    "permittedIdentifiers": [
+      "correlationId",
+      "traceparent",
+      "the platform tenant_id, as a dimension",
+      "opaque platform identifiers (session, work item, operation)"
+    ]
+  }
+}

@@ -25,7 +25,7 @@ what the separated database principals exist to prevent.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -44,9 +44,10 @@ from ragcore.api.middleware.provenance import (
 from ragcore.api.staff.routes import router as staff_router
 from ragcore.api.workload.routes import router as workload_router
 from ragcore.config.composition import Container, build_container
-from ragcore.config.secrets import KeyVaultSecretResolver, resolve_required
+from ragcore.config.secrets import KeyVaultSecretResolver, SecretValue, resolve_required
 from ragcore.config.settings import Settings, get_settings
 from ragcore.infrastructure.azure_credentials import close_azure_credential
+from ragcore.observability.telemetry import configure_telemetry
 
 TITLE = "Synthia RagCore"
 DESCRIPTION = (
@@ -113,11 +114,22 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
         # Skipped when no vault is configured, which is the developer-machine case and the only
         # one. A deployed environment without a vault is a deployment defect, and the pipeline is
         # what catches it: a running process cannot tell which environment it wishes it were in.
+        secrets: Mapping[str, SecretValue] = {}
         if resolved.key_vault.is_configured:
-            await resolve_required(
+            secrets = await resolve_required(
                 KeyVaultSecretResolver(resolved.key_vault.vault_uri),
                 resolved.required_secret_references(),
             )
+
+        # Telemetry is configured AFTER secrets resolve and BEFORE the application serves. After,
+        # because the Application Insights connection string is one of those secrets and is a
+        # credential for a telemetry workspace, so it arrives as a reference like everything else.
+        # Before, because a request served by a process with no tracer is a request that is
+        # invisible — and it would be the first one, which is the one being debugged.
+        configure_telemetry(
+            resolved.observability,
+            connection_string=secrets.get(resolved.observability.connection_string_secret_name),
+        )
 
         try:
             yield

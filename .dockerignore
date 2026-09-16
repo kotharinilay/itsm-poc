@@ -1,0 +1,97 @@
+# What never enters a build context.
+#
+# Both Dockerfiles build from the REPOSITORY ROOT, because each needs files from more than one
+# directory — build/docker/ragcore.Dockerfile copies ragcore/pyproject.toml, ragcore/uv.lock and
+# ragcore/src/, and the .NET one copies dotnet/. A root context means everything below is sent to
+# the daemon unless it is excluded here.
+#
+# THIS FILE IS A SECURITY CONTROL, NOT A BUILD OPTIMISATION, and the difference matters. The
+# optimisation is real — ragcore/.venv and node_modules are hundreds of megabytes that would be
+# uploaded on every build — but the reason each entry is here is that a file in the context can end
+# up in an image layer, and a file in a layer is readable by anyone who can pull it. A local
+# .env, a developer's Azure token cache or the .git directory in an image is a credential leak that
+# no scanner of the running container would notice, because the process never reads the file.
+#
+# Deny nothing broadly and allow back: an allow-list here would silently drop a file the build
+# genuinely needs, and the failure would be a missing module at runtime.
+
+# ---------------------------------------------------------------------------------------------
+# Version control and CI
+# ---------------------------------------------------------------------------------------------
+# .git carries every secret ever committed and then removed. It is the single most valuable thing
+# in this list.
+.git/
+.github/
+.gitattributes
+.gitignore
+
+# ---------------------------------------------------------------------------------------------
+# Local environments and dependency trees
+# ---------------------------------------------------------------------------------------------
+# The virtual environment is rebuilt inside the builder from uv.lock. Copying a developer's one in
+# would also copy whatever platform-specific wheels it happens to hold.
+**/.venv/
+**/venv/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+
+# ---------------------------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------------------------
+**/bin/
+**/obj/
+**/dist/
+**/build/lib/
+**/*.egg-info/
+apps/web/dist/
+apps/desktop/out/
+
+# ---------------------------------------------------------------------------------------------
+# Anything that could hold a credential
+# ---------------------------------------------------------------------------------------------
+# No deployed configuration comes from a file: every secret is a Key Vault reference resolved
+# through managed identity at the point of use. A .env in a context is therefore always a
+# developer's local file, and never something an image should carry.
+**/.env
+**/.env.*
+**/*.pem
+**/*.pfx
+**/*.key
+**/*.crt
+**/.azure/
+**/.aws/
+**/.kube/
+**/secrets/
+
+# ---------------------------------------------------------------------------------------------
+# Editor and operating system noise
+# ---------------------------------------------------------------------------------------------
+**/.vscode/
+**/.idea/
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+
+# ---------------------------------------------------------------------------------------------
+# Things that are documentation rather than product
+# ---------------------------------------------------------------------------------------------
+# Excluded so a documentation edit does not invalidate the build cache, and so an image carries no
+# internal design material. The specification describes controls in detail, which is useful to a
+# reviewer and equally useful to somebody probing the running system.
+docs/
+specs/
+*.md
+!README.md
+
+# ---------------------------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------------------------
+# The production image installs with --no-dev and runs no tests. Excluding them keeps the test
+# fixtures — which contain deliberately realistic-looking fake credentials — out of every layer.
+ragcore/tests/
+dotnet/tests/
+apps/web/**/*.spec.ts

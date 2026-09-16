@@ -56,16 +56,42 @@ properties:
         keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-ragcore-database-dsn
         identity: ${MANAGED_IDENTITY_RESOURCE_ID}
 
+      # Application Insights. A connection string carries an instrumentation key, which is a WRITE
+      # credential for a telemetry workspace: hold it and you can inject telemetry into somebody
+      # else's dashboards. It is therefore a Key Vault reference like any other credential, never a
+      # plain environment value and never baked into an image.
+      - name: applicationinsights-connection-string
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-appinsights-connection-string
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
     registries:
       - server: ${CONTAINER_REGISTRY}
         identity: ${MANAGED_IDENTITY_RESOURCE_ID}
 
   template:
-    # THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE (plan Stage 10), and it matters more here than
-    # on the read-only monolith: this deployable claims work. A replica killed mid-execution is the
-    # approved-but-not-executed condition, which is why the drain is longer than the monolith's and
-    # why nothing here depends on it succeeding - the work item's claim expiry is the real control.
-    terminationGracePeriodSeconds: 60
+    # THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE (plan Stage 10). Twenty-five seconds, the same as
+    # the monolith, and the number is fixed by the plan rather than chosen per deployable.
+    #
+    # It matters more here than on the read-only monolith, because this deployable CLAIMS WORK, and
+    # what happens when the drain elapses is stated rather than hoped about:
+    #
+    #   - An API replica stops accepting requests and finishes those in flight. Nothing is claimed,
+    #     so nothing is at risk.
+    #   - A worker replica PRE-CLAIM: the message returns to the queue, another replica takes it,
+    #     and the atomic claim absorbs the duplicate that at-least-once delivery produces.
+    #   - A worker replica POST-CLAIM, drain elapsed mid-execution: the work stays claimed,
+    #     unexecuted and NON-RETRIABLE. This is exactly the approved-but-not-executed condition of
+    #     ADR-0002. It surfaces in vw_approval_unexecuted_v1 and the staff portal, raises an
+    #     operational alert, and recovers only through FRESH AUTHORIZATION. It is never silently
+    #     re-fired, and a drain elapsing is never a reason to re-fire it.
+    #
+    # A LONGER DRAIN WOULD NOT FIX THAT, which is why it was not the answer. It would widen the
+    # window in which a replica is neither serving nor gone, and the real control is elsewhere: the
+    # work item's claim expiry, and the explicit timeout on every outbound call (Stage 9). The
+    # scheduling rule that follows is that workers scale in on a drain longer than the longest
+    # single external call - an execution that cannot finish inside the drain is one whose timeout
+    # was set wrong.
+    terminationGracePeriodSeconds: 25
 
     containers:
       - name: synthia-ragcore
@@ -87,6 +113,44 @@ properties:
             value: ${KEY_VAULT_URI}
           - name: SYNTHIA_OTEL_SERVICE_NAME
             value: synthia-ragcore
+
+          # The secret NAME, not the value. ragcore resolves it from Key Vault at startup through
+          # the managed identity, and the resolved value is a SecretValue that redacts itself in
+          # every rendering path (ragcore/src/ragcore/config/secrets.py).
+          - name: SYNTHIA_OTEL_CONNECTION_STRING_SECRET_NAME
+            value: synthia-appinsights-connection-string
+
+          # Thirty days (spec FR-OPS-011). Audit keeps seven years, and the gap is what makes
+          # "telemetry may never answer an audit question" true in practice rather than only in
+          # policy: after a month the question demonstrably cannot be answered from here. The same
+          # number is configured on the workspace in build/infra/monitoring/telemetry.json, and the
+          # two are asserted to agree - a workspace quietly keeping more would defeat the rule from
+          # outside the application.
+          - name: SYNTHIA_OTEL_RETENTION_DAYS
+            value: "30"
+
+          # The proportion of ORDINARY journeys retained. Sampling is keyed on the correlation
+          # identifier, so a journey that suspends and resumes hours later in another process is
+          # sampled as one unit (spec FR-OPS-012); head sampling is prohibited. A trace carrying an
+          # error, a governance denial or an approval is retained whatever this says.
+          - name: SYNTHIA_OTEL_TRACE_SAMPLE_RATIO
+            value: ${TRACE_SAMPLE_RATIO}
+
+          # REDIS - TRANSIENT ONLY (constitution Principle IV). Never an authority, never a durable
+          # record, and no sample flow reads it. There is no password or access-key setting here and
+          # there will not be one: Entra authentication presents a token in the password position,
+          # minted per connection by the managed identity, so the value that goes there is never
+          # configuration. Authorization is a Redis ACCESS POLICY assigned to the identity's object
+          # id - not an RBAC role assignment, which would deploy cleanly and then not connect
+          # (build/infra/identity/managed-identities.json, notRoleBased).
+          #
+          # An empty host disables caching rather than failing. That is a supported deployed state:
+          # the platform's correctness does not depend on the cache, so a process without one takes
+          # the path every caller takes after an eviction.
+          - name: SYNTHIA_REDIS_HOST
+            value: ${REDIS_HOST}
+          - name: SYNTHIA_REDIS_IDENTITY_OBJECT_ID
+            value: ${MANAGED_IDENTITY_OBJECT_ID}
 
           # The SHA-256 hashes of the gateway client certificates this replica will accept,
           # comma-separated. NOT a secret: it is the hash of a public certificate, and holding it

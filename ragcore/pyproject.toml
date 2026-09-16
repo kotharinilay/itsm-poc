@@ -32,6 +32,11 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "azure-monitor-opentelemetry>=1.8",
     "psycopg[binary]>=3.3",
+    # The transient cache (constitution Principle IV). Redis is never an authority and never a
+    # durable record here, and the client is declared rather than optional because a dependency
+    # that is present in production and absent in CI is one whose failure mode is only ever seen
+    # in production.
+    "redis>=5.2",
 ]
 
 [dependency-groups]

@@ -190,8 +190,13 @@ class TestTheExemptionIsExactlyAsWideAsItLooks:
 
         Safe only because these paths expose no identity: a caller reaching one has gained nothing
         it could not have guessed.
+
+        **Served, not necessarily healthy.** The assertion is that provenance did not refuse the
+        request — 403 is the refusal this class exists to rule out. Readiness legitimately answers
+        503 when the platform database is unreachable, as it is for this client, and asserting 200
+        would make this a test that readiness checks nothing.
         """
-        assert direct.get(path).status_code == 200
+        assert direct.get(path).status_code != 403
 
     def test_a_path_merely_beginning_with_health_is_not_exempt(self, direct: Any) -> None:
         """The exemption is a *segment* prefix.

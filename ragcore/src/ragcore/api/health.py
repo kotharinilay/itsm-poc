@@ -22,9 +22,18 @@ Neither probe reveals anything about an organisation, a session or a decision (s
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import logging
+from typing import TYPE_CHECKING, Final
+
+from fastapi import APIRouter, HTTPException, Request, status
+from sqlalchemy import text
 
 from ragcore.api.schemas import HealthStatus
+
+if TYPE_CHECKING:  # pragma: no cover — import-time typing only
+    from ragcore.config.composition import Container
+
+_log: Final = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"], include_in_schema=False)
 """Excluded from every published document.
@@ -46,15 +55,53 @@ async def live() -> HealthStatus:
 
 
 @router.get("/ready")
-async def ready() -> HealthStatus:
+async def ready(request: Request) -> HealthStatus:
     """Readiness. A replica failing this is taken out of rotation rather than restarted.
+
+    **Checks PostgreSQL, and only PostgreSQL.** The database is the single authority for durable
+    state: a replica that cannot reach it can serve nothing, so taking it out of rotation is exactly
+    right. Every other dependency is deliberately excluded, and each exclusion is a decision:
+
+    * **The AI Gateway, the system of record, Graph, AI Search.** Unreachable means *degraded*, not
+      *unable to serve*. The platform continues in reduced mode when an external system is
+      unavailable (spec FR-EXT-020), and a readiness probe that checked them would convert a third
+      party's outage into an outage of ours — every replica out of rotation, nothing serving, and
+      the cause in somebody else's datacentre.
+    * **Redis.** Transient by definition. A cache miss is the normal path.
+    * **Service Bus.** The API publishes through the outbox, which is a PostgreSQL write.
+      Publication is the dispatcher's problem and is not in the request path.
 
     Returns:
         ``ok`` when this replica should receive traffic.
 
-    Note:
-        The dependency checks this will consult — PostgreSQL, and the checkpointer's schema — land
-        with the components that own them. Until then this reports process readiness only, which is
-        honest: it never claims a dependency is healthy, it only declines to claim otherwise.
+    Raises:
+        HTTPException: 503 when the database cannot be reached. The body names the dependency and
+            nothing else — no DSN, no driver message, no stack. A probe response is one of the few
+            things served without gateway provenance, so what it may disclose is narrow by
+            construction (spec 13.6).
     """
+    container: Container | None = getattr(request.app.state, "container", None)
+
+    if container is None or container.engine is None:
+        # No engine means the process has not finished starting, or was built without one. Not ready
+        # is the honest answer; claiming otherwise would put a replica into rotation that has
+        # nothing to serve with.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This replica is not ready: the platform database is not configured.",
+        )
+
+    try:
+        async with container.engine.connect() as connection:
+            # `SELECT 1` rather than a table read: readiness asks whether the connection pool can
+            # reach the server, and a query touching a table would also fail on a permission or
+            # migration problem that a restart cannot fix and that rotation should not hide.
+            await connection.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001 — every failure mode has the same answer: not ready
+        _log.warning("Readiness check failed: the platform database is unreachable.", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This replica is not ready: the platform database is unreachable.",
+        ) from None
+
     return HealthStatus()

@@ -1,0 +1,115 @@
+# Schema migration. A GATED JOB BEFORE REVISION ACTIVATION — never at application startup (ADR-0003).
+#
+# WHY A JOB AND NOT A STARTUP HOOK. Three reasons, each sufficient on its own:
+#
+#   1. DDL RIGHTS. A process that migrates on boot needs CREATE and ALTER for its whole life. The
+#      separated database principals exist precisely to prevent that: the application principal can
+#      read and write rows and cannot change the schema, so a compromised application replica cannot
+#      drop a table. Migrating at startup would hand that right back to every replica permanently.
+#   2. CONCURRENCY. Container Apps starts replicas in parallel. Startup migration means N replicas
+#      racing on the same ALTER, and Alembic's version table is not a distributed lock. A job runs
+#      exactly once.
+#   3. ORDERING. The migration must complete BEFORE the new revision serves traffic and AFTER the
+#      old one has stopped depending on what it changes. A startup hook cannot express that; a
+#      pipeline step between the two can.
+#
+# ALEMBIC IS NOT THE WHOLE JOB. The LangGraph checkpointer owns its own tables and provisions them
+# through its own setup() call, which is not an Alembic revision and would otherwise never run
+# anywhere — the application principal cannot create them, and nothing else was going to. Running it
+# here, in the one place that holds DDL rights, is what stops "the checkpointer creates its tables on
+# first use" from being true, because on first use there are no DDL rights to create them with.
+#
+# Placeholders in ${...} are substituted by the deployment pipeline.
+
+apiVersion: 2024-03-01
+type: Microsoft.App/jobs
+name: synthia-migrate
+
+identity:
+  # The MIGRATION identity, deliberately NOT the application's. It is the only principal that holds
+  # DDL, it exists for the minutes this job runs, and it is not attached to any long-lived replica.
+  # Reusing id-synthia-ragcore here would give every serving replica schema rights for the sake of a
+  # job that runs at deploy time.
+  type: UserAssigned
+  userAssignedIdentities:
+    ${MIGRATION_IDENTITY_RESOURCE_ID}: {}
+
+properties:
+  environmentId: ${CONTAINER_APP_ENVIRONMENT_ID}
+
+  configuration:
+    # Manual, invoked by the pipeline between "old revision stopped" and "new revision activated".
+    # Not Schedule and not Event: a migration that could fire on its own is one that can fire
+    # halfway through a deployment.
+    triggerType: Manual
+
+    # ONE RUN, NO PARALLELISM, AND NO AUTOMATIC RETRY.
+    #
+    # replicaRetryLimit is 0 on purpose. A failed migration is a deployment that stops and a human
+    # who reads the error — Alembic leaves the version table at the last revision that applied, so a
+    # blind retry re-runs a migration whose failure nobody has understood. ADR-0003 makes rollback a
+    # forward revision rather than a downgrade, which is a decision, not a retry.
+    manualTriggerConfig:
+      parallelism: 1
+      replicaCompletionCount: 1
+    replicaRetryLimit: 0
+
+    # Generous, because a migration on a large table legitimately takes minutes and being killed
+    # halfway through is the worst available outcome. This is not the application's 25-second drain:
+    # that bounds a request, this bounds a schema change.
+    replicaTimeout: 1800
+
+    secrets:
+      - name: migration-dsn
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-migration-database-dsn
+        identity: ${MIGRATION_IDENTITY_RESOURCE_ID}
+
+    registries:
+      - server: ${CONTAINER_REGISTRY}
+        identity: ${MIGRATION_IDENTITY_RESOURCE_ID}
+
+  template:
+    containers:
+      - name: synthia-migrate
+        # THE SAME IMAGE THE APPLICATION RUNS, at the same digest. Not a separate migration image:
+        # two images means two dependency sets, and the failure mode is a migration applied by a
+        # different SQLAlchemy version from the one that will read the result.
+        image: ${CONTAINER_REGISTRY}/synthia-ragcore@${IMAGE_DIGEST}
+
+        resources:
+          cpu: 1.0
+          memory: 2Gi
+
+        env:
+          # The MIGRATION DSN, which authenticates as the migration principal. The application's own
+          # DSN is a different secret naming a different principal, and that separation is the whole
+          # control — one connection string can change the schema and the other cannot.
+          - name: SYNTHIA_DB_DSN
+            secretRef: migration-dsn
+          - name: SYNTHIA_KEYVAULT_VAULT_URI
+            value: ${KEY_VAULT_URI}
+          - name: SYNTHIA_ENVIRONMENT
+            value: ${SYNTHIA_ENVIRONMENT}
+          - name: SYNTHIA_OTEL_SERVICE_NAME
+            value: synthia-migrate
+
+        # Exec form, so the migration process is PID 1 and receives SIGTERM directly. A shell
+        # wrapper would swallow it, and a migration killed by SIGKILL instead of stopping cleanly is
+        # the one case where the version table and the schema can disagree.
+        #
+        # ORDER IS THE CONTRACT: Alembic first, then the checkpointer's own setup(). The
+        # checkpointer's tables live in a schema the Alembic revisions create, so the reverse order
+        # fails on a schema that does not exist yet — and fails after the first half already applied.
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -eu
+            alembic upgrade head
+            python scripts/provision_checkpoint_schema.py
+
+        # NOTE ON THE SHELL ABOVE. This is the one place the image's shell is used, and it is a
+        # deliberate exception rather than an oversight: the job is two sequential commands where the
+        # second must not run if the first fails, and `set -eu` is the shortest honest way to say
+        # that. The application container uses exec form with no shell (build/docker/ragcore.Dockerfile).
+
+    volumes: []

@@ -315,6 +315,53 @@ class NotificationSettings(BaseSettings):
         return bool(self.endpoint)
 
 
+class CacheSettings(BaseSettings):
+    """Redis — **transient only**, and never an authority (constitution Principle IV).
+
+    **There is no password field here and there will not be one.**
+    ``build/policy/azure-identity.json`` names ``password`` and ``access key`` as forbidden
+    configuration for this resource. Entra authentication presents the token in the password
+    position, minted per connection by the managed identity
+    (:mod:`ragcore.infrastructure.azure_credentials`), so the value that goes there is never
+    configuration.
+
+    Empty ``host`` disables caching rather than failing. That is a supported deployed state as well
+    as the developer-machine one: the platform's correctness does not depend on the cache, no sample
+    flow reads it, and a process running without one takes the path every caller takes after an
+    eviction.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SYNTHIA_REDIS_", extra="forbid", frozen=True)
+
+    host: str = ""
+    """The cache host name, for example ``synthia.redis.cache.windows.net``. An address, not a
+    credential: knowing it permits nothing without a token."""
+
+    port: int = Field(default=10000, ge=1, le=65535)
+    """The TLS data-plane port. Azure Managed Redis uses 10000; Azure Cache for Redis uses 6380."""
+
+    identity_object_id: str = ""
+    """The managed identity's object id, sent as the Redis username.
+
+    An identifier, not a secret. Redis Entra authentication expects the principal's object id in the
+    username position and the access token in the password position; what the principal may actually
+    do is decided by the access policy assigned to it on the cache.
+    """
+
+    request_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
+    """Deliberately short, and bounded above.
+
+    A cache exists to be faster than the work it avoids. A lookup that can block for ten seconds has
+    already cost more than recomputing, and a cache that can hold a request open is one that can
+    take the platform down — which is not a property a transient store is allowed to have.
+    """
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether a cache is available to this process."""
+        return bool(self.host)
+
+
 class ObservabilitySettings(BaseSettings):
     """Telemetry. Separate from audit, and never a substitute for it.
 
@@ -330,7 +377,32 @@ class ObservabilitySettings(BaseSettings):
     """Key Vault secret *name*, never a connection string. See the module docstring."""
 
     trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
-    """Sampling is decided per correlated journey, not per span (spec FR-OPS-012)."""
+    """The proportion of **ordinary journeys** retained.
+
+    Sampling is decided per correlated journey, not per span (spec FR-OPS-012):
+    :mod:`ragcore.observability.sampling` derives the decision from the correlation identifier, so a
+    journey that suspends and resumes hours later in another process reaches the same answer without
+    the two halves sharing anything. **Head sampling is prohibited** — it decides at the first span,
+    before the journey is known to be interesting, and routinely keeps the request half of an
+    approval and discards the resume half.
+
+    This ratio never applies to a trace carrying an error, a governance denial or an approval. Those
+    are retained regardless (plan §Telemetry retention and sampling), which is why a low value here
+    is safe: what it discards is the ordinary.
+    """
+
+    retention_days: int = Field(default=30, ge=1, le=90)
+    """Telemetry retention, **bounded above at 90 days** (spec FR-OPS-011).
+
+    Bounded by the type rather than by a comment, because the ceiling is what makes FR-OPS-004
+    enforceable in practice. Audit keeps seven years; telemetry keeping months would make it
+    plausible to answer an audit question from a dashboard, and the answer would be wrong in a way
+    nobody could see — sampled, unretained after the window, and never intended to be authoritative.
+
+    The value here is what the process reports and what the workspace is configured with
+    (``build/infra/monitoring/telemetry.json``). The two are asserted to agree, because a workspace
+    silently keeping more than this would defeat the rule from outside the application.
+    """
 
 
 class EdgeTrustSettings(BaseSettings):
@@ -456,6 +528,7 @@ class Settings(BaseSettings):
     gateway: ModelGatewaySettings = ModelGatewaySettings()
     retrieval: RetrievalSettings = RetrievalSettings()
     integrations: IntegrationSettings = IntegrationSettings()
+    cache: CacheSettings = CacheSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 
     execution_window_minutes: int = Field(default=15, ge=1, le=15)

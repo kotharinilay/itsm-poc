@@ -1,0 +1,13 @@
+@if (open()) {
+  <div
+    class="cf-consent"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cf-consent-heading"
+    [dsFocusTrap]="open()"
+  >
+    <h2 id="cf-consent-heading">Permission needed</h2>
+    <p>This surface is scaffolded. No consent is requested and none can be recorded here.</p>
+    <button type="button" (click)="open.set(false)">Close</button>
+  </div>
+}

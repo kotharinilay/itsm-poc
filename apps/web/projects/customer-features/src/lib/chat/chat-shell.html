@@ -1,0 +1,16 @@
+<section class="cf-chat" aria-labelledby="cf-chat-heading">
+  <h2 id="cf-chat-heading">Conversation</h2>
+
+  <ds-async-state-container
+    [state]="messages()"
+    loadingLabel="Loading your conversation…"
+    emptyTitle="No messages yet"
+    emptyDetail="Start by describing what you need help with."
+  >
+    <ol class="cf-chat__messages"></ol>
+  </ds-async-state-container>
+
+  <p class="cf-chat__scaffold-note">
+    This surface is scaffolded. Conversation behaviour is not implemented.
+  </p>
+</section>

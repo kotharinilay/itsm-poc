@@ -1,0 +1,21 @@
+<section class="cf-sessions" aria-labelledby="cf-sessions-heading">
+  <h2 id="cf-sessions-heading">Your sessions</h2>
+
+  <ds-async-state-container
+    [state]="sessions()"
+    loadingLabel="Loading your sessions…"
+    emptyTitle="You have no sessions yet"
+    emptyDetail="A session appears here once you ask for help."
+  >
+    <!-- A suspended session shows as awaiting you, by glyph and text as well as colour. -->
+    <ul class="cf-sessions__list">
+      <li class="cf-sessions__example">
+        <ds-status-indicator state="suspended" qualifier="awaiting you" />
+      </li>
+    </ul>
+  </ds-async-state-container>
+
+  <p class="cf-sessions__scaffold-note">
+    This surface is scaffolded. Session behaviour is not implemented.
+  </p>
+</section>

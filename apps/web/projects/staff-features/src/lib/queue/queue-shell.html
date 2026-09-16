@@ -1,0 +1,34 @@
+<section class="sf-queue" aria-labelledby="sf-queue-heading">
+  <h2 id="sf-queue-heading">Approval queue</h2>
+
+  <ds-async-state-container
+    [state]="queue()"
+    loadingLabel="Loading the approval queue…"
+    emptyTitle="Nothing is awaiting approval"
+    emptyDetail="Approvals appear here as work suspends."
+  >
+    <table class="sf-queue__table">
+      <caption class="sf-queue__caption">
+        Work items awaiting a verdict
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">State</th>
+          <th scope="col">Command</th>
+          <th scope="col">Expires</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><ds-status-indicator state="pending" qualifier="awaiting a verdict" /></td>
+          <td>Scaffolded — no work item is listed.</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </ds-async-state-container>
+
+  <p class="sf-queue__scaffold-note">
+    This surface is scaffolded. Approval behaviour is not implemented.
+  </p>
+</section>

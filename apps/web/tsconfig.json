@@ -35,6 +35,9 @@
   "files": [],
   "references": [
     {
+      "path": "./tsconfig.tools.json"
+    },
+    {
       "path": "./projects/customer-portal/tsconfig.app.json"
     },
     {

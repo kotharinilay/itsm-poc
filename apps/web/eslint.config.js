@@ -27,7 +27,16 @@ const forbid = (names, why) => [
 
 module.exports = tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', '.angular/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      '.angular/**',
+      'coverage/**',
+      'out-tsc/**',
+      'test-results/**',
+      'playwright-report/**',
+      'blob-report/**',
+    ],
   },
 
   // ---------------------------------------------------------------- TypeScript

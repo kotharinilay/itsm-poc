@@ -85,18 +85,18 @@ Per plan.md: `apps/web/`, `apps/desktop/`, `dotnet/`, `ragcore/`, `build/`, `doc
 
 **Goal**: Three applications and four libraries that build and render, with shared infrastructure centralized.
 
-- [ ] T038 [P] Implement `apps/web/projects/design-system/` accessible primitives — focus management, live regions, state conveyed by more than colour — Boundary: presentation | Validates: Spec §FR-SURF-010, §FR-SURF-013
-- [ ] T039 [P] Implement loading, empty and partial-failure states in `apps/web/projects/design-system/states/` so no failure renders as an empty result — Boundary: presentation | Validates: Spec §FR-SURF-016
-- [ ] T040 Implement `apps/web/projects/platform-core/` with typed API clients for both backends, auth/token handling, correlation propagation and RFC 9457 problem-details handling — Boundary: client infrastructure | Validates: Constitution §Angular (centralized infrastructure)
-- [ ] T041 [P] Implement the realtime client in `apps/web/projects/platform-core/realtime/` that rebuilds state from the API on reconnect rather than from missed notifications — Boundary: realtime | Validates: Spec §FR-SESS-019
-- [ ] T042 [P] Scaffold `apps/web/projects/customer-features/` shells for chat, session, consent and handoff with no behaviour — Boundary: presentation | Validates: Constitution P-IX (scaffold honestly)
-- [ ] T043 [P] Scaffold `apps/web/projects/staff-features/` shells for the queue, take-over and reporting — Boundary: presentation | Validates: Constitution P-IX
-- [ ] T044 Compose `apps/web/projects/customer-portal/` from `customer-features` and `platform-core` — Boundary: customer surface | Validates: Spec §FR-SURF-001
-- [ ] T045 Compose `apps/web/projects/staff-portal/` with module visibility by role and **no session-origination route** — Boundary: staff surface | Validates: Spec §FR-SURF-006
-- [ ] T046 Compose `apps/web/projects/desktop-renderer/` reusing `customer-features`, adding only the desktop bridge service — Boundary: desktop surface | Validates: Plan Stage 3
-- [ ] T047 [P] Write a test in `apps/web/projects/platform-core/no-authz.spec.ts` asserting no presentation component makes an authorization decision — Boundary: presentation | Validates: Spec §FR-SURF-004
-- [ ] T048 [P] Configure the plan Stage 3 CSP baseline as a **response header** (never a meta tag) and the Angular sanitization policy in `apps/web/projects/platform-core/security/`, with `bypassSecurityTrust*` absent and no unsafe-inline or unsafe-eval in script-src — Boundary: browser security | Validates: Constitution P-VII
-- [ ] T049 [P] Write the axe-core accessibility sweep in `apps/web/e2e/a11y-scaffold.spec.ts` across all three surfaces — Boundary: presentation | Validates: Spec §SC-SURF-002
+- [X] T038 [P] Implement `apps/web/projects/design-system/` accessible primitives — focus management, live regions, state conveyed by more than colour — Boundary: presentation | Validates: Spec §FR-SURF-010, §FR-SURF-013
+- [X] T039 [P] Implement loading, empty and partial-failure states in `apps/web/projects/design-system/states/` so no failure renders as an empty result — Boundary: presentation | Validates: Spec §FR-SURF-016
+- [X] T040 Implement `apps/web/projects/platform-core/` with typed API clients for both backends, auth/token handling, correlation propagation and RFC 9457 problem-details handling — Boundary: client infrastructure | Validates: Constitution §Angular (centralized infrastructure)
+- [X] T041 [P] Implement the realtime client in `apps/web/projects/platform-core/realtime/` that rebuilds state from the API on reconnect rather than from missed notifications — Boundary: realtime | Validates: Spec §FR-SESS-019
+- [X] T042 [P] Scaffold `apps/web/projects/customer-features/` shells for chat, session, consent and handoff with no behaviour — Boundary: presentation | Validates: Constitution P-IX (scaffold honestly)
+- [X] T043 [P] Scaffold `apps/web/projects/staff-features/` shells for the queue, take-over and reporting — Boundary: presentation | Validates: Constitution P-IX
+- [X] T044 Compose `apps/web/projects/customer-portal/` from `customer-features` and `platform-core` — Boundary: customer surface | Validates: Spec §FR-SURF-001
+- [X] T045 Compose `apps/web/projects/staff-portal/` with module visibility by role and **no session-origination route** — Boundary: staff surface | Validates: Spec §FR-SURF-006
+- [X] T046 Compose `apps/web/projects/desktop-renderer/` reusing `customer-features`, adding only the desktop bridge service — Boundary: desktop surface | Validates: Plan Stage 3
+- [X] T047 [P] Write a test in `apps/web/projects/platform-core/no-authz.spec.ts` asserting no presentation component makes an authorization decision — Boundary: presentation | Validates: Spec §FR-SURF-004
+- [X] T048 [P] Configure the plan Stage 3 CSP baseline as a **response header** (never a meta tag) and the Angular sanitization policy in `apps/web/projects/platform-core/security/`, with `bypassSecurityTrust*` absent and no unsafe-inline or unsafe-eval in script-src — Boundary: browser security | Validates: Constitution P-VII
+- [X] T049 [P] Write the axe-core accessibility sweep in `apps/web/e2e/a11y-scaffold.spec.ts` across all three surfaces — Boundary: presentation | Validates: Spec §SC-SURF-002
 
 **Checkpoint**: All three apps build under strict TypeScript; zero Level A/AA failures; boundary lint fails a cross-library import.
 

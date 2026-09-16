@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  min-block-size: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid currentcolor;
+}
+
+.app-header__brand {
+  margin: 0;
+  font-weight: 700;
+}
+
+.app-header__identity {
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+.app-nav__list {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-nav__link--active {
+  font-weight: 700;
+}
+
+.app-main {
+  padding: 1rem;
+}
+
+/* A visible focus indicator on every surface — WCAG 2.4.7 / 2.4.11. */
+:host :focus-visible {
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}

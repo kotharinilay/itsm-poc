@@ -153,6 +153,21 @@ class TestDependsIsConfinedToTheTransportBoundary:
             "IdempotencyStore",
             "Outbox",
             "AuditSink",
+            "EntitlementCredentials",
+            # Stage 9. The integration adapters, on the same terms: each is a deliberate line
+            # here, and constructing one outside the composition root fails rather than quietly
+            # working. The model egress implementations are listed because the choice between them
+            # is the single-egress rule — a selection made at a call site would be a per-caller
+            # model egress.
+            "AiGatewayEgress",
+            "LocalDevelopmentEgress",
+            "GatewayModelAdapter",
+            "AzureAiSearchRetrieval",
+            "ServiceNowAdapter",
+            "MicrosoftGraphAdapter",
+            "McpToolClient",
+            "HttpClientFactory",
+            "TenantCredentialResolver",
         }
         users = {
             str(path.relative_to(SRC)).replace("\\", "/")

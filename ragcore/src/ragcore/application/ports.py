@@ -17,7 +17,7 @@ reaching the agent loop.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -453,6 +453,154 @@ class ExecutionResult(Protocol):
     @property
     def verification(self) -> VerificationOutcome:
         """What the platform actually knows. A client-reported result is a claim, not proof."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# External systems — one owning boundary each
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class CaseSystemPort(Protocol):
+    """The system of record for cases. **The single owning boundary for ServiceNow traffic.**
+
+    All traffic to a given external system passes through one boundary, and that system's own
+    concepts do not leak into the platform's model (spec FR-EXT-011). There is therefore no
+    ``sys_id``, no ``incident`` and no table name in any signature here: what the platform has is a
+    case reference and facts about a session.
+
+    **This port is not an authority.** The system of record holds the case; it does not hold
+    approvals, and an inbound change from it is an untrusted signal (spec FR-EXT-005, FR-EXT-006).
+    Nothing here returns a decision, which is what keeps that true by construction.
+    """
+
+    async def record_progress(
+        self,
+        tenant: TenantContext,
+        case_reference: str,
+        facts: Mapping[str, str],
+        idempotency_key: IdempotencyKey,
+        correlation_id: CorrelationId,
+    ) -> CaseWriteReceipt:
+        """Write session progress to the case, **idempotently**.
+
+        ``idempotency_key`` is required and non-optional because a retried write MUST NOT
+        double-post (spec FR-EXT-004), and a key with a default is a key some call site omits.
+
+        Returns:
+            A receipt saying what the platform knows. When the system is unavailable the write is
+            queued for replay rather than lost (spec FR-EXT-007) — which the receipt reports as
+            :attr:`CaseWriteReceipt.queued`, not as a success.
+        """
+        ...
+
+
+@runtime_checkable
+class CaseWriteReceipt(Protocol):
+    """What the platform knows about one case write.
+
+    Three states rather than a boolean, because "it is queued" is neither a success nor a failure
+    and collapsing it into either one loses the distinction a caller needs: a session that cannot
+    commit its case MUST NOT proceed to resolution, even though the agent loop was not blocked
+    (spec FR-EXT-007).
+    """
+
+    @property
+    def committed(self) -> bool:
+        """Whether the system of record accepted the write."""
+        ...
+
+    @property
+    def queued(self) -> bool:
+        """Whether the write is held for replay because the system was unreachable."""
+        ...
+
+
+@runtime_checkable
+class DirectoryPort(Protocol):
+    """Directory and productivity reads through Microsoft Graph (spec FR-EXT-008).
+
+    **Read-only by interface.** Graph can do a great deal more than this, and every additional
+    verb would be an action capability reachable without passing the governance gate. A directory
+    write belongs in the catalogue as a governed capability and is invoked through
+    :class:`ToolExecutionPort`, not added here.
+    """
+
+    async def lookup_principal(
+        self, tenant: TenantContext, principal_id: PrincipalId
+    ) -> DirectoryProfile | None:
+        """Resolve directory facts about one principal within the organisation.
+
+        Returns:
+            The profile, or ``None`` when the directory does not know them. ``None`` is an absence
+            of information and never an authorization outcome.
+        """
+        ...
+
+
+@runtime_checkable
+class DirectoryProfile(Protocol):
+    """The directory facts this platform consumes. Deliberately few."""
+
+    @property
+    def display_name(self) -> str:
+        """The principal's display name, for presentation only."""
+        ...
+
+    @property
+    def mail(self) -> str | None:
+        """The primary address, where the directory publishes one."""
+        ...
+
+
+@runtime_checkable
+class CapabilityDiscoveryPort(Protocol):
+    """What a third-party system **advertises**. Never what an organisation may call.
+
+    **Discovery is not entitlement** (spec FR-EXT-014). This port is separate from
+    :class:`OperationCataloguePort` for exactly that reason: a single port returning "the tools
+    available" would make the two indistinguishable at the call site, and the first caller to treat
+    an advertised tool as a callable one would be making a governance decision by accident.
+
+    Nothing returned here is callable. A capability becomes callable only once it is registered in
+    the catalogue and entitled to the organisation, both of which happen elsewhere.
+    """
+
+    async def discover(self, tenant: TenantContext, system: str) -> Sequence[AdvertisedCapability]:
+        """List what the system says it can do.
+
+        Returns:
+            The advertisements. An empty sequence when the system advertises nothing, and an
+            unreachable system raises rather than returning empty — "advertises nothing" and
+            "could not be asked" are different facts (spec FR-EXT-022).
+        """
+        ...
+
+
+@runtime_checkable
+class AdvertisedCapability(Protocol):
+    """One capability a third-party system claims to offer.
+
+    **It carries no treatment, no accepted roles and no entitlement**, and that absence is the
+    type doing its job: there is no field here a caller could read to decide whether to proceed.
+    Those facts live in the catalogue, which is platform-owned; these come from the third party,
+    which is not.
+    """
+
+    @property
+    def system(self) -> str:
+        """The owning system, as the platform names it — ``servicenow``, ``onelogin``, ``duo``."""
+        ...
+
+    @property
+    def name(self) -> str:
+        """The capability's name on that system. Not a catalogue identifier."""
+        ...
+
+    @property
+    def description(self) -> str:
+        """The system's own description. **Data, never instruction** (spec FR-EXT-017)."""
         ...
 
 

@@ -82,18 +82,52 @@ class TestTheScaffoldBindsNoAdapter:
         ):
             assert bound is not None
 
-    def test_every_port_without_an_adapter_is_still_none(self) -> None:
-        """The rest stay ``None`` until their own stage.
+    def test_the_integration_ports_are_bound(self) -> None:
+        """Stage 9 brings the adapters, and binding them is still not inventing product.
 
-        A convenient default — a retrieval port returning an empty list, a catalogue answering
-        ``AUTO`` — would let the platform appear to work while no boundary was real.
+        Each is a real boundary over a real external system, and none of them answers a question by
+        making one up: an unconfigured index raises rather than returning an empty result, an
+        organisation without a credential is refused rather than falling back to a shared one, and
+        an unreachable system of record reports a *queued* write rather than a committed one.
+        """
+        container = build_container(_settings())
+
+        assert container.http is not None
+        for bound in (
+            container.model,
+            container.execution,
+            container.directory,
+            container.discovery,
+        ):
+            assert bound is not None
+
+    def test_the_model_port_is_bound_even_with_no_gateway_configured(self) -> None:
+        """**And it reaches no provider.** With no gateway, the composition root selects the local
+        development seam, which calls no model at all — not a provider client behind an environment
+        branch. There is deliberately no third option, so no configuration exists in which
+        application code bypasses the gateway.
+        """
+        from ragcore.integrations.model.local import SERVED_BY
+
+        container = build_container(_settings())
+
+        assert container.model is not None
+        assert container.settings.gateway.is_configured is False
+        # The seam identifies itself on every response it produces.
+        assert SERVED_BY == "local-development-seam"
+
+    def test_an_unconfigured_external_system_is_left_unbound(self) -> None:
+        """A convenient default — a retrieval port returning an empty list, a case system that
+        discarded a write — would let the platform appear to work while no boundary was real.
+
+        ``None`` here is the honest state: there is no index and no instance in this configuration,
+        and a caller must be able to tell that from "this organisation has nothing".
         """
         container = build_container(_settings())
 
         for unbound in (
             container.retrieval,
-            container.model,
-            container.execution,
+            container.case_system,
             container.notifications,
         ):
             assert unbound is None

@@ -244,8 +244,18 @@ class TestAnUnconfiguredProcessDoesNotStart:
 
     def test_the_failure_names_the_setting_to_fix(self) -> None:
         """A fail-closed control that does not say what to configure gets worked around."""
+
+        async def unreached_app(scope: Any, receive: Any, send: Any) -> None:
+            """The application the middleware would wrap. It is never called.
+
+            An ASGI application is awaitable, and the middleware's parameter is typed as one. A
+            synchronous stub type-checks as `-> None` and would be a silent mismatch here, where
+            the assertion is that construction raises before anything is wrapped at all.
+            """
+            raise AssertionError("construction must fail before the application is reached")
+
         with pytest.raises(GatewayProvenanceUnconfiguredError) as caught:
-            GatewayProvenanceMiddleware(lambda *_: None, accepted_thumbprints=frozenset())
+            GatewayProvenanceMiddleware(unreached_app, accepted_thumbprints=frozenset())
         assert "SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS" in str(caught.value)
 
     @pytest.mark.parametrize("malformed", ["deadbeef", "x" * 64, CERTIFICATE_HASH[:-1]])

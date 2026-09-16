@@ -114,12 +114,157 @@ class ModelGatewaySettings(BaseSettings):
     base_url: str = ""
     """The gateway. The only outbound model destination this platform knows."""
 
+    entra_scope: str = ""
+    """The Entra scope this process requests when calling the gateway.
+
+    A scope, not a credential: it names what the caller is asking to reach and grants nothing by
+    itself. The bearer is minted on demand by the shared managed identity
+    (:mod:`ragcore.infrastructure.azure_credentials`), so there is no standing secret here either.
+
+    Named ``entra_scope`` rather than anything containing "token": ``tests/security/
+    test_secret_binding.py`` treats such a name as a field that holds secret material, and it is
+    right to — the convention is what lets a reviewer tell a name from a value at a glance, and an
+    exception granted for one harmless field is the exception the next one inherits.
+
+    Empty means the gateway is reached unauthenticated, which is legitimate only on a developer
+    machine — and on a developer machine the gateway is usually absent altogether and the local
+    development seam serves the call instead.
+    """
+
     request_timeout_seconds: float = Field(default=60.0, gt=0)
     """**Every outbound call carries an explicit timeout** (research R-020).
 
     Specific to this platform rather than general hygiene: one call without a timeout can hold
     work past its fifteen-minute expiry, turning a slow dependency into an expired approval.
     """
+
+    @field_validator("base_url")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        """Refuse a plaintext gateway at startup.
+
+        Raises:
+            ValueError: When set and not ``https``. The request carries an Entra token and an
+                organisation's prompt content; sending either over plaintext hands both to anyone
+                watching.
+        """
+        if value and not value.startswith("https://"):
+            raise ValueError(
+                f"the AI Gateway base URL must be https, got {value!r}. Model requests carry a "
+                "bearer token and organisation content."
+            )
+        return value
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether a gateway is configured for this process.
+
+        When it is not, the composition root selects the local development seam — which calls no
+        model — rather than any provider. **There is no third option**, which is the single-egress
+        rule holding at the point where it is most tempting to add one.
+        """
+        return bool(self.base_url)
+
+
+class RetrievalSettings(BaseSettings):
+    """Azure AI Search — the **derived** grounding index.
+
+    Derived, not authoritative (constitution Principle IV): a lost index is rebuilt by re-running
+    ingestion, never restored from a backup. Nothing here is a source of truth, and nothing
+    retrieved through it confers authority.
+
+    **No key field, and there will not be one.** Both the admin and the query key are
+    application-owned credentials; ``build/policy/azure-identity.json`` names
+    ``AzureKeyCredential``,
+    ``admin key``, ``query key`` and ``api-key`` as forbidden configuration for this resource. The
+    service is reached with an Entra token through managed identity, and the role granted is
+    ``Search Index Data Reader`` — index authoring belongs to ingestion and is not granted to the
+    retrieval path.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SYNTHIA_SEARCH_", extra="forbid", frozen=True)
+
+    endpoint: str = ""
+    """The search service endpoint, for example ``https://synthia.search.windows.net``.
+
+    Empty disables retrieval rather than failing at startup: a scaffold with no index still reaches
+    every outcome, and the grounding node reports an absence of evidence rather than inventing it.
+    """
+
+    index_name: str = "synthia-knowledge"
+
+    request_timeout_seconds: float = Field(default=15.0, gt=0)
+    """Shorter than the model timeout on purpose: retrieval runs before reasoning, inside the same
+    window, and a slow index should surface as thin grounding rather than as expired work."""
+
+    @field_validator("endpoint")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        """Refuse a plaintext endpoint at startup.
+
+        Raises:
+            ValueError: When set and not ``https``.
+        """
+        if value and not value.startswith("https://"):
+            raise ValueError(
+                f"the AI Search endpoint must be https, got {value!r}. The query carries a bearer "
+                "token and an organisation filter."
+            )
+        return value
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether an index is configured for this process."""
+        return bool(self.endpoint)
+
+
+class IntegrationSettings(BaseSettings):
+    """Third-party target systems: where they are, never how to authenticate to them.
+
+    **Every field here is an address.** Credentials for a third-party system are held per
+    organisation and per system as a Key Vault *reference* in
+    ``tenant_entitlement.credential_reference``, resolved at the point of use by
+    :class:`~ragcore.integrations.credentials.TenantCredentialResolver` (spec FR-EXT-016). A
+    credential in this class would be a platform-wide one — the same credential for every
+    organisation — which is the cross-organisation leak the per-tenant arrangement exists to
+    prevent.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="SYNTHIA_INTEGRATION_", extra="forbid", frozen=True
+    )
+
+    servicenow_instance_url: str = ""
+    """The system-of-record instance, for example ``https://example.service-now.com``."""
+
+    graph_base_url: str = "https://graph.microsoft.com/v1.0"
+    """Microsoft Graph. A well-known address rather than a deployment choice, so it defaults."""
+
+    mcp_server_urls: str = ""
+    """Comma-separated MCP server endpoints, in ``system=url`` form.
+
+    **An advertised capability is not a callable one** (spec FR-EXT-014). Listing a server here
+    makes it reachable for discovery and does nothing else: a capability becomes callable only once
+    it is registered in the governance catalogue and entitled to an organisation, neither of which
+    happens in configuration.
+    """
+
+    request_timeout_seconds: float = Field(default=30.0, gt=0)
+
+    @field_validator("servicenow_instance_url", "graph_base_url")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        """Refuse a plaintext third-party address at startup.
+
+        Raises:
+            ValueError: When set and not ``https``. These calls carry an organisation's credential.
+        """
+        if value and not value.startswith("https://"):
+            raise ValueError(
+                f"an integration address must be https, got {value!r}. These calls carry an "
+                "organisation's credential."
+            )
+        return value
 
 
 class NotificationSettings(BaseSettings):
@@ -309,6 +454,8 @@ class Settings(BaseSettings):
     messaging: MessagingSettings = MessagingSettings()
     notifications: NotificationSettings = NotificationSettings()
     gateway: ModelGatewaySettings = ModelGatewaySettings()
+    retrieval: RetrievalSettings = RetrievalSettings()
+    integrations: IntegrationSettings = IntegrationSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 
     execution_window_minutes: int = Field(default=15, ge=1, le=15)

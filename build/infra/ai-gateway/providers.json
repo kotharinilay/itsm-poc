@@ -1,0 +1,135 @@
+{
+  "$comment": [
+    "THE PROVIDER POOL. The only place in this platform where a model provider is named.",
+    "",
+    "Provider routing is mandated at the AI Gateway (specification 13.5), which is why a",
+    "provider-neutral model port exists before a second provider does: a second provider is",
+    "architecturally assumed, and this file is where it will be added.",
+    "",
+    "WHAT ADDING A PROVIDER COSTS. An entry below, a role assignment for the gateway's identity on",
+    "the new resource, and nothing else. No agent, governance, retrieval or execution code names a",
+    "provider, so none of it changes (FR-OPS-009). If adding one ever requires touching RagCore,",
+    "the boundary has been drawn wrong and the fix belongs here rather than there.",
+    "",
+    "NO CREDENTIAL APPEARS IN THIS FILE AND NONE CAN. Every backend authenticates by the gateway's",
+    "managed identity; build/policy/azure-identity.json names AzureKeyCredential, api_key and",
+    "OPENAI_API_KEY as forbidden configuration for the `foundry` resource, and",
+    "ragcore/tests/security/test_azure_identity.py scans committed build/**/*.json for exactly the",
+    "shapes a credential takes."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "egressRule": {
+    "statement": "RagCore -> AI Gateway -> model provider. No component reaches a model provider directly (FR-OPS-007, constitution §Model access).",
+    "enforcedBy": [
+      "build/infra/identity/managed-identities.json — id-synthia-ragcore holds no Foundry role",
+      "ragcore/src/ragcore/integrations/model/egress.py — ModelEgressPort is the only shape a call takes",
+      "ragcore/tests/architecture/test_no_direct_model_call.py — no provider SDK or endpoint outside integrations/model/",
+      "ragcore/src/ragcore/config/settings.py — ModelGatewaySettings has no provider, key or model-endpoint field"
+    ]
+  },
+
+  "backends": [
+    {
+      "id": "model-provider-pool",
+      "kind": "pool",
+      "$comment": [
+        "The pool the policy routes to. One member today; the pool exists rather than a single",
+        "backend because a pool with one member and a pool with three are the same policy line,",
+        "and a single backend promoted to a pool later is a policy change under time pressure."
+      ],
+      "members": [
+        {
+          "id": "foundry-primary",
+          "priority": 1,
+          "weight": 100
+        }
+      ]
+    },
+    {
+      "id": "foundry-primary",
+      "kind": "single",
+      "resource": "foundry",
+      "urlSetting": "{{foundry-endpoint}}",
+      "credentials": {
+        "type": "managed-identity",
+        "resourceId": "https://cognitiveservices.azure.com",
+        "$comment": "The gateway's own identity, onward to Foundry. Not a key, and not the caller's identity — the gateway is a policy function, not an identity boundary (plan §Trust boundaries)."
+      },
+      "circuitBreaker": {
+        "failureCountThreshold": 5,
+        "failureIntervalSeconds": 60,
+        "tripDurationSeconds": 60,
+        "$comment": "A provider having a bad minute becomes a fast refusal rather than a queue of calls each holding part of a fifteen-minute execution window."
+      }
+    },
+    {
+      "id": "embeddings-backend",
+      "kind": "single",
+      "resource": "foundry",
+      "urlSetting": "{{foundry-embeddings-endpoint}}",
+      "credentials": {
+        "type": "managed-identity",
+        "resourceId": "https://cognitiveservices.azure.com"
+      },
+      "$comment": [
+        "Used by llm-semantic-cache-lookup to embed the incoming prompt, and by the platform's own",
+        "embedding calls. It is a SEPARATE backend rather than the completion pool because the",
+        "cache must keep working while the completion pool's circuit breaker is open — otherwise",
+        "one provider outage disables the cache that would have absorbed part of it."
+      ]
+    },
+    {
+      "id": "content-safety-backend",
+      "kind": "single",
+      "resource": "contentsafety",
+      "urlSetting": "{{content-safety-endpoint}}",
+      "credentials": {
+        "type": "managed-identity",
+        "resourceId": "https://cognitiveservices.azure.com"
+      },
+      "$comment": "Azure AI Content Safety, reached by the gateway's managed identity with the Cognitive Services User role. Required by llm-content-safety in both directions."
+    }
+  ],
+
+  "namedValues": {
+    "$comment": [
+      "APIM named values, resolved at deployment. Those marked keyVault are read by APIM's own",
+      "managed identity (id-synthia-apim). NONE of them is a model provider credential.",
+      "",
+      "The three numeric ones are the per-organisation budget. They are deliberately deployment",
+      "configuration rather than application settings: a budget an application could read is a",
+      "budget an application could be asked to work around."
+    ],
+    "entra-tenant-id": { "source": "deployment", "why": "Validates the caller's token issuer." },
+    "ai-gateway-audience": { "source": "deployment", "why": "The audience RagCore's token must carry." },
+    "ragcore-identity-object-id": { "source": "deployment", "why": "The one caller permitted. Object id of id-synthia-ragcore." },
+    "foundry-endpoint": { "source": "deployment", "why": "An address, not a credential." },
+    "foundry-embeddings-endpoint": { "source": "deployment", "why": "An address, not a credential." },
+    "content-safety-endpoint": { "source": "deployment", "why": "An address, not a credential." },
+    "organisation-tokens-per-minute": { "source": "deployment", "why": "Per-organisation rate limit (FR-OPS-005)." },
+    "organisation-token-quota": { "source": "deployment", "why": "Per-organisation daily quota (FR-OPS-005)." },
+    "semantic-cache-seconds": { "source": "deployment", "why": "Cache entry lifetime. Redis is transient only; every entry expires." }
+  },
+
+  "cache": {
+    "$comment": [
+      "REDIS IS TRANSIENT ONLY (constitution Principle IV, plan §Platform environment). It is the",
+      "semantic cache's store and is never an authority and never a durable record.",
+      "",
+      "Two consequences, both deliberate: every entry carries a TTL, and no sample flow reads the",
+      "cache. A lost cache costs model calls and nothing else — which is the test of whether a",
+      "store is really transient, and this one passes it.",
+      "",
+      "The cache is partitioned by organisation through the policy's vary-by. Without that, a",
+      "completion produced for one organisation could be served to another: a cross-tenant leak",
+      "through a cache, which no database-level isolation would catch."
+    ],
+    "store": "redis",
+    "authority": false,
+    "durable": false,
+    "partitionedBy": "X-Synthia-Organisation",
+    "entryTtlSetting": "{{semantic-cache-seconds}}"
+  }
+}

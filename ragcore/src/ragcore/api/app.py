@@ -122,6 +122,10 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
         try:
             yield
         finally:
+            # The outbound pools go first: they hold live connections to the AI Gateway, the system
+            # of record and Graph, and closing the credential out from under an in-flight call
+            # would produce an authentication failure on the way down rather than a clean shutdown.
+            await app.state.container.aclose()
             # The shared credential owns an HTTP session; a session nobody closes is a warning on
             # every test run and a descriptor leak in a long-lived worker.
             await close_azure_credential()

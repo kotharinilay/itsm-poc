@@ -46,6 +46,8 @@ expect_fail() {
 }
 
 py_arch() { (cd ragcore && uv run pytest tests/architecture -q); }
+py_leak() { (cd ragcore && uv run pytest tests/integrations/test_no_provider_leak.py -q); }
+py_isolation() { (cd ragcore && uv run pytest tests/isolation -q -m 'not integration'); }
 net_arch() { (cd dotnet && dotnet test tests/Synthia.ArchitectureTests --nologo -v quiet); }
 net_build() { (cd dotnet && dotnet build Synthia.sln --nologo -v quiet -warnaserror); }
 
@@ -115,9 +117,57 @@ expect_fail "SharedKernel taking a platform dependency" net_build
 cp /tmp/synthia-sk.bak "$SK"
 rm -f /tmp/synthia-sk.bak
 
+# --- 7: a model provider SDK reaches RagCore -------------------------------
+# The single-egress rule (FR-OPS-007) rests on four independent facts; this plants a violation of
+# the one that is code. The other three - no Foundry role assignment, ModelEgressPort being the
+# only shape a call takes, and settings having no provider field - cannot be planted here because
+# two of them are configuration and one is a type.
+printf 'from openai import AzureOpenAI\n' > ragcore/src/ragcore/__planted_model.py
+restore+=("RM:ragcore/src/ragcore/__planted_model.py")
+expect_fail "a model provider SDK imported in RagCore" py_arch
+rm -f ragcore/src/ragcore/__planted_model.py
+
+# --- 8: a provider endpoint inside the model package -----------------------
+# Deliberately planted INSIDE integrations/model/, which is where a direct call would be least
+# conspicuous: the directory name is right, so only the guard notices. The gateway client needs no
+# provider endpoint either - it posts to the gateway, and the gateway knows the providers.
+printf 'ENDPOINT = "https://contoso.openai.azure.com"\n' \
+  > ragcore/src/ragcore/integrations/model/__planted_endpoint.py
+restore+=("RM:ragcore/src/ragcore/integrations/model/__planted_endpoint.py")
+expect_fail "a provider endpoint inside integrations/model/" py_arch
+rm -f ragcore/src/ragcore/integrations/model/__planted_endpoint.py
+
+# --- 9: a provider's vocabulary reaches the application layer --------------
+# The half that imports nothing and couples just as firmly: no import to spot, and the word
+# outlives the adapter that justified it.
+cat > ragcore/src/ragcore/application/__planted_vocabulary.py <<'PLANTED'
+"""Planted by verify-architecture-guards.sh."""
+
+
+def lookup(sys_id: str) -> str:
+    """Planted."""
+    return sys_id
+PLANTED
+restore+=("RM:ragcore/src/ragcore/application/__planted_vocabulary.py")
+expect_fail "a provider's own vocabulary in application/" py_leak
+rm -f ragcore/src/ragcore/application/__planted_vocabulary.py
+
+# --- 10: an unfiltered retrieval path ---------------------------------------
+# Isolation is absolute (Principle IV): a code path able to issue an unfiltered query MUST NOT
+# exist. Planted as the shape it would actually take - a caller-supplied filter parameter, which
+# passes every behavioural test in the suite until something passes None.
+cp ragcore/src/ragcore/retrieval/search.py /tmp/synthia-search.bak
+restore+=("/tmp/synthia-search.bak:ragcore/src/ragcore/retrieval/search.py")
+sed -i 's#    async def search(self, tenant: TenantContext, query: str, limit: int)#    async def search(self, tenant: TenantContext, query: str, limit: int, filter: str = "")#' \
+  ragcore/src/ragcore/retrieval/search.py
+expect_fail "a caller-supplied filter on the retrieval boundary" py_isolation
+cp /tmp/synthia-search.bak ragcore/src/ragcore/retrieval/search.py
+rm -f /tmp/synthia-search.bak
+
 # --- clean tree must pass --------------------------------------------------
 (cd dotnet && dotnet build Synthia.sln --nologo -v quiet >/dev/null 2>&1)
-if py_arch >/dev/null 2>&1 && net_arch >/dev/null 2>&1; then
+if py_arch >/dev/null 2>&1 && py_leak >/dev/null 2>&1 && py_isolation >/dev/null 2>&1 \
+  && net_arch >/dev/null 2>&1; then
   printf '  \xe2\x9c\x93 clean tree accepted\n'
 else
   printf '  \xe2\x9c\x97 clean tree REJECTED - a guard has a false positive\n'

@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 from ragcore.application.ports import CatalogueEntry, ExecutionResult, RetrievedChunk
@@ -212,6 +213,21 @@ class FakeWorkItems:
         """Accept the transition. Optimistic concurrency arrives with the real repository."""
         del tenant, work_item_id, state, expected_version
         return True
+
+    async def list_expired(self, tenant: TenantContext, now: datetime, limit: int) -> list[Any]:
+        """Work whose window has passed with no successful claim.
+
+        Returns nothing: this fake seeds no work, so nothing it holds can have expired. Answering
+        honestly matters more here than it looks — a fake inventing an expired item would let the
+        sweeper's "expiry is not an error" path pass against work that never existed.
+
+        It is implemented rather than omitted because
+        :class:`~ragcore.application.ports.WorkItemRepositoryPort` declares it: a fake that
+        satisfies a port partially is one the type checker cannot use to prove the graph is bound
+        to the same contract production is.
+        """
+        del tenant, now, limit
+        return []
 
 
 class FakeApprovals:

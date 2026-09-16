@@ -1,0 +1,235 @@
+<!--
+  THE AI GATEWAY POLICY. The platform's single model egress, and the only place model traffic is
+  shaped.
+
+  Every model call this platform makes arrives here: RagCore holds no Foundry role at all
+  (build/infra/identity/managed-identities.json, identity id-synthia-ragcore), so a direct provider
+  call would fail to authenticate even if the code existed — and ragcore/tests/architecture/
+  test_no_direct_model_call.py asserts that it does not.
+
+      RagCore -> AI Gateway -> model provider          (the only path)
+      RagCore -> Azure OpenAI / Foundry                (does not exist, at four independent levels)
+
+  WHY EVERY POLICY BELOW LIVES HERE RATHER THAN IN THE APPLICATION. A budget enforced by the caller
+  is a budget the caller can decline to enforce, and a content check applied by the agent loop is one
+  a new call site forgets. Metering, budgets, routing, caching and safety are properties of the
+  egress, so they are configured at the egress, where there is exactly one of them.
+
+  WHAT THE APPLICATION SUPPLIES, AND IT IS DELIBERATELY LITTLE. Two headers
+  (ragcore/src/ragcore/integrations/model/gateway.py): X-Synthia-Organisation, which every policy
+  below counts and meters against, and X-Correlation-Id, which joins a metered token to a
+  user-visible outcome. It supplies no model name, no deployment name and no provider — naming one
+  would make the caller the routing decision-maker and would break FR-OPS-009, which requires that
+  changing or adding a provider not change the agent, governance, retrieval or execution logic.
+
+  ORDER MATTERS AND IS NOT ADJUSTABLE:
+
+    1. Prove the caller is the platform.                    (managed identity, validate-azure-ad-token)
+    2. Require the organisation header.                      (nothing unattributable is metered)
+    3. Content safety on the way IN.                         (before a prompt reaches a provider)
+    4. Budget and rate limit, per organisation.              (before tokens are spent)
+    5. Semantic cache lookup.                                (after safety, so a cache hit is safe)
+    6. Route to a provider backend.                          (the platform's only routing decision)
+    7. Content safety on the way OUT, then meter, then store.
+
+  STEP 3 BEFORE STEP 5 IS THE SUBTLE ONE. FR-OPS-010 says a cached response MUST NOT bypass the
+  checks a fresh response passes. Inbound safety runs before the cache lookup, so a prompt that would
+  be blocked is blocked whether or not something similar was answered earlier.
+
+  REPLACEMENTS. {{...}} are API Management named values, resolved at deployment from Key Vault by
+  APIM's own managed identity. None of them is a model provider credential; there is no such
+  credential anywhere in this platform.
+-->
+<policies>
+  <inbound>
+
+    <!--
+      (1) THE CALLER IS THE PLATFORM, PROVED BY MANAGED IDENTITY.
+
+      RagCore presents an Entra token minted by id-synthia-ragcore
+      (SYNTHIA_GATEWAY_ENTRA_SCOPE names the audience). There is no subscription key and no API key
+      in this path: a key is not tied to a caller, so per-organisation metering would be
+      unattributable and a leaked key would be a model budget anybody could spend.
+    -->
+    <validate-azure-ad-token tenant-id="{{entra-tenant-id}}" header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized">
+      <audiences>
+        <audience>{{ai-gateway-audience}}</audience>
+      </audiences>
+      <required-claims>
+        <claim name="oid" match="any">
+          <value>{{ragcore-identity-object-id}}</value>
+        </claim>
+      </required-claims>
+    </validate-azure-ad-token>
+
+    <!--
+      (2) NOTHING UNATTRIBUTABLE IS SERVED.
+
+      Every policy after this one counts against the organisation. A call without the header could
+      not be metered, budgeted or throttled, so it is refused rather than served unmetered — an
+      unmetered call is the one that escapes the budget, and it would escape it silently.
+
+      403 with no detail: the reason names the control.
+    -->
+    <choose>
+      <when condition="@(string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Synthia-Organisation", string.Empty)))">
+        <return-response>
+          <set-status code="403" reason="Forbidden" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/problem+json</value>
+          </set-header>
+          <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/unattributable-model-call\",\"title\":\"Unattributable model call\",\"status\":403,\"detail\":\"A model call is metered against an organisation.\"}")</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <!--
+      (3) CONTENT SAFETY, INBOUND. Bidirectional: this half guards the prompt, and the outbound
+      section guards the completion.
+
+      shield-prompt guards against adversarial input, which matters here beyond the usual reason:
+      retrieved content and chat text both reach a prompt, and the platform's position is that
+      retrieved content is data and never instruction (FR-EXT-017). This is defence in depth for
+      that position, not the position itself — the actual defence is structural, since content
+      cannot reach a treatment, a role or an outbound destination.
+
+      The content safety backend authenticates by APIM's managed identity, not by a key.
+    -->
+    <llm-content-safety backend-id="content-safety-backend" shield-prompt="true">
+      <categories output-type="EightSeverityLevels">
+        <category name="Hate" threshold="4" />
+        <category name="Violence" threshold="4" />
+        <category name="SelfHarm" threshold="4" />
+        <category name="Sexual" threshold="4" />
+      </categories>
+    </llm-content-safety>
+
+    <!--
+      (4) PER-ORGANISATION BUDGET AND RATE LIMIT (FR-OPS-005).
+
+      Counted on the organisation header rather than on a subscription key, because the platform has
+      one caller and many organisations: keying on the subscription would give every organisation a
+      single shared budget, which is precisely the noisy-neighbour outcome FR-OPS-005 prohibits.
+
+      estimate-prompt-tokens is true so an over-budget prompt is refused before it is sent to a
+      provider. Refusing after the call would have already spent the tokens it was refusing to spend.
+
+      A 429 (rate) or 403 (quota) from here is a THROTTLE, not a failure. The application maps it to
+      ModelBudgetExceededError and the user is told the request was limited — never that it failed
+      (FR-OPS-006).
+    -->
+    <llm-token-limit
+        counter-key="@(context.Request.Headers.GetValueOrDefault("X-Synthia-Organisation", string.Empty))"
+        tokens-per-minute="{{organisation-tokens-per-minute}}"
+        token-quota="{{organisation-token-quota}}"
+        token-quota-period="Daily"
+        estimate-prompt-tokens="true"
+        remaining-tokens-variable-name="remainingTokens"
+        remaining-quota-tokens-variable-name="remainingQuotaTokens" />
+
+    <!--
+      (5) SEMANTIC CACHE LOOKUP (FR-OPS-010).
+
+      vary-by the organisation, and this is the most important line in the file. Without it a cached
+      completion produced for one organisation's prompt could be served to another — a cross-tenant
+      leak through a cache, which no amount of database-level isolation would catch.
+
+      The cache is Redis and Redis is TRANSIENT ONLY in this platform: it is never an authority and
+      never a durable record (plan §Platform environment). A cache miss costs a model call; a lost
+      cache costs nothing at all.
+
+      Placed AFTER inbound content safety, so a cache hit does not skip a check a fresh response
+      would have passed.
+    -->
+    <llm-semantic-cache-lookup
+        score-threshold="0.05"
+        embeddings-backend-id="embeddings-backend"
+        embeddings-backend-auth="system-assigned"
+        ignore-system-messages="true"
+        max-message-count="10">
+      <vary-by>@(context.Request.Headers.GetValueOrDefault("X-Synthia-Organisation", string.Empty))</vary-by>
+    </llm-semantic-cache-lookup>
+
+    <!--
+      (6) PROVIDER ROUTING (§13.5, FR-OPS-009). The one routing decision in the platform, made here
+      and nowhere else.
+
+      The backend pool is defined in providers.json. Adding or changing a provider is a change to
+      that pool and to nothing else: no agent, governance, retrieval or execution code names a
+      provider, so none of it moves.
+
+      The backend's own credentials are set to Managed Identity, so the gateway authenticates onward
+      to Foundry as itself. build/policy/azure-identity.json, resource `foundry`, names
+      AzureKeyCredential, api_key and OPENAI_API_KEY as forbidden configuration for exactly this hop.
+    -->
+    <set-backend-service backend-id="model-provider-pool" />
+
+  </inbound>
+
+  <backend>
+    <forward-request buffer-request-body="true" />
+  </backend>
+
+  <outbound>
+
+    <!--
+      (7a) CONTENT SAFETY, OUTBOUND. The other half of bidirectional.
+
+      A completion is provider output, and provider output is checked at the boundary before it
+      reaches the agent loop (FR-EXT-021). This is the boundary.
+    -->
+    <llm-content-safety backend-id="content-safety-backend">
+      <categories output-type="EightSeverityLevels">
+        <category name="Hate" threshold="4" />
+        <category name="Violence" threshold="4" />
+        <category name="SelfHarm" threshold="4" />
+        <category name="Sexual" threshold="4" />
+      </categories>
+    </llm-content-safety>
+
+    <!--
+      (7b) METERING, IN PROVIDER-NEUTRAL UNITS (FR-OPS-008).
+
+      Tokens, dimensioned by organisation and correlation. Provider-neutral is the requirement:
+      usage must stay comparable when a provider changes, so nothing here is counted in a
+      provider's own billing unit.
+
+      The organisation dimension is what makes per-organisation budgets auditable after the fact
+      rather than merely enforced in the moment.
+    -->
+    <llm-emit-token-metric namespace="Synthia.ModelUsage">
+      <dimension name="Organisation" value="@(context.Request.Headers.GetValueOrDefault("X-Synthia-Organisation", string.Empty))" />
+      <dimension name="CorrelationId" value="@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))" />
+      <dimension name="API ID" />
+    </llm-emit-token-metric>
+
+    <!--
+      (7c) CACHE STORE. Same vary-by as the lookup, for the same reason: a cache partitioned one way
+      on write and another on read is a cross-organisation leak with extra steps.
+    -->
+    <llm-semantic-cache-store duration="{{semantic-cache-seconds}}" />
+
+    <!--
+      Provenance on the response, so the application can state where an answer came from. The
+      application records it on ModelResponse.served_from_cache; a cached response MUST be
+      attributable (FR-OPS-010) and this is what makes it so.
+    -->
+    <set-header name="X-Synthia-Served-From-Cache" exists-action="override">
+      <value>@(context.Variables.ContainsKey("llm-semantic-cache-lookup-hit") ? "true" : "false")</value>
+    </set-header>
+
+  </outbound>
+
+  <on-error>
+    <!--
+      The provider's error does not reach the caller. It can carry endpoint detail, deployment names
+      and request content, none of which the application should see or log — and the application
+      already has the only distinction it needs, which is the status code: 403/429 is a throttle,
+      everything else is a failure.
+    -->
+    <set-header name="Content-Type" exists-action="override">
+      <value>application/problem+json</value>
+    </set-header>
+    <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/model-egress\",\"title\":\"Model egress error\",\"status\":" + context.Response.StatusCode + "}")</set-body>
+  </on-error>
+</policies>

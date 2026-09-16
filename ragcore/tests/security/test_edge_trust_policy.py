@@ -53,7 +53,11 @@ def policy_fixture() -> dict[str, Any]:
         f"the shared edge trust policy is missing: {POLICY_PATH}. Both deployables read this one "
         "file; without it neither rule enforces anything."
     )
-    return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    # Bound to an annotated local rather than returned straight from `json.loads`, which is typed
+    # `Any`. The same pattern as `test_azure_identity.py`: returning `Any` from a function declared
+    # to return a mapping silently disables type checking on every use of this fixture.
+    loaded: dict[str, Any] = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    return loaded
 
 
 def _production_sources() -> list[Path]:

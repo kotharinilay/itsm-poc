@@ -1,0 +1,192 @@
+{
+  "$comment": [
+    "MANAGED IDENTITIES AND DATA-PLANE ROLE ASSIGNMENTS. One identity per deployable.",
+    "",
+    "Rights come from a role assignment on the resource, not from a credential the application holds.",
+    "That is the whole point: they are centrally revocable, visible without reading application",
+    "configuration, and there is nothing to exfiltrate. build/policy/azure-identity.json is the rule;",
+    "this file is where it is discharged.",
+    "",
+    "LEAST PRIVILEGE IS EXPRESSED HERE, NOT ASSUMED. The two deployables deliberately do NOT get the",
+    "same set. The monolith is read-only (ADR-0001) and its identity is what makes that structural",
+    "rather than a convention: it holds no Service Bus, SignalR, AI Search or model access at all, so",
+    "a write path added to it by mistake fails at the platform rather than succeeding quietly.",
+    "",
+    "ROLES ARE NAMED, NOT NUMBERED. Built-in role names are what `az role assignment create --role`",
+    "accepts and what a reviewer can check; the GUIDs are resolved at deploy time. A GUID transcribed",
+    "into a repository is a value nobody proofreads.",
+    "",
+    "TWO RESOURCES ARE NOT RBAC AND ARE CALLED OUT BELOW rather than left to be discovered:",
+    "PostgreSQL authorizes at the database level, and Redis uses an access policy. Writing either as",
+    "a role assignment produces a deployment that succeeds and an application that cannot connect."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "identities": [
+    {
+      "name": "id-synthia-monolith",
+      "type": "UserAssigned",
+      "usedBy": "build/docker/containerapps/monolith.yaml",
+      "$comment": [
+        "THE READ-ONLY DEPLOYABLE, and its role set is the shortest in this file on purpose.",
+        "",
+        "It serves customer and staff read surfaces over versioned views and writes nothing. It",
+        "therefore holds no Service Bus role (it publishes and consumes nothing), no SignalR role (it",
+        "notifies nobody), no AI Search role (it retrieves nothing) and no model access (it reasons",
+        "about nothing). Each absence is a control, not an oversight: ADR-0001 says this deployable",
+        "is read-only, and an identity that could send a message would make that a promise rather",
+        "than a property."
+      ],
+      "roleAssignments": [
+        {
+          "resource": "keyvault",
+          "role": "Key Vault Secrets User",
+          "scope": "vault",
+          "why": "Resolves the secret references in its container app manifest at revision start."
+        },
+        {
+          "resource": "monitor",
+          "role": "Monitoring Metrics Publisher",
+          "scope": "application-insights",
+          "why": "Entra-authenticated telemetry ingestion, so no instrumentation key is held."
+        },
+        {
+          "resource": "containerregistry",
+          "role": "AcrPull",
+          "scope": "registry",
+          "why": "Pulls its own digest-pinned image. Read-only, and on the registry alone."
+        }
+      ]
+    },
+    {
+      "name": "id-synthia-ragcore",
+      "type": "UserAssigned",
+      "usedBy": "build/docker/containerapps/ragcore.yaml",
+      "$comment": [
+        "THE EXECUTION LEG. Orchestrates, persists, publishes and consumes, so its set is larger -",
+        "and every entry below is one it genuinely exercises.",
+        "",
+        "It holds BOTH Service Bus Sender and Receiver because it is both ends of the outbox seam: the",
+        "dispatcher publishes and the workers consume. Data Owner would cover both in one line and is",
+        "deliberately not used - it also grants management of queues and subscriptions, which nothing",
+        "here does.",
+        "",
+        "IT HAS NO DIRECT MODEL ACCESS. Every model call goes through the AI Gateway, which holds its",
+        "own identity onward to Foundry (build/policy/azure-identity.json, resource `foundry`). A",
+        "Foundry role here would be a second path to a provider that bypasses the gateway's metering,",
+        "budgets and content safety - the exact thing the gateway exists to prevent."
+      ],
+      "roleAssignments": [
+        {
+          "resource": "keyvault",
+          "role": "Key Vault Secrets User",
+          "scope": "vault",
+          "why": "Resolves secret references, including the database DSN, at revision start."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Sender",
+          "scope": "queue:synthia-triggers",
+          "why": "The outbox dispatcher publishes triggers. Scoped to the queue, not the namespace."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Receiver",
+          "scope": "queue:synthia-triggers",
+          "why": "The workers consume them. Same queue; Data Owner is deliberately not used."
+        },
+        {
+          "resource": "signalr",
+          "role": "SignalR App Server",
+          "scope": "signalr",
+          "why": "Publishes completion notifications. A notification carries no authority (FR-IDENT-005), so this is the narrow app-server role and not Service Owner."
+        },
+        {
+          "resource": "aisearch",
+          "role": "Search Index Data Reader",
+          "scope": "index",
+          "why": "Retrieval only. Index authoring belongs to ingestion and is not granted here."
+        },
+        {
+          "resource": "monitor",
+          "role": "Monitoring Metrics Publisher",
+          "scope": "application-insights",
+          "why": "Entra-authenticated telemetry ingestion."
+        },
+        {
+          "resource": "containerregistry",
+          "role": "AcrPull",
+          "scope": "registry",
+          "why": "Pulls its own digest-pinned image."
+        }
+      ]
+    },
+    {
+      "name": "id-synthia-apim",
+      "type": "UserAssigned",
+      "usedBy": "build/infra/apim/",
+      "$comment": [
+        "THE GATEWAY'S OWN IDENTITY, and the reason this file blocks work that is already merged.",
+        "",
+        "APIM reads the gateway client certificate from Key Vault as this identity. Without the",
+        "assignment below there is no certificate on the backend connection, Container Apps ingress",
+        "rejects the handshake, and every application request fails - the edge trust boundary in",
+        "build/policy/edge-trust.json does not function at all.",
+        "",
+        "It is an identity rather than a stored credential for the usual reason, which matters more",
+        "here than anywhere else in this file: a secret used to fetch the certificate that proves",
+        "gateway provenance would be a credential guarding the thing that guards everything else."
+      ],
+      "roleAssignments": [
+        {
+          "resource": "keyvault",
+          "role": "Key Vault Secrets User",
+          "scope": "vault",
+          "why": "Reads the gateway client certificate. A Key Vault certificate's private material is retrieved as a secret, so this is the role that applies - Certificates Officer would also permit issuing and deleting, which APIM never does."
+        }
+      ]
+    }
+  ],
+
+  "notRoleBased": [
+    {
+      "resource": "postgresql",
+      "mechanism": "database-level role, created inside PostgreSQL",
+      "$comment": [
+        "NOT AN AZURE RBAC ROLE ASSIGNMENT, and the most common way this file would be got wrong.",
+        "",
+        "Entra authentication to PostgreSQL Flexible Server works by presenting an access token in",
+        "the password position; authorization is then decided by GRANTs on a database role created",
+        "with `pgaadauth_create_principal`. Writing it here as a role assignment produces a deployment",
+        "that succeeds and an application that cannot connect - the failure appears at the first query",
+        "of the first request, in a place that looks nothing like a permissions problem.",
+        "",
+        "The separated principals (the monolith's read-only principal, RagCore's owner, the migration",
+        "principal that alone holds DDL) are defined with the schema, not here."
+      ],
+      "definedIn": "ragcore/migrations/"
+    },
+    {
+      "resource": "redis",
+      "mechanism": "Redis access policy assignment",
+      "$comment": [
+        "Also not an RBAC role. Azure Cache for Redis and Azure Managed Redis authorize Entra",
+        "principals through a data access policy on the cache, assigned to the principal's object id.",
+        "",
+        "Redis is transient-only in this platform and no sample flow reads it, so the assignment is",
+        "listed for completeness and is not on the critical path."
+      ]
+    }
+  ],
+
+  "$unassigned": [
+    "DELIBERATELY ABSENT, so that a reader can tell a decision from an omission:",
+    "",
+    "  Front Door - needs no identity. Its Private Link connection to APIM is approved on the",
+    "               control plane at provisioning time; no data-plane call is ever made as itself.",
+    "  Foundry    - reached only through the AI Gateway, which holds the identity onward. Neither",
+    "               deployable has direct model access, by design.",
+    "  Monolith   - holds no Service Bus, SignalR, AI Search or model role. See its entry above."
+  ]
+}

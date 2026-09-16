@@ -194,6 +194,20 @@ sed -i 's/Microsoft.KeyVault.CertificateNearExpiry/Microsoft.KeyVault.Certificat
 expect_rejected "the certificate near-expiry alert being removed"
 restore
 
+# 9d - the gateway loses its Key Vault access.
+#
+# The subtlest failure this suite covers. Nothing in the APIM policy, the ingress manifests or
+# either backend changes - every other check still passes - and the platform is completely down,
+# because APIM cannot read the certificate it is configured to present.
+#
+# The role is removed from the APIM identity only, leaving the deployables' Key Vault roles intact,
+# which is what a naive file-wide grep would have been fooled by.
+IDENTITIES="build/infra/identity/managed-identities.json"
+save "$IDENTITIES"
+sed -i '/"name": "id-synthia-apim"/,/^    }/ s/"resource": "keyvault"/"resource": "none"/' "$IDENTITIES"
+expect_rejected "the APIM identity losing its Key Vault role"
+restore
+
 # 10 - A WORKER MANIFEST MUST NOT BE REJECTED.
 #
 # Workers consume Service Bus by dialling OUT over AMQP as a managed identity. They declare no

@@ -309,8 +309,10 @@ policy per audience is what makes "the surface decides the authorization model" 
 is then no shared branch in which the customer path could read a role claim.
 
 **These tasks define committed configuration; they do not provision it.** Acceptance still requires a
-deployed environment (`FR-DEMO-019`, `SC-DEMO-001`), and T256 remains the gate. No task currently covers
-Azure provisioning of Front Door, APIM or the gateway certificate.
+deployed environment (`FR-DEMO-019`, `SC-DEMO-001`), and T256 remains the gate. Provisioning is tracked
+separately under *Azure provisioning* below (T227a, T227b) together with the certificate issuance it
+depends on (T233e, T233f) — the longest-lead items in the scaffold, and the ones every sample flow
+passes without right up until it has to cross a boundary that does not exist.
 
 - [X] T226 Define the **Front Door + WAF** public edge in `build/infra/frontdoor/` — the single public entry point for all three audiences, WAF in prevention mode with a documented managed rule set, origin reaching APIM over Private Link so neither APIM nor the containers are **publicly reachable** — Boundary: edge | Validates: Spec §FR-DEMO-019, Plan §Platform Environment
 - [X] T227 Define **APIM** as the trust boundary in `build/infra/apim/` — terminates the public edge, routes `/api/{customer,staff,workload}/v1/...` to the correct deployable, and is the **only** network path to either container — Boundary: gateway | Validates: Spec §FR-DEMO-004a, Contracts §README rule 4
@@ -323,7 +325,30 @@ Azure provisioning of Front Door, APIM or the gateway certificate.
 
 - [ ] T231 [P] Implement the **Redis transient cache** abstraction in `ragcore/src/ragcore/infrastructure/cache.py` — reached by managed identity, **every entry carries a TTL**, and the type exposes no API that could persist an authority record or a durable decision. Redis is **transient only**; it is never a source of truth and no sample flow reads it — Boundary: cache | Validates: Constitution P-IV, Plan §Platform Environment
 - [X] T232 [P] Bind **Key Vault** to both deployables in `build/docker/containerapps/` — secrets surfaced as references resolved at the point of use, **never** as environment variables holding values, and never baked into an image — Boundary: configuration | Validates: Spec §FR-DEMO-012
-- [ ] T233 Assign **managed identity and Azure RBAC** per deployable in `build/infra/identity/` — one identity each, with data-plane role assignments for Service Bus, SignalR, Key Vault, PostgreSQL, AI Search, Foundry and Application Insights. Rights come from role assignment on the resource, **not** from a credential the application holds, so they are centrally revocable and visible without reading application configuration — Boundary: identity | Validates: Plan §Authentication, Spec §SC-DEMO-003
+- [X] T233 Assign **managed identity and Azure RBAC** per deployable in `build/infra/identity/managed-identities.json` — one identity each, **plus one for APIM**, with data-plane role assignments named per resource. Rights come from role assignment on the resource, **not** from a credential the application holds, so they are centrally revocable and visible without reading application configuration. Sets are **deliberately unequal**: the monolith is read-only (ADR-0001) and holds no Service Bus, SignalR, AI Search or model role, so a write path added to it by mistake fails at the platform rather than succeeding quietly. PostgreSQL and Redis are recorded as **not RBAC** — database-level role and access policy respectively — because writing either as a role assignment deploys cleanly and then cannot connect — Boundary: identity | Validates: Plan §Authentication, Spec §SC-DEMO-003, ADR-0001
+- [X] T233a Grant the **APIM identity** Key Vault read in `build/infra/identity/managed-identities.json` — APIM reads the gateway client certificate as itself, so without this there is no certificate on the backend connection, ingress rejects the handshake and **every application request fails**. Guarded by `check-edge-path.sh`, because the failure lands in a different file and a different resource from everything it breaks — Boundary: identity | Validates: Spec §FR-IDENT-012, §SC-DEMO-003
+
+### Gateway provenance certificate *(added 2026-09-16)*
+
+The application half of the APIM-to-backend hop. Network placement alone is not sufficient
+(`FR-IDENT-012`): internal ingress admits everything already inside the environment, and for a
+backend that consumes the `X-Idp-*` contract as authoritative, reachability *is* the ability to
+assert any organisation and any role.
+
+- [X] T233b Enforce **gateway provenance** in both deployables — `dotnet/src/Synthia.Api/Middleware/GatewayProvenanceMiddleware.cs` and `ragcore/src/ragcore/api/middleware/provenance.py`, each running **before** identity, validating the ingress-forwarded certificate hash against a required allow-list. The request is **refused, not sanitised**: stripping the headers and continuing returns success to an attacker and leaves the attempt indistinguishable from an ordinary unauthenticated call. An empty allow-list **fails the process at start** — an unconfigured vault fails loudly, an unconfigured allow-list fails silently by accepting forged identity — Boundary: identity | Validates: Spec §FR-IDENT-012, §SC-DEMO-003b
+- [X] T233c Require the client certificate at **ingress** in `build/docker/containerapps/*.yaml` — `clientCertificateMode: require`, so ingress itself sets `X-Forwarded-Client-Cert` and a caller cannot forge it. `accept` is not sufficient: it forwards a certificate when one is offered and nothing when one is not, making an unauthenticated caller indistinguishable from a correctly configured one — Boundary: identity | Validates: Spec §FR-IDENT-012
+- [X] T233d Define **expiry alerting** in `build/infra/monitoring/gateway-certificate-expiry.json` — Key Vault lifetime action at 45 days, `CertificateNearExpiry` paging at 30 (Azure fixes this and offers no setting), `CertificateExpired` at Sev0. Expiry is the **residual risk of the pinned-version rotation strategy** and is a misleading outage: health probes are exempt from provenance, so every replica stays green while serving nothing — Boundary: operations | Validates: Spec §FR-IDENT-012
+- [ ] T233e **Issue the gateway client certificate into Key Vault** and register it as an APIM certificate entity referenced by `certificate-id` — **never by thumbprint**, which changes on rotation and makes the policy silently stop attaching a certificate at all. Pin the Key Vault version so APIM's four-hour auto-sync cannot rotate it out from under the backend allow-list unattended — Boundary: identity | Validates: Spec §FR-IDENT-012
+- [ ] T233f Set the certificate hash allow-list on both deployables — `EdgeTrust__GatewayCertificateThumbprints` and `SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS`. Rotation is an **overlap and the order is the control**: widen the allow-list on both deployables *before* repointing APIM, per `docs/runbooks/rotate-gateway-certificate.md`. The reverse order is a total outage — Boundary: identity | Validates: Spec §FR-IDENT-012
+
+### Azure provisioning *(added 2026-09-16)*
+
+Everything above **defines** committed configuration. Nothing above **provisions** it, and the spec
+makes traversal of the real deployed path part of acceptance (`FR-DEMO-019`, `SC-DEMO-001`) —
+configuration review explicitly does not substitute. These are the scaffold's longest-lead items.
+
+- [ ] T227a Provision **Front Door + WAF, APIM and the Container Apps environment** in a deployed environment from `build/infra/` — including the Private Link connection from Front Door to APIM, the `front-door-id` and `gateway-client-certificate-id` named values, and the Event Grid system topic and action group backing `build/infra/monitoring/` — Boundary: platform | Validates: Spec §FR-DEMO-019, §SC-DEMO-001
+- [ ] T227b Apply the **role assignments** from `build/infra/identity/managed-identities.json`, and create the PostgreSQL database-level principals and the Redis access policy, which are **not** role assignments — Boundary: identity | Validates: Spec §SC-DEMO-003
 
 ### OpenAPI contract emission *(added 2026-09-16)*
 

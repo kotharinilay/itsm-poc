@@ -258,6 +258,35 @@ if require_file "$EXPIRY_ALERTS" "The gateway certificate expiry alerting"; then
   fi
 fi
 
+# ------------------------------- (6c) the gateway can actually read its own certificate
+#
+# APIM presents the client certificate that every other control here rests on, and it reads that
+# certificate from Key Vault as its own managed identity. Without the role assignment there is no
+# certificate on the backend connection, ingress rejects the handshake, and EVERY application
+# request fails.
+#
+# Worth a guard rather than a comment because of where the failure lands: nothing in the APIM
+# policy, the ingress manifests or either backend is wrong, so every other check in this script
+# passes and the platform is still completely down. The missing piece is in a different file, in a
+# different resource, in a different deployment step.
+IDENTITIES="build/infra/identity/managed-identities.json"
+if require_file "$IDENTITIES" "The managed identity and role assignment definitions"; then
+  # The APIM identity block must exist and must carry a Key Vault role. Matched on the block rather
+  # than on the file as a whole: a Key Vault role granted to a *deployable* elsewhere in the file
+  # would otherwise satisfy a naive grep while the gateway still had none.
+  apim_block="$(awk '/"name": "id-synthia-apim"/,/^    }/' "$IDENTITIES")"
+
+  if [ -z "$apim_block" ]; then
+    fail "No managed identity is defined for APIM, so it cannot read its own client certificate"
+  elif ! printf '%s' "$apim_block" | grep -qF '"resource": "keyvault"'; then
+    fail "The APIM identity holds no Key Vault role" \
+      "APIM reads the gateway client certificate from Key Vault as this identity. Without it the
+backend connection carries no certificate and every application request fails provenance."
+  else
+    pass "APIM has an identity that can read the gateway certificate from Key Vault."
+  fi
+fi
+
 # ------------------------------------------- (7) no service addresses another service directly
 #
 # Specification 13.4: every application API call traverses the edge and the Gateway. A private peer

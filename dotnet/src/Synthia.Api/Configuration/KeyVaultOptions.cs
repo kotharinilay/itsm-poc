@@ -35,6 +35,24 @@ public sealed class KeyVaultOptions
     [Range(1, 1440)]
     public int ReloadIntervalMinutes { get; set; } = 60;
 
+    /// <summary>
+    /// The configuration keys that MUST resolve to a non-empty value before this process serves.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared here rather than discovered at the point of use. A secret resolved lazily fails on
+    /// whichever request first needed it, in whichever replica happened to serve it — a
+    /// configuration defect wearing the costume of an intermittent outage. Validating the whole set
+    /// at start turns that into a deployment that does not start.
+    /// </para>
+    /// <para>
+    /// These are configuration <i>keys</i>, not secret names: the Key Vault provider maps a secret
+    /// called <c>Observability--ConnectionString</c> onto the key <c>Observability:ConnectionString</c>,
+    /// and the key is what the rest of the process binds against.
+    /// </para>
+    /// </remarks>
+    public IList<string> RequiredSecretKeys { get; } = [];
+
     /// <summary>Whether a vault URI is configured.</summary>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(VaultUri);
 

@@ -8,8 +8,15 @@
 
 ## Summary
 
-Build a monorepo containing five applications across two deployables, proving every load-bearing
-behaviour of the platform end to end while containing no product use cases.
+Build a monorepo containing five applications across two deployables, proving the load-bearing
+**platform infrastructure** end to end while containing no product use cases.
+
+**Revised 2026-09-16 — scaffold scope correction.** The architecture below is unchanged. What changed
+is what the scaffold must *demonstrate*: platform integration through inert sample flows
+(spec `FR-DEMO-001`–`FR-DEMO-019`), not business approval semantics. Golden path B is now
+**asynchronous platform integration** rather than a governed human decision; the approval and consent
+workflows remain fully specified and move past the scaffold. Nothing was removed from the design, and
+no infrastructure was added.
 
 This revision **reconciles the plan with constitution v3.1.0**. The architecture is unchanged — it
 remains the one fixed by `Synthia-Platform-Specification.md` and
@@ -24,8 +31,10 @@ they meet only at PostgreSQL and asynchronous messaging. Three client surfaces c
 workspace, with Electron as a thin host that decides nothing.
 
 Work is organised into **fourteen ordered stages**: eleven scaffold stages containing no product
-behaviour, two architectural golden paths that prove the governance machine end to end — between them
-exercising all four execution treatments — and only then the twelve use cases.
+behaviour, two architectural golden paths — A proves the synchronous governed machine, B proves the
+asynchronous platform integration — and only then the twelve use cases. The four execution treatments
+remain catalogue data throughout and are classified deterministically; the two human-decided ones are
+not *exercised* by the scaffold (spec `FR-DEMO-016`, `FR-DEMO-017`).
 
 ## Technical Context
 
@@ -68,6 +77,68 @@ no residency support (`FR-SURF-015`). WCAG 2.2 AA on all three surfaces. Invaria
 **Scale/Scope**: No scale envelope defined — recorded as Outstanding. Design for linear horizontal
 scale on stateless compute; revisit when use cases arrive.
 
+## Platform Environment and Access
+
+*Added 2026-09-16.* Consolidated here because spec `FR-DEMO-019` makes a deployed environment part of
+scaffold **acceptance** rather than a later deployment concern: a sample flow that has not crossed the
+edge has not been demonstrated. Every resource below already appears in this plan and in §9.3 of the
+platform specification. **Nothing here is new infrastructure**; this section names what must exist and
+how it is reached.
+
+### Azure resources required by the scaffold
+
+| Resource | Role | Scaffold acceptance depends on it |
+|---|---|---|
+| Front Door + WAF | The public edge. Every flow enters here | Yes — `FR-DEMO-019` |
+| API Management (APIM) | The trust boundary. **Identity is derived once, here**; neither deployable parses a token | Yes — `FR-DEMO-004a`, `FR-DEMO-019` |
+| Azure Container Apps | Internal environment hosting both deployables and the workers | Yes |
+| PostgreSQL Flexible Server | The single authoritative durable store | Yes — `FR-DEMO-005`, `FR-DEMO-006` |
+| Azure Service Bus | The asynchronous seam between deployables | Yes — `FR-DEMO-007` |
+| Azure SignalR | Server-to-client realtime delivery. A leaf, never a link | Yes — `FR-DEMO-008` |
+| Azure Key Vault | The sole source of secret material | Yes — `FR-DEMO-012` |
+| Application Insights / Azure Monitor | Telemetry sink for traces, metrics and structured logs | Yes — `FR-DEMO-009` |
+| Azure AI Search | The **derived** retrieval index. Rebuilt by re-running ingestion, never restored | No — reachable and configured, not exercised by a sample flow |
+| Azure AI Foundry | Reasoning and embedding models, on private endpoints | No — reachable through the gateway, not exercised by a sample flow |
+| AI Gateway | The sole model egress. A policy function, **not an identity boundary** | No — same |
+| Redis | **Transient only.** Never an authority, never a durable record | No — present, and deliberately absent from every sample flow |
+
+The last four are required to exist and be reachable so the scaffold is deployable as designed, and are
+deliberately **not** on the acceptance path: no sample flow calls a model, queries the index, or reads
+a cache. A flow that did would be proving product behaviour, which is what this correction removed.
+
+### Authentication and secret handling
+
+These are build-gating rules, not guidance. `SC-DEMO-003` and `SC-DEMO-004` measure them.
+
+1. **Managed identity wherever the resource supports it.** Service Bus, SignalR, PostgreSQL, Key
+   Vault, Application Insights, AI Search and Foundry are all reached as a managed identity.
+2. **Azure RBAC and data-plane authorization rather than application secrets.** Access is granted by
+   role assignment on the resource, not by a credential the application holds. A component's rights
+   are then revocable centrally and visible without reading application configuration.
+3. **Key Vault is the sole source of secret material.** Any credential that genuinely cannot be
+   replaced by managed identity — a third-party system's API key, for instance — lives there and is
+   resolved by reference at the point of use.
+4. **No secret is ever committed.** Not in source, not in tests, not in committed configuration. CI
+   secret scanning enforces this and a finding fails the build.
+5. **No Azure client secret in application configuration.** A configuration key that could hold one is
+   itself the defect; the settings types expose `*_secret_name` fields holding a *name*, never a value.
+6. **No connection string carrying embedded credentials** where managed identity is supported. A DSN
+   with a password in it defeats every rule above at once, and is the form the violation usually takes.
+
+### OpenAPI contract emission
+
+`FR-DEMO-013` and `SC-DEMO-011` make the contract an artifact rather than a document.
+
+- **.NET** emits OpenAPI from the running Minimal APIs through the built-in document generator.
+- **RagCore** emits OpenAPI from FastAPI, generated from the Pydantic request and response models on
+  each route — so the document cannot drift from what the service accepts.
+- **Each audience has its own explicit contract**: `customer/*`, `staff/*` and `workload/*` are
+  separate documents, because one merged document would let a customer-facing client discover the
+  staff and workload surfaces.
+- **CI emits versioned artifacts** on every build and publishes them.
+- **Contract tests validate the emitted documents**, not hand-written copies. A route whose emitted
+  shape stops matching its declared contract fails the build rather than surfacing at a client.
+
 ## Constitution Check
 
 *GATE: evaluated before Phase 0 and re-evaluated after Phase 1 design. Constitution v3.1.0.*
@@ -82,10 +153,31 @@ scale on stateless compute; revisit when use cases arrive.
 | VI | Design for change without speculation | Constructor injection only; no Service Locator; no `BuildServiceProvider` during configuration. No provider-neutral abstraction before a second provider — the model port is the one exception and is justified below. | **PASS (one justified)** |
 | VII | No client is a security boundary | Angular role checks presentation-only; Electron `contextIsolation` on, `nodeIntegration` off, sandbox on, narrow typed bridge, every IPC sender and argument validated, navigation allow-listed. | **PASS** |
 | VIII | Provable by audit and by test | Correlation from the edge through every tier on W3C Trace Context. Full actor chain on every consequential action. All fifteen test categories appear in the stage plan. | **PASS** |
-| IX | Scaffold honestly | UC-01–UC-12 are labelled placeholders. Four inert reference operations, production-excluded. Use cases are Stage 14, gated behind both golden paths. | **PASS** |
+| IX | Scaffold honestly | UC-01–UC-12 are labelled placeholders. Four inert reference operations, production-excluded. Use cases are Stage 14, gated behind both golden paths. **Strengthened by the 2026-09-16 correction**: the scaffold no longer stands up an approval workflow against a fixture, which was the closest thing in this plan to inventing product. | **PASS** |
 | X | Decisions recorded | ADR-0001–0005 govern this plan; divergences are listed below rather than left implicit. | **PASS** |
 
 **Result**: no unjustified violations. One justified exception and three complexities, recorded below.
+
+### Re-evaluation after the scaffold scope correction (2026-09-16)
+
+The correction removes demonstrations, not controls. Re-checked against every principle, three deserve
+a word:
+
+- **Principle III — deterministic governance decides.** Not weakened. The gate, the catalogue and
+  deterministic treatment classification are all still built and exercised in Stage 12. What is not
+  built is the *workflow* behind two of the four treatments, and spec `FR-DEMO-018` closes the hole
+  that would otherwise open: an operation requiring a human decision is refused or routed to manual
+  fallback, **never auto-approved**. Without that rule the correction would have been a permission
+  grant wearing the clothes of a scope reduction. **PASS.**
+- **Principle IV — isolation absolute.** Strengthened in practice. Tenant propagation across the
+  asynchronous hop is now an acceptance criterion (`SC-DEMO-006`) rather than an untested property of
+  a path the scaffold never ran. **PASS.**
+- **Principle IX — scaffold honestly.** Improved. An approval workflow exercised against an inert
+  fixture proves that the fixture was wired up; it reads as product capability while being none.
+  Removing it is the more honest scaffold, not the lesser one. **PASS.**
+
+No principle moved from PASS. No new violation, no new justified exception, and the Complexity
+Tracking table is unchanged — the correction adds no project, no library and no abstraction.
 
 ### `senior_technician` — present, accepted by nothing
 
@@ -645,7 +737,15 @@ validated configuration, hardened images.
 responses, bound to the logging scope and OpenTelemetry context, and carried on every trigger,
 notification and audit record. W3C Trace Context; no custom propagation header replaces it.
 
-**Infrastructure.** Application Insights / Azure Monitor; Azure Container Apps.
+**Infrastructure.** Application Insights / Azure Monitor; Azure Container Apps; and — newly
+acceptance-critical — Front Door + WAF and APIM.
+
+**Sequencing note, added 2026-09-16.** `FR-DEMO-019` makes edge traversal part of scaffold acceptance,
+so the environment this stage configures is no longer a deployment concern that can trail the build:
+Stage 13 cannot be *accepted* until Front Door, WAF and APIM are provisioned and APIM derives identity.
+The work stays in this stage; what changed is that it now gates a later stage rather than only
+preceding it. Provisioning should start as early as it can be started, because every sample flow will
+pass locally right up until the moment it has to cross a boundary that does not exist yet.
 
 **Security.** Logs and telemetry leak no secret, token, authorization header, sensitive payload or
 cross-tenant value. Secrets resolve through managed identity and Key Vault.
@@ -779,57 +879,134 @@ the unit tests assert the boundary case explicitly in both directions.
 
 **Validation gates.** The `AUTO` reference operation completes with a verified outcome and a full actor
 chain. The `NOT_ALLOWED` reference operation is refused at the gate, never surfaced as an approvable
-proposal, and recorded as a denial. A planted injection in retrieved content produces at most a
+proposal, and recorded as a denial. The two human-decided treatments are **classified** from the
+catalogue and their operations refused or routed to manual fallback rather than auto-approved
+(spec `FR-DEMO-018`) — classification is proven here, the workflows are not built
+(`SC-SCOPE-002`, amended). A planted injection in retrieved content produces at most a
 proposal, never an execution. A near-tie and a confident singleton at the same top score route
 differently. A score exactly equal to the absolute threshold, and a margin exactly equal to the margin
 threshold, both pass — asserted directly rather than inferred.
 
-**Non-goals.** No approval, no consent, no desktop execution, no use case.
+**Non-goals.** No approval workflow, no consent workflow, no desktop execution, no use case.
 
 ---
 
-### Stage 13 — Golden path B: governed human decision (`STAFF_APPROVAL` and `END_USER_APPROVAL`)
+### Stage 13 — Golden path B: asynchronous platform integration
 
-**Objective.** Prove the hardest guarantee: durable suspension, an authenticated human decision, and
-execution that survives the requester's absence.
+*Replaced 2026-09-16. The previous Stage 13 proved a governed human decision — durable suspension, an
+authenticated verdict, resume. That machine is **not removed**; it remains specified in
+spec `FR-INTR-*`, `FR-EXEC-*` and User Stories 2 and 3, and moves past the scaffold under
+`FR-DEMO-016`. What replaces it proves the seams underneath it, which is what the scaffold is for.*
 
-Both human-decided treatments run on **one machine** — suspend → verdict → outbox → trigger → resume →
-atomic claim → execute — differing only in **who may decide** (a `technician` versus the work's own
-requester) and **on which surface** (staff portal versus customer). Proving them together is what makes
-`SC-SCOPE-002` reachable without a third path, and it directly tests constitution Principle II's rule
-that the two authorization models never decide for one another.
+**Objective.** Prove the platform's asynchronous integration end to end, on inert fixtures: a request
+entering at the public edge, becoming durable state, crossing the deployable boundary through the
+outbox and the bus, being acted on by the workload leg, and returning to the client as a notification —
+with one correlation identifier and one organisation binding intact the whole way.
 
-**Architectural boundaries.** Adds Approval and the resume path, for both the staff verdict and the
-end-user consent decision.
+**Why this is the harder half.** Golden path A proves a synchronous machine inside one process. Every
+failure mode that actually costs a platform its integrity lives in the seams this stage crosses: the
+transaction boundary between a state change and the message announcing it, the identity of one service
+reaching another, the organisation binding surviving a hop that carries no tenant, and the duplicate
+delivery that at-least-once guarantees will arrive. None of those is exercised by a product workflow.
 
-**Components.** The approval and consent APIs in RagCore; the approval and consent interrupt nodes;
-outbox → trigger → resume worker; atomic claim; Workload execution; the Mission Control queue read
-model; the in-conversation consent prompt.
+**Architectural boundaries.** Exercises the Session, Work, Tool Execution, Notification and Ingestion
+read paths, plus the .NET read side. **Adds no bounded context and moves no boundary.**
 
-**Dependencies.** Stage 12.
+#### Flow B1 — the asynchronous round trip
 
-**Contracts.** Staff API verdict; the trigger contract; the notification envelope; the fifteen-minute
-window.
+```text
+Customer API (Front Door + WAF → APIM → RagCore)
+  → PostgreSQL transaction
+  → transactional outbox row, same transaction
+  → Azure Service Bus
+  → Workload API / worker
+  → sample inert execution
+  → persistence of the outcome
+  → Azure SignalR notification
+  → client state refresh
+```
 
-**Infrastructure.** As Stage 12, plus Service Bus on the critical path.
+The outbox row and the state change commit **together or not at all**. The trigger on the bus carries
+opaque identifiers and correlation only — no tenant, requester, role, action, target or approval state
+— so the workload leg reads its authority from the durable record rather than from the message that
+woke it. The claim is atomic, making a duplicate delivery a no-op rather than a second effect. The
+notification is a **leaf**: the client refreshes its state by reading back through the API, and the
+flow's outcome is identical if no client was ever connected.
 
-**Security.** Approval binds approver, tenant, work item, operation, target, version, expiry and audit.
-`technician` may approve; `administrator` may not. The verdict enters only through the authenticated
-API — never the realtime channel. **Approval records authority; it never executes.** Consent is given
-only by the work item's own requester, only through the authenticated consent endpoint, and **an
-affirmative chat message is never consent**. Consent never satisfies a `STAFF_APPROVAL` requirement.
+#### Flow B2 — the .NET read seam
 
-**Testing.** Approval; consent; checkpoint/resume; concurrency; idempotency; the authorization matrix;
-end-to-end golden path with the client closed, and a second end-to-end run proving an affirmative chat
-message confers nothing while the explicit consent action resumes the work.
+```text
+Staff API (Front Door + WAF → APIM → .NET read API)
+  → PostgreSQL published view (vw_*_v1)
+  → response
+```
 
-**Validation gates.** With the customer client **entirely closed**, an approved operation resumes and
-completes. The `END_USER_APPROVAL` reference operation suspends at consent, ignores an affirmative chat
-message, and resumes only on the explicit authenticated action; consent from anyone but the requester is
-rejected. Expiry without execution is not an error and surfaces as approved-but-not-executed. A failed
-action does not re-fire. **All four execution treatments are now demonstrable (`SC-SCOPE-002`).**
+Proves the read contract as a *runtime* boundary rather than a documented one. The monolith reaches
+PostgreSQL as its own least-privileged principal holding `SELECT` on published views and nothing else:
+a query attempting a base table fails at the database. The staff caller's target organisation is
+resolved from the platform object being read, never from the request.
 
-**Non-goals.** No desktop script, no use case.
+#### Flow B3 — the service boundary
+
+```text
+Customer API (Front Door + WAF → APIM → RagCore)
+  → workload / service boundary (app-only, via APIM)
+```
+
+Proves that a synchronous service-to-service call routes **through APIM** and that no direct route
+exists. The negative half is the point: a request presented straight to a deployable fails, **including
+one carrying a well-formed but self-supplied gateway header contract** — the shape a real bypass takes
+(spec `SC-DEMO-003a`, `SC-DEMO-003b`).
+
+**Components.** Sample-flow endpoints on all three audiences; the outbox dispatcher; the Service Bus
+consumer; the workload claim and outcome path; the SignalR notification client; the .NET read modules
+over published views; OpenTelemetry propagation across both deployables.
+
+**Dependencies.** Stage 12, and — newly load-bearing — a **provisioned environment including the edge**.
+Every flow in this stage is accepted only when driven through Front Door + WAF + APIM (`FR-DEMO-019`).
+This is the longest-lead dependency in the scaffold: all three flows will pass against the deployables
+long before they can be accepted.
+
+**Contracts.** Customer, staff and workload API sample-flow operations, each in its own emitted OpenAPI
+document; the trigger contract; the notification envelope; the published read views.
+
+**Infrastructure.** Front Door + WAF, APIM, Container Apps, PostgreSQL Flexible Server, Service Bus,
+SignalR, Key Vault, Application Insights — all on the critical path together for the first time.
+**No new infrastructure.**
+
+**Security.** Identity is derived once, at APIM; neither deployable parses a token. Every hop
+authenticates as a managed identity under RBAC; no shared key, no connection secret, no password. The
+trigger payload carries nothing authority-bearing. The notification authorizes nothing. The monolith's
+database principal cannot reach a base table. No sample flow touches a model, the retrieval index or
+the cache.
+
+**Testing.** Integration across both deployables; messaging and idempotency (duplicate delivery →
+exactly one effect); tenant isolation across the asynchronous hop; correlation continuity; contract
+tests against the emitted OpenAPI documents; a negative suite for the gateway bypass.
+
+**Validation gates.**
+
+1. All three flows complete when driven through the deployed edge, and 0 are accepted on a
+   direct-to-deployable or locally hosted run (`SC-DEMO-001`).
+2. An induced failure between the state change and the outbox write loses 0 messages and duplicates
+   0 effects (`SC-DEMO-008`).
+3. The same bus message delivered twice produces exactly 1 effect (`SC-DEMO-009`).
+4. The flow reaches the same outcome with no client connected, and the notification carries no
+   authority (`SC-DEMO-010`).
+5. One correlation identifier is recoverable across every tier and the asynchronous hop
+   (`SC-DEMO-005`).
+6. A request scoped to one organisation returns 0 rows belonging to another, including after the
+   asynchronous hop (`SC-DEMO-006`).
+7. A direct-to-deployable request fails across every audience, including one carrying a self-supplied
+   gateway header (`SC-DEMO-003b`).
+8. The emitted OpenAPI documents for all three audiences match what the services accept, with 0
+   hand-maintained divergences (`SC-DEMO-011`).
+9. A repository scan finds 0 committed secrets and 0 credential-bearing connection strings
+   (`SC-DEMO-004`).
+
+**Non-goals.** No approval, no consent, no approval or consent UI, no real endpoint execution, no
+desktop script execution, no use case. No model call, no retrieval query, no cache read — those are
+product behaviour and this stage is about the platform beneath it.
 
 ---
 
@@ -862,4 +1039,9 @@ the endpoint-execution open items in ADR-0004 — script signing and the destruc
 - [x] Phase 0 — research complete → [research.md](./research.md)
 - [x] Phase 1 — design complete → [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
 - [x] Constitution re-check after Phase 1 — v3.1.0, no new violations. The 3.0.0 to 3.1.0 amendment is additive (test-category mapping, coverage position); no principle changed and no stage is affected
-- [ ] Phase 2 — task breakdown (`/speckit-tasks`), to be re-run against the fourteen stages
+- [x] Scaffold scope correction applied 2026-09-16 — Summary, Platform Environment and Access (new),
+  Stage 10 sequencing, Stage 12 gates, Stage 13 replaced. Architecture unchanged; no infrastructure
+  added; no bounded context or deployable boundary moved
+- [ ] Phase 2 — task breakdown (`/speckit-tasks`), to be re-run against the fourteen stages. **Stale
+  as of the correction**: Phase 13 tasks still describe the approval and consent golden path, and no
+  tasks exist yet for the three Stage 13 sample flows or for the OpenAPI emission requirements

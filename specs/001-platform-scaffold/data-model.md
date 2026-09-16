@@ -17,12 +17,24 @@ table and every migration; the .NET monolith reads only through versioned views 
 concurrency** — no pessimistic or distributed locking exists. Standard audit columns (`created_at`,
 `updated_at`, and `created_by`/`updated_by` where a principal is meaningful) apply to every table.
 
-**Optimistic concurrency — one exemption, named.** `idempotency_record` carries no `version` column
-and is exempt. It is written once at claim time and updated exactly once when `outcome` is recorded;
-its `idempotency_key` primary key already serialises every concurrent writer, so a version column
-would add a second concurrency mechanism to a row that structurally cannot have two live writers.
-Every other table in this document carries `version`. **No further exemption exists**, and adding one
-requires naming it here.
+**Optimistic concurrency — two exemptions, both named.**
+
+*`idempotency_record`* carries no `version` column. It is written once at claim time and updated
+exactly once when `outcome` is recorded; its `idempotency_key` primary key already serialises every
+concurrent writer, so a version column would add a second concurrency mechanism to a row that
+structurally cannot have two live writers.
+
+*`governance_record`* carries no row-version column either, and for a different reason: its
+`version` column is **half the primary key**, not a row counter. A catalogue entry is never edited
+in place — a change is a new `(catalogue_id, version)` row, and the old one stays exactly as it was
+because an approval granted against it must keep meaning what it meant. A second `row_version`
+would be a concurrency mechanism on a row that structurally cannot be updated.
+
+Every other table in this document carries `version`, including the append-only ones (`message`,
+`consent`, `audit_event`) where the value stays `1` for the life of the row — the runtime principal
+holds no `UPDATE` grant on `audit_event`, so that constancy is enforced by the database rather than
+asserted by convention. **No further exemption exists**, and adding one requires naming it here;
+`tests/concurrency/test_optimistic.py` fails until it is.
 
 **Soft delete — no entity in the scaffold uses it.** The convention is: a row requiring soft deletion
 carries `deleted_at`, excluded by a global query filter and by every published view. **No table below
@@ -43,6 +55,33 @@ Every durable identifier is a UUID. Every timestamp is `timestamptz` stored in U
 Every tenant-scoped table carries `tenant_id` as a non-nullable column and every repository applies it
 — there is no query path that omits it. Money, counters and free text are out of scope for the
 scaffold.
+
+---
+
+## Sample flows add no entity
+
+*Added 2026-09-16.* The scaffold's acceptance flows (spec `FR-DEMO-001`–`FR-DEMO-019`,
+[contracts/sample-flows.md](./contracts/sample-flows.md)) introduce **no table, no column and no
+enum**. They reuse what is already here:
+
+| Flow step | Entity it uses |
+|---|---|
+| The record a customer sample flow creates | `chat_session` + `work_item` |
+| The inert operation it proposes | `operation`, bound to a `governance_record` reference fixture |
+| The message announcing the state change | `outbox_message`, committed in the same transaction |
+| The workload leg's atomic claim | `work_item.claimed_at` — idempotency boundary 1 |
+| The external-effect guard | `idempotency_record` — idempotency boundary 2 |
+| The outcome the client reads back | `work_item.outcome` + `operation.verification` |
+| What the flow leaves behind | `audit_event` |
+| What the staff read seam reads | `vw_*_v1`, never a base table |
+
+**This is deliberate and is the point.** A sample flow that needed its own schema would be proving a
+fixture rather than the platform. If a future flow appears to need a new entity, that is a signal the
+flow is drifting into product behaviour, not that the model is missing something.
+
+Approval and consent remain modelled below in full. The scaffold does not write to `approval` or
+`consent` (`FR-DEMO-016`); the tables, their constraints and their rules are unchanged, because the
+deferral is of a demonstration rather than of a design (`FR-DEMO-017`).
 
 ---
 
@@ -104,6 +143,32 @@ retention; audit is unaffected (spec FR-AUDIT-004).
 
 ---
 
+## Session step
+
+One entry in the progress trail a client renders while work is in flight. Owned by the Session
+context.
+
+| Field | Type | Notes |
+|---|---|---|
+| `step_id` | uuid, PK | |
+| `session_id` | uuid, FK, not null | |
+| `tenant_id` | uuid, not null | |
+| `kind` | text, not null | A machine-readable step kind, for the client to localise |
+| `summary` | text, not null | A short, client-safe description |
+| `created_at`, `updated_at` | timestamptz | |
+
+**Added at Stage 7, and why.** [contracts/read-views.md](./contracts/read-views.md) publishes
+`vw_session_step_v1` and the monolith's `SessionStepRow` reads it, but this document named no table
+behind it. Recorded here rather than resolved by dropping the view, which would have left a
+published contract with nothing underneath it.
+
+**Rules**
+- **Carries no authority field** — no treatment, no verdict, no target. A step says *something is
+  happening*; it never says *this was allowed*.
+- Follows chat-content retention: a step trail describes a conversation and expires with it.
+
+---
+
 ## Feedback
 
 A per-message thumbs signal. Owned by the Session context.
@@ -136,7 +201,7 @@ updates the existing row rather than inserting a second. Withdrawal deletes the 
 |---|---|---|
 | `work_item_id` | uuid, PK | |
 | `tenant_id` | uuid, FK, not null | **Immutable** |
-| `session_id` | uuid, FK, unique, not null | 1:1 with session |
+| `session_id` | uuid, unique, not null | 1:1 with session. **No FK** — see below |
 | `requested_by_oid` | uuid, not null | **Immutable** |
 | `case_reference` | text, null | **Immutable once set** |
 | `governed_action` | text, null | Catalogue id. **Immutable once set** |
@@ -148,6 +213,16 @@ updates the existing row rather than inserting a second. Withdrawal deletes the 
 | `claimed_by` | text, null | Executing principal |
 | `outcome` | jsonb, null | Result plus verification outcome |
 | `created_at`, `updated_at` | timestamptz | |
+
+**`session_id` carries no foreign key, and that is a decision.** The work item follows *audit*
+retention — seven years — while its session follows *chat* retention at ninety days from the
+terminal state. A foreign key forces them to share one window: `RESTRICT` makes the ninety-day
+sweep impossible, and `CASCADE` or `SET NULL` destroys the authority record or its identity along
+with the conversation. Expiring a conversation MUST NOT take the record of what was authorized in
+it (spec FR-AUDIT-004). The `unique` constraint still enforces the 1:1. This is the same reasoning
+as `audit_event.work_item_id`, and the same conclusion: a reference that can cascade is a reference
+that can delete the evidence. Found by `tests/retention/test_retention_classes.py`, which could not
+delete an expired session while the work item referenced it.
 
 **Immutability is enforced at the database permission boundary** — a trigger or column-level grant, not
 application convention (constitution Principle III, spec FR-EXEC-008). The six immutable fields above are

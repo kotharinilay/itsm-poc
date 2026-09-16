@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 from ragcore.application.ports import (
     ApprovalRepositoryPort,
     AuditSinkPort,
@@ -36,6 +38,16 @@ from ragcore.application.ports import (
 )
 from ragcore.config.settings import Settings, get_settings
 from ragcore.infrastructure.clock import SystemClock
+from ragcore.persistence.engine import create_engine, create_session_factory
+from ragcore.persistence.repositories import (
+    ApprovalRepository,
+    AuditSink,
+    ConsentRepository,
+    OperationCatalogue,
+    Outbox,
+    TenantRegistry,
+    WorkItemRepository,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,25 +61,30 @@ class Container:
         settings: The validated configuration. The only place any component sees it.
         clock: The system clock. The one adapter that exists in the scaffold, because it needs no
             infrastructure — and because the alternative is ``datetime.now`` scattered around.
-        tenant_registry: Registry state for admission. ``None`` until Stage 7.
-        work_items: Durable authority records. ``None`` until Stage 7.
-        approvals: Staff verdicts. ``None`` until Stage 7.
-        consents: End-user consents. ``None`` until Stage 7.
-        catalogue: The operation catalogue and per-organisation entitlement. ``None`` until
-            Stage 7 — and while it is ``None`` no operation resolves, which means no operation
-            executes. Failing closed by construction.
+        engine: The one PostgreSQL engine. Constructed here and disposed by the lifespan that owns
+            it, because a pool nobody closes is a file-descriptor leak that only appears under
+            load.
+        tenant_registry: Registry state for admission. **Stage 7 — bound.**
+        work_items: Durable authority records. **Stage 7 — bound.**
+        approvals: Staff verdicts. **Stage 7 — bound.**
+        consents: End-user consents. **Stage 7 — bound.**
+        catalogue: The operation catalogue and per-organisation entitlement. **Stage 7 — bound**,
+            and it resolves nothing for an organisation with no entitlement row, so the platform
+            still fails closed.
+        outbox: The transactional outbox. **Stage 7 — bound.** Publication is Stage 8; durability
+            is here, and the two are separate on purpose.
+        audit: Durable audit records. **Stage 7 — bound.**
         retrieval: Grounding evidence. ``None`` until the index exists.
         model: Model access through the AI Gateway. ``None`` until Stage 9.
         execution: Governed capability invocation. ``None`` until Stage 9 — so the scaffold
             cannot perform an ITSM operation even if something reached the execution node.
-        outbox: The transactional outbox. ``None`` until Stage 8.
         notifications: Realtime delivery. ``None`` until Stage 8.
-        audit: Durable audit records. ``None`` until Stage 7.
     """
 
     settings: Settings
     clock: ClockPort
 
+    engine: AsyncEngine | None = None
     tenant_registry: TenantRegistryPort | None = None
     work_items: WorkItemRepositoryPort | None = None
     approvals: ApprovalRepositoryPort | None = None
@@ -96,7 +113,30 @@ def build_container(settings: Settings | None = None) -> Container:
     Returns:
         The container, with every adapter this stage has.
     """
+    resolved = settings if settings is not None else get_settings()
+
+    # The engine is constructed, not connected. `create_async_engine` opens nothing until the
+    # first query, so building a container is still a pure configuration step — which is what
+    # keeps a container constructible in a test that never touches a database.
+    engine = create_engine(resolved.database)
+    sessions = create_session_factory(engine)
+
     return Container(
-        settings=settings if settings is not None else get_settings(),
+        settings=resolved,
         clock=SystemClock(),
+        engine=engine,
+        # Every repository takes the same session factory and holds no state of its own. They are
+        # separate classes rather than one facade because a generic repository would give every
+        # aggregate a `get(id)` with no tenant in it.
+        tenant_registry=TenantRegistry(sessions),
+        work_items=WorkItemRepository(sessions),
+        approvals=ApprovalRepository(sessions),
+        consents=ConsentRepository(sessions),
+        catalogue=OperationCatalogue(sessions),
+        outbox=Outbox(sessions),
+        audit=AuditSink(sessions),
+        # Still `None`, and still honestly so: retrieval has no index, the model has no gateway,
+        # execution has no capability to invoke and notifications have no transport. A default
+        # that returned an empty list or answered `AUTO` would let the platform appear to work
+        # while no boundary was real.
     )

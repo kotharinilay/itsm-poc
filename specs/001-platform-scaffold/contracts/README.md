@@ -69,12 +69,29 @@ pagination always has a deterministic order.
 2. The realtime channel carries no decision. Every consequential decision arrives as an authenticated
    request on one of the APIs above.
 3. The .NET monolith exposes **no** state-changing endpoint. Every `views` route is a read.
-4. Neither deployable calls the other. There is no internal service-to-service contract between them.
+4. **Neither deployable reaches the other directly, and no internal service-to-service contract
+   exists between them.** *Clarified 2026-09-16.* Service-to-service interaction takes two permitted
+   forms, and neither is a direct route:
+   - **Asynchronous** — the two sides meet at Service Bus and at the published views. No application
+     dependency exists in either direction.
+   - **Synchronous** — a service reaches another through the **workload audience**, app-only, and the
+     call routes **through APIM** like any other. APIM is the trust boundary and the single place
+     identity is derived.
+
+   A direct route — pod to pod, container to container, or by any internal address that bypasses the
+   gateway — MUST NOT exist. The scaffold proves this by attempting one and observing it fail,
+   including a request carrying a well-formed but self-supplied gateway header contract, which is the
+   shape a real bypass takes (spec `FR-DEMO-004a`, `SC-DEMO-003a`, `SC-DEMO-003b`).
+5. **Every audience emits its own OpenAPI document from the running service.** A merged document is
+   prohibited: it would let a customer-facing client discover the staff and workload surfaces. CI
+   publishes versioned artifacts and contract tests validate the emitted documents rather than
+   hand-written copies (spec `FR-DEMO-013`).
 
 ## Documents
 
 | File | Contract |
 |---|---|
+| [sample-flows.md](./sample-flows.md) | The scaffold's inert acceptance flows, and OpenAPI emission |
 | [customer-api.md](./customer-api.md) | Customer audience — RagCore and .NET |
 | [staff-api.md](./staff-api.md) | Staff audience — RagCore and .NET |
 | [workload-api.md](./workload-api.md) | Workload audience |

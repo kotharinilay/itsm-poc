@@ -120,3 +120,23 @@ class VerificationOutcome(Enum):
 
     CONTRADICTED = "contradicted"
     """A server-side read disagreed with the claim. Treated as a failure."""
+
+
+class RiskTier(Enum):
+    """How much damage an operation could do if it went wrong.
+
+    **The scaffold registers non-destructive tiers only.** The destructive taxonomy is an open
+    ADR-0004 item, and a tier that named destruction before that taxonomy existed would be a
+    label with no agreed meaning attached to it. The two members below are the ones the catalogue
+    may hold today; a third arrives with the taxonomy, not before it.
+
+    Distinct from :class:`ExecutionTreatment` on purpose. Risk describes the *operation*;
+    treatment describes *how a human is involved*. Collapsing them would mean a catalogue edit
+    that reclassified risk silently changed who has to approve.
+    """
+
+    INFORMATIONAL = "informational"
+    """Reads state and changes nothing. A failed call leaves the external system as it was."""
+
+    LOW_IMPACT = "low_impact"
+    """Changes state reversibly, within the requester's own account or device."""

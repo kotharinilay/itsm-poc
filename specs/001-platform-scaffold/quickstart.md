@@ -42,6 +42,11 @@ cd ../desktop && npm run start    # Electron host
 
 ## Validation scenarios
 
+**Scaffold acceptance vs platform behaviour** *(2026-09-16)*. V2a, V2b and V2c are the scaffold's
+acceptance flows and must pass through the deployed edge. **V3, V4 and V7 describe approval, consent
+and durable suspension — platform behaviour deferred past the scaffold** (spec `FR-DEMO-016`). They
+remain here because the behaviour remains specified; they are not gates on scaffold completion.
+
 Each proves a specific claim. Run them in order — later ones depend on earlier state.
 
 ### V1 — A session exists and streams (SC-SESS-001, SC-SESS-002)
@@ -58,6 +63,50 @@ Ask for something requiring an action.
 **Passes when**: the request is escalated for human resolution, you are told plainly a human will take
 it, context is preserved, and nothing is fabricated. **With no use case defined this is the expected
 path for every action-requiring request** — it is the correct result, not a failure.
+
+### V2a — The asynchronous round trip, through the real edge (SC-DEMO-001, SC-DEMO-005, SC-DEMO-008…010)
+
+*Added 2026-09-16. Flow **B1** — see [contracts/sample-flows.md](./contracts/sample-flows.md).*
+
+**Must be driven through Front Door → WAF → APIM.** A run against a deployable directly does not
+satisfy `FR-DEMO-019`, however green it looks.
+
+1. `POST /api/customer/v1/sample-flows/round-trip` as a signed-in end user. Note the returned
+   correlation identifier.
+2. Confirm the state row and its outbox row committed **together** — then repeat with the dispatcher
+   stopped and confirm the message is still there after a restart.
+3. Confirm the dispatcher published, the workload leg claimed atomically, and the outcome persisted.
+4. Re-deliver the same bus message. Expect **exactly one** effect, not two.
+5. `GET .../round-trip/{id}` and confirm the client refresh returns the persisted outcome.
+6. Repeat the whole flow with **no client connected**. Expect an identical outcome.
+7. Search telemetry for the correlation identifier from step 1. Expect one journey spanning both
+   deployables and the asynchronous hop.
+
+**Expected**: one effect, one correlation identifier end to end, and no external system touched.
+
+### V2b — The .NET read seam (SC-DEMO-006, SC-DEMO-007)
+
+*Flow **B2**.*
+
+1. `GET /api/staff/v1/sample-flows/records` as staff, through APIM, targeting one organisation.
+2. Confirm every row belongs to that organisation and none to another.
+3. Attempt the same read against a **base table** with the monolith's database principal.
+
+**Expected**: the view read succeeds; the base-table read is refused by PostgreSQL, not by application
+code.
+
+### V2c — The service boundary, and the bypass that must fail (SC-DEMO-003a, SC-DEMO-003b)
+
+*Flow **B3**. The negative half is the point.*
+
+1. `POST /api/customer/v1/sample-flows/service-hop` through APIM. Confirm the callee reports an
+   app-only caller carrying no customer-organisation authority.
+2. Send the same request **directly to the container**, bypassing the edge and gateway.
+3. Send it again directly, this time carrying a **well-formed, self-supplied gateway header
+   contract** — the shape a real bypass takes.
+
+**Expected**: step 1 succeeds; steps 2 and 3 both fail. A pass on step 3 means the deployable is
+trusting a header it should only ever accept from APIM, which is the whole vulnerability.
 
 ### V3 — Staff approval survives the client (SC-EXEC-001)
 

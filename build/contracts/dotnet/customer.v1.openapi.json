@@ -1,0 +1,108 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Synthia.Api | customer",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/customer/v1/views/sessions": {
+      "get": {
+        "tags": [
+          "customer-views"
+        ],
+        "summary": "Lists the caller\u0027s own sessions. Cursor paged.",
+        "operationId": "CustomerListSessions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer/v1/views/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "customer-views"
+        ],
+        "summary": "Reads one of the caller\u0027s own sessions.",
+        "operationId": "CustomerGetSession",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer/v1/views/sessions/{sessionId}/messages": {
+      "get": {
+        "tags": [
+          "customer-views"
+        ],
+        "summary": "Lists a session\u0027s conversation history. Cursor paged.",
+        "operationId": "CustomerListSessionMessages",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer/v1/views/sessions/{sessionId}/steps": {
+      "get": {
+        "tags": [
+          "customer-views"
+        ],
+        "summary": "Reads a session\u0027s step trail, oldest first.",
+        "operationId": "CustomerListSessionSteps",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "customer-views"
+    }
+  ]
+}

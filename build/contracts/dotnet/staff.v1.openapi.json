@@ -1,0 +1,128 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Synthia.Api | staff",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/staff/v1/views/sessions/live": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Lists live sessions. Cursor paged.",
+        "operationId": "StaffListLiveSessions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Reads one session and its step trail.",
+        "operationId": "StaffGetSession",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/approvals/queue": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Lists pending approvals with their fully disclosed commands. Cursor paged.",
+        "operationId": "StaffListApprovalQueue",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/approvals/unexecuted": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Lists work approved but never executed. Cursor paged.",
+        "operationId": "StaffListUnexecutedApprovals",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/audit": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Searches audit records. Cursor paged.",
+        "operationId": "StaffSearchAudit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/dashboard/platform": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Reads the platform rollup. Aggregate only; no per-organisation breakdown.",
+        "operationId": "StaffGetPlatformDashboard",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/staff/v1/views/tenants": {
+      "get": {
+        "tags": [
+          "staff-views"
+        ],
+        "summary": "Lists organisations. Cursor paged.",
+        "operationId": "StaffListTenants",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "staff-views"
+    }
+  ]
+}

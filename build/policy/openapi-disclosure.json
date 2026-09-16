@@ -1,0 +1,84 @@
+{
+  "$comment": [
+    "WHAT A PUBLISHED OPENAPI DOCUMENT MAY NEVER CARRY. One registry, two enforcers.",
+    "",
+    "Read by ragcore/src/ragcore/api/openapi.py and by",
+    "dotnet/tests/Synthia.ContractTests/OpenApiEmissionTests.cs. Both stacks publish contracts, so",
+    "both apply the same list — two hand-maintained copies drift, and the drift is invisible until",
+    "the weaker of the two is the one that mattered.",
+    "",
+    "IT LIVES IN A DATA FILE FOR A SECOND REASON. These terms are the shapes a credential takes, so",
+    "a list of them written as string literals in application source is indistinguishable, to a",
+    "secret scanner, from the credentials it is describing. tests/security/test_azure_identity.py",
+    "found exactly that and was right to: a policy list and a leaked key look the same from the",
+    "outside. Keeping the vocabulary as data rather than as code resolves it without weakening",
+    "either guard.",
+    "",
+    "MATCHED AGAINST NAMES, NEVER DESCRIPTIONS. A document explaining that an operation carries no",
+    "credential is correct documentation; a field called apiKey is a defect whatever it holds today.",
+    "A scanner that flagged the prose would get the prose deleted, and then nobody remembers why."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "secretTerms": {
+    "$comment": "Substring match against a normalised name. 'api_key', 'apiKey' and 'api-key' all reduce to 'apikey'.",
+    "terms": [
+      "secret",
+      "password",
+      "passphrase",
+      "credential",
+      "apikey",
+      "accesskey",
+      "sharedaccesskey",
+      "sastoken",
+      "connectionstring",
+      "privatekey",
+      "bearertoken"
+    ]
+  },
+
+  "internalTerms": {
+    "$comment": [
+      "Exact match against a normalised name, not substring: 'roles' must not be a parameter, but a",
+      "schema called 'AcceptedRolesSummary' is a legitimate read model and a substring rule would",
+      "reject it.",
+      "",
+      "Two different things are in this list. The first group is implementation detail — a client",
+      "that can see it starts depending on it, and then the detail is a contract nobody agreed to.",
+      "The second group is authority the platform DERIVES and never accepts: publishing a parameter",
+      "named for one advertises exactly what the platform refuses, and a client that sent it would",
+      "get a silent no-op rather than an error, which is the worst of both."
+    ],
+    "implementationDetail": [
+      "sqlalchemy",
+      "alembic",
+      "checkpoint",
+      "langgraph",
+      "outbox",
+      "dispatcher",
+      "deadletter",
+      "internal",
+      "debug",
+      "stacktrace",
+      "traceback",
+      "connectionpool"
+    ],
+    "derivedAuthority": [
+      "tenantid",
+      "roles",
+      "audience"
+    ]
+  },
+
+  "structuralKeys": {
+    "$comment": "Keys of the OpenAPI format itself, skipped. 'security' and 'securitySchemes' describe HOW to authenticate and never with what.",
+    "keys": [
+      "security",
+      "securitySchemes",
+      "description",
+      "summary",
+      "title"
+    ]
+  }
+}

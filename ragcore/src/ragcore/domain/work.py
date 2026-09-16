@@ -154,3 +154,34 @@ class InterruptKind(Enum):
     CLARIFICATION = "clarification"
     CONSENT = "consent"
     APPROVAL = "approval"
+
+
+class SenderKind(Enum):
+    """Who authored a message (``data-model.md`` §Message).
+
+    Three members, not two. ``STAFF`` exists because a staff member may speak into a session they
+    have taken over — and its presence in the conversation **never confers requester authority**
+    (spec FR-SURF-009). A boolean ``is_agent`` would have made the third case unrepresentable and
+    the rule unstateable.
+    """
+
+    END_USER = "end_user"
+    """The end user who owns the session."""
+
+    AGENT = "agent"
+    """The platform. Carries no ``sender_oid``, because no principal authored it."""
+
+    STAFF = "staff"
+    """A staff member, valid only while the session is ``staff_controlled``."""
+
+
+class FeedbackSignal(Enum):
+    """A per-message thumbs signal (spec FR-SESS-009).
+
+    **Never an input to a decision.** Governance, retrieval and execution MUST NOT read it
+    (spec FR-SESS-011a, ``data-model.md`` §Feedback). It is a quality signal, and the reason it
+    lives here rather than beside the treatment enums is to keep that separation legible.
+    """
+
+    POSITIVE = "positive"
+    NEGATIVE = "negative"

@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from ragcore.application.ports import CatalogueEntry, ExecutionResult, RetrievedChunk
+from ragcore.domain.audit import ActorChain, AuditFacts
 from ragcore.domain.decisions import EndUserConsent, StaffVerdict
 from ragcore.domain.envelopes import NotificationEnvelope, TriggerEnvelope
 from ragcore.domain.governance import CapabilityKind, ExecutionTreatment, VerificationOutcome
@@ -312,7 +313,7 @@ class RecordedAuditEvent:
     """One captured audit event."""
 
     correlation_id: CorrelationId
-    detail: object
+    detail: AuditFacts
 
 
 class FakeAudit:
@@ -326,8 +327,8 @@ class FakeAudit:
         tenant: TenantContext,
         event_id: AuditEventId,
         correlation_id: CorrelationId,
-        actor_chain: object,
-        detail: object,
+        actor_chain: ActorChain,
+        detail: AuditFacts,
     ) -> None:
         """Append one audit event."""
         del tenant, event_id, actor_chain

@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Synthia Platform Engineering Scaffold
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-15
+**Created**: 2026-09-15 | **Last validated**: 2026-09-16 (contradiction review of the revised scope)
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -97,6 +97,78 @@
    scenarios were unrunnable as written. Resolved by adding inert, labelled, production-excluded
    reference operations, one per execution treatment. The Independent Test lines for US2 and US3 now
    name the fixture that drives them, making them executable.
+
+**Iteration 6 — scaffold scope correction (2026-09-16):**
+
+10. *The scaffold demonstration requirement was corrected, and only that.* The scaffold no longer
+    has to implement business approval semantics or a real approval/consent workflow. It proves
+    platform infrastructure instead, through thirteen inert sample flows: the three API audiences,
+    service-to-service, persistence, transactional outbox, publish/consume, notification,
+    correlation propagation, organisation propagation, managed-identity authentication, secret
+    binding and contract emission. Added as FR-DEMO-001 through FR-DEMO-018, User Story 6, and
+    SC-DEMO-001 through SC-DEMO-014. The scaffold is complete when the SC-DEMO group is met.
+
+11. *Nothing architectural was removed, and two requirements now say so normatively.* The identity
+    requirements, tenant isolation, the authorization model, the governance architecture, the four
+    execution treatments, PostgreSQL authority, ServiceNow as system of record, the derived retrieval
+    index, transient cache, model egress, managed identity, secret store, contract emission, the
+    gateway and edge, the container platform, the message transport, the notification channel and
+    the three API audiences are all unchanged. FR-DEMO-017 states that the deferral is of a
+    demonstration rather than of a design; FR-DEMO-018 states that an unexercised gate fails closed,
+    so "not yet built" can never be implemented as "allowed by default". Without that second rule
+    the correction would have been a silent permission grant.
+
+12. *Item 9 above resolved differently, and better.* Iteration 5 recorded a contradiction between the
+    Overview's claim to demonstrate "every load-bearing behaviour end to end" and an empty catalogue,
+    and resolved it by adding reference operations to make the approval and consent stories runnable.
+    That claim is now withdrawn: the Overview says the scaffold proves load-bearing *infrastructure*,
+    and the approval and consent stories carry an explicit scaffold-scope banner marking them
+    platform behaviour rather than scaffold acceptance. The reference operations remain and are still
+    required — the sample flows need something inert to act upon (FR-SCOPE-004, amended).
+
+13. *Two requirements were amended rather than replaced, each carrying its own amendment note.*
+    FR-SCOPE-004 no longer requires the consent and approval paths to be demonstrable end to end;
+    SC-SCOPE-002 no longer requires each treatment to be demonstrated through its workflow, and now
+    measures what remains verifiable — that the catalogue carries all four and that classification is
+    deterministic. Both notes name the date and the superseding requirement, so a reader who knew the
+    old wording can see what changed and why.
+
+**Iteration 7 — contradiction review of the revised scope (2026-09-16):**
+
+14. *One genuine contradiction found and closed.* FR-DEMO-004 as first written required "a
+    service-to-service flow between the two deployables" — a direct route, which `plan.md` forbids
+    ("§13.4's no-direct-service-to-service rule holds between the two deployables"; "they meet only
+    at PostgreSQL (versioned views) and Service Bus (opaque triggers)"). The traceability table
+    contradicted the requirement text in the same document, which is how the defect surfaced.
+    Resolved by clarification: service-to-service takes two permitted forms — asynchronous, over the
+    message transport and published views; and synchronous, through the workload audience — and
+    **neither is a direct call**. FR-DEMO-004 rewritten to require both forms; FR-DEMO-004a added to
+    prohibit any route that bypasses the gateway; SC-DEMO-003a makes the prohibition measurable by
+    requiring that a bypass be *attempted and observed to fail*, not merely unused.
+
+15. *Edge and gateway traversal is now acceptance, not configuration.* FR-DEMO-019 requires every
+    sample flow to be driven through the deployed public edge, web application firewall, API gateway
+    and container platform. SC-DEMO-001 restated accordingly, and SC-DEMO-003b added: a request
+    presented directly to a deployable must fail, **including one carrying a well-formed but
+    self-supplied gateway header contract** — the shape a real bypass takes, and the one a naive
+    negative test misses.
+
+16. *The cost of that decision is recorded as a dependency rather than left to be discovered.* A
+    provisioned platform environment including the edge is now the longest-lead dependency in the
+    scaffold: the thirteen flows can be written and can pass against the deployables, but none can be
+    *accepted* until the environment exists. Stated in Dependencies with the reason it tends to be
+    found late.
+
+**Known and accepted exception — Content Quality item 1:**
+
+- *"No implementation details" is knowingly relaxed in one place.* The FR-DEMO preamble carries a
+  traceability table naming the technology each flow resolves to (PostgreSQL, Service Bus, SignalR,
+  Key Vault, Entra managed identity, OpenAPI). The requirements themselves stay in capability
+  language — "the authoritative durable store", "the message transport", "the secret store" — and the
+  table exists solely so a reviewer can check the scaffold against the component list without
+  inferring the mapping. Recorded as a deliberate exception rather than ticked silently. Note that
+  the spec already named ServiceNow, PostgreSQL and the transient cache before this change, as
+  external-system constraints rather than design choices.
 
 **Outstanding:**
 

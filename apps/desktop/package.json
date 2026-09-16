@@ -6,10 +6,13 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
+    "build:renderer": "npm --prefix ../web run build:libs && npm --prefix ../web exec ng build desktop-renderer",
     "build": "npm run build:main && npm run build:preload",
     "build:main": "tsc -p tsconfig.json",
     "build:preload": "esbuild src/preload/bridge.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/preload/bridge.js",
     "stage:renderer": "node scripts/stage-renderer.mjs",
+    "dist:win": "npm run build:renderer && npm run build && npm run stage:renderer && electron-builder --win nsis",
+    "pack:dir": "npm run build:renderer && npm run build && npm run stage:renderer && electron-builder --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.preload.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,10 +20,33 @@
     "lint": "eslint .",
     "start": "npm run build && npm run stage:renderer && electron ."
   },
+  "build": {
+    "appId": "com.synthia.desktop",
+    "productName": "Synthia Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^22.10.2",
     "electron": "^44.4.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "0.28.2",
     "eslint": "^9.39.5",
     "typescript": "~5.8.3",

@@ -36,6 +36,11 @@ from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.graph.state import CompiledStateGraph
+
+    from ragcore.graph.context import RunContext
+    from ragcore.graph.dependencies import GraphDependencies
+    from ragcore.graph.state import AgentState
 
 CHECKPOINT_SCHEMA: Final = "langgraph"
 """The schema the checkpointer owns outright. Excluded from Alembic autogenerate."""
@@ -121,3 +126,33 @@ async def provision_checkpoint_schema(dsn: str) -> None:
 
     async with AsyncPostgresSaver.from_conn_string(checkpointer_dsn(dsn)) as saver:
         await saver.setup()
+
+
+@asynccontextmanager
+async def durable_graph(
+    dsn: str, deps: GraphDependencies
+) -> AsyncIterator[CompiledStateGraph[AgentState, RunContext, AgentState, AgentState]]:
+    """Compile the graph against the one durable checkpointer, for the lifetime of the context.
+
+    **This is the only place a production graph is compiled**, and the reason it lives here rather
+    than in :mod:`ragcore.graph.builder` is that the builder must stay ignorant of savers: a test
+    compiles the same shape against an in-memory saver, and ``builder.py`` naming one would put an
+    in-memory saver on the import path of every production module that builds a graph.
+
+    Compiling with a checkpointer is what makes a suspension survive a restart. The three interrupts
+    persist indefinitely (spec FR-INTR-001, FR-SESS-016), and "indefinitely" across a deployment is
+    a property of the store rather than of the graph — an in-memory saver would lose every awaiting
+    conversation on the next scale-to-zero, silently and without an error anywhere.
+
+    Args:
+        dsn: The base platform connection string. Pinned to the checkpoint schema by
+            :func:`checkpointer_dsn`.
+        deps: The collaborators every node is bound to.
+
+    Yields:
+        The compiled graph, backed by PostgreSQL.
+    """
+    from ragcore.graph.builder import build_graph
+
+    async with durable_checkpointer(dsn) as saver:
+        yield build_graph(deps).compile(checkpointer=saver)

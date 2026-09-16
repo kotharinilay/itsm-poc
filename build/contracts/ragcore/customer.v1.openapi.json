@@ -1,0 +1,594 @@
+{
+  "components": {
+    "schemas": {
+      "AnswerRequest": {
+        "additionalProperties": false,
+        "description": "An answer to a pending clarifying question.\n\nAnswerable only by the end user of the session (spec FR-INTR-004). Who that is comes from\ntrusted identity, so it is not a field here.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "AnswerRequest",
+        "type": "object"
+      },
+      "ConsentRequest": {
+        "additionalProperties": false,
+        "description": "A consent decision — **the only way consent is ever recorded**.\n\nOne field, an enum of two. Deliberately not a boolean: ``consent(True)`` says nothing at a\ncall site, and the constitution prohibits a boolean flag that hides behaviour.",
+        "properties": {
+          "verdict": {
+            "$ref": "#/components/schemas/ConsentVerdict"
+          }
+        },
+        "required": [
+          "verdict"
+        ],
+        "title": "ConsentRequest",
+        "type": "object"
+      },
+      "ConsentVerdict": {
+        "description": "An end user's decision on an operation affecting their own account or device.\n\nTwo members, mirroring ``data-model.md`` ``consent.verdict`` and the two consent trigger kinds.\nA boolean would collapse this to ``True``/``False`` at every call site, which the constitution\nprohibits as \"a boolean parameter flag that hides behaviour\" (Principle VI).",
+        "enum": [
+          "granted",
+          "refused"
+        ],
+        "title": "ConsentVerdict",
+        "type": "string"
+      },
+      "ExecutionResultRequest": {
+        "additionalProperties": false,
+        "description": "An execution result posted by the desktop client.\n\n**A client-reported result is a claim, not proof** (ADR-0004). It becomes a\n``client_attested`` verification outcome and MUST NOT be reported to a user or written to the\nsystem of record as confirmed resolution.",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "exitStatus": {
+            "title": "Exitstatus",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exitStatus"
+        ],
+        "title": "ExecutionResultRequest",
+        "type": "object"
+      },
+      "FeedbackRequest": {
+        "additionalProperties": false,
+        "description": "A quality signal against one agent-authored message.\n\n**Feedback never influences authorization, governance treatment, retrieval scope or\nexecution** (spec FR-SESS-013). It is read by reporting and by nothing else.",
+        "properties": {
+          "signal": {
+            "$ref": "#/components/schemas/FeedbackSignal"
+          }
+        },
+        "required": [
+          "signal"
+        ],
+        "title": "FeedbackRequest",
+        "type": "object"
+      },
+      "FeedbackSignal": {
+        "description": "A thumbs signal.",
+        "enum": [
+          "positive",
+          "negative"
+        ],
+        "title": "FeedbackSignal",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "StartSessionResponse": {
+        "additionalProperties": false,
+        "description": "The identifier of a newly started session.",
+        "properties": {
+          "sessionId": {
+            "format": "uuid",
+            "title": "Sessionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "title": "StartSessionResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The customer audience. Generated from the running service; not hand-maintained. Identity is derived at the gateway and no operation accepts a tenant, role or audience parameter.",
+    "title": "Synthia Customer API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/customer/v1/messages/{messageId}/feedback": {
+      "delete": {
+        "description": "Withdraw a previously recorded signal.",
+        "operationId": "withdraw_feedback_api_customer_v1_messages__messageId__feedback_delete",
+        "parameters": [
+          {
+            "description": "An agent-authored message.",
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "description": "An agent-authored message.",
+              "format": "uuid",
+              "title": "Messageid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Withdraw Feedback Api Customer V1 Messages  Messageid  Feedback Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Withdraw Feedback",
+        "tags": [
+          "customer"
+        ]
+      },
+      "put": {
+        "description": "Record or revise a thumbs signal.\n\n``PUT`` because feedback is **revisable**: repeating it replaces the previous signal rather\nthan creating a second, which is what the unique constraint on ``(message_id, given_by_oid)``\nenforces underneath.",
+        "operationId": "record_feedback_api_customer_v1_messages__messageId__feedback_put",
+        "parameters": [
+          {
+            "description": "An agent-authored message.",
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "description": "An agent-authored message.",
+              "format": "uuid",
+              "title": "Messageid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Feedback Api Customer V1 Messages  Messageid  Feedback Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Record Feedback",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/realtime/negotiate": {
+      "post": {
+        "description": "Obtain a realtime connection token.\n\n**Group membership is derived from trusted identity, never requested by the client**\n(contracts/notifications.md). There is no request body here, and that absence is the control:\na client that could name its group could name somebody else's.",
+        "operationId": "negotiate_realtime_api_customer_v1_realtime_negotiate_post",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Negotiate Realtime Api Customer V1 Realtime Negotiate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Negotiate Realtime",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sessions": {
+      "post": {
+        "description": "Start a chat session.\n\nA session is started here; a **work record is not**. One is committed only once the user has\narticulated a genuine request (spec FR-SESS-003), which is a later transition — creating one\nper session would put an authority record behind every \"hello\".",
+        "operationId": "start_session_api_customer_v1_sessions_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start Session",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sessions/{sessionId}/answers": {
+      "post": {
+        "description": "Answer a pending clarifying question.",
+        "operationId": "answer_clarification_api_customer_v1_sessions__sessionId__answers_post",
+        "parameters": [
+          {
+            "description": "The chat session.",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "description": "The chat session.",
+              "format": "uuid",
+              "title": "Sessionid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Answer Clarification Api Customer V1 Sessions  Sessionid  Answers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Answer Clarification",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/sessions/{sessionId}/messages": {
+      "post": {
+        "description": "Send a message. **Streams the response** as ``text/event-stream``.\n\nThe stream carries no authority. See :mod:`ragcore.api.customer.streaming`.",
+        "operationId": "send_message_api_customer_v1_sessions__sessionId__messages_post",
+        "parameters": [
+          {
+            "description": "The chat session.",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "description": "The chat session.",
+              "format": "uuid",
+              "title": "Sessionid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Message",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/work/{workItemId}/consent": {
+      "post": {
+        "description": "Grant or refuse consent.\n\nOnly the work item's own ``requested_by_oid`` may consent; anyone else receives 403\n(spec FR-INTR-005). That comparison is against the durable record, made in the application\nlayer — not here, where the work item has not been loaded.\n\nConsent does **not** satisfy a ``STAFF_APPROVAL`` requirement (spec FR-INTR-007), which the\ngate enforces by type: it accepts a\n:class:`~ragcore.domain.decisions.StaffVerdict` on that branch and nothing else.",
+        "operationId": "record_consent_api_customer_v1_work__workItemId__consent_post",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Consent Api Customer V1 Work  Workitemid  Consent Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Record Consent",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/work/{workItemId}/instruction": {
+      "get": {
+        "description": "Fetch the authorized execution instruction. Desktop only.\n\nReturns the work identifier, catalogue id, catalogue version, content hash and parameters;\nthe client verifies all four before executing and aborts on any mismatch (ADR-0004). Never\ndelivered over the realtime channel, and 410 once the validity window has elapsed.\n\n**In the scaffold the catalogue holds only inert reference fixtures, so no real script is\never returned** — and no autonomous ITSM operation is implemented behind this route.",
+        "operationId": "fetch_instruction_api_customer_v1_work__workItemId__instruction_get",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Fetch Instruction Api Customer V1 Work  Workitemid  Instruction Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Fetch Instruction",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/customer/v1/work/{workItemId}/result": {
+      "post": {
+        "description": "Post an execution result and exit status. Desktop only.",
+        "operationId": "record_result_api_customer_v1_work__workItemId__result_post",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Result Api Customer V1 Work  Workitemid  Result Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Record Result",
+        "tags": [
+          "customer"
+        ]
+      }
+    }
+  }
+}

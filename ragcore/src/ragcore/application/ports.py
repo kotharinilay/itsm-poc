@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
+from ragcore.domain.audit import ActorChain, AuditFacts
 from ragcore.domain.decisions import EndUserConsent, StaffVerdict
 from ragcore.domain.envelopes import NotificationEnvelope, TriggerEnvelope
 from ragcore.domain.governance import CapabilityKind, ExecutionTreatment, VerificationOutcome
@@ -29,6 +30,7 @@ from ragcore.domain.identifiers import (
     AuditEventId,
     ConsentId,
     CorrelationId,
+    EntraTenantId,
     IdempotencyKey,
     OperationId,
     OperationIdentity,
@@ -75,7 +77,7 @@ class TenantRegistryPort(Protocol):
     tenant identifier from a client, because its callers never have one.
     """
 
-    async def admit_end_user(self, entra_tenant_id: object) -> TenantContext | None:
+    async def admit_end_user(self, entra_tenant_id: EntraTenantId) -> TenantContext | None:
         """Resolve admission for an end user's validated ``tid``.
 
         Args:
@@ -488,13 +490,18 @@ class AuditSinkPort(Protocol):
         tenant: TenantContext,
         event_id: AuditEventId,
         correlation_id: CorrelationId,
-        actor_chain: object,
-        detail: object,
+        actor_chain: ActorChain,
+        detail: AuditFacts,
     ) -> None:
         """Append one audit event.
 
         Append-only: the store grants no update or delete. Decisions that deny, expire or escalate
         are recorded as durably as decisions that permit.
+
+        ``actor_chain`` and ``detail`` are domain types rather than ``object``. They were the one
+        pair still declared loosely, and the looseness was not free: a sink taking ``object`` cannot
+        state that it needs an execution method, so "every audit record names by what means" became
+        a rule each implementation was trusted to honour.
         """
         ...
 

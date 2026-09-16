@@ -61,27 +61,40 @@ class TestConfigurationFailsFast:
 class TestTheScaffoldBindsNoAdapter:
     """Constitution Principle IX: scaffold honestly; do not invent product."""
 
-    def test_only_the_clock_is_bound(self) -> None:
-        """Every other port is ``None`` until its stage.
+    def test_the_persistence_ports_are_bound(self) -> None:
+        """Stage 7 brings PostgreSQL, so these stop being ``None``.
+
+        Binding them is not the same as inventing product: each is a real adapter over the
+        authoritative store, and none of them answers a question by making one up.
+        """
+        container = build_container(_settings())
+
+        assert container.clock is not None
+        assert container.engine is not None
+        for bound in (
+            container.tenant_registry,
+            container.work_items,
+            container.approvals,
+            container.consents,
+            container.catalogue,
+            container.outbox,
+            container.audit,
+        ):
+            assert bound is not None
+
+    def test_every_port_without_an_adapter_is_still_none(self) -> None:
+        """The rest stay ``None`` until their own stage.
 
         A convenient default — a retrieval port returning an empty list, a catalogue answering
         ``AUTO`` — would let the platform appear to work while no boundary was real.
         """
         container = build_container(_settings())
 
-        assert container.clock is not None
         for unbound in (
-            container.tenant_registry,
-            container.work_items,
-            container.approvals,
-            container.consents,
-            container.catalogue,
             container.retrieval,
             container.model,
             container.execution,
-            container.outbox,
             container.notifications,
-            container.audit,
         ):
             assert unbound is None
 

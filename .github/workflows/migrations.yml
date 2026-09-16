@@ -49,13 +49,19 @@ jobs:
         run: uv sync --all-groups --frozen
 
       # pytest-alembic asserts single head, upgrade from base, models match DDL, and that
-      # EVERY downgrade succeeds. Alembic is initialised at Stage 7 (T082).
-      - name: Migration tests
+      # EVERY downgrade succeeds. The four tests are imported explicitly by
+      # tests/migrations/test_migrations.py, so `--test-alembic` is not passed: it would inject a
+      # second, differently-configured copy of the same four.
+      #
+      # SYNTHIA_TEST_DB_DSN points the suite at the service container above. Without it the
+      # fixtures start their own via Testcontainers, which on a runner that already has one is a
+      # container per run for no benefit.
+      - name: Migration and persistence tests
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/synthia_test
-        run: |
-          if [ -f alembic.ini ]; then
-            uv run pytest --test-alembic -q
-          else
-            echo "::notice::Alembic is initialised at Stage 7 (T082) - no migrations to test yet"
-          fi
+          SYNTHIA_TEST_DB_DSN: postgresql+asyncpg://postgres:postgres@localhost:5432/synthia_test
+        run: uv run pytest -q -m integration
+
+      # The rest of the suite — structural, architectural, unit — needs no database, and running
+      # it here keeps a schema change from passing while breaking something that reads the models.
+      - name: Everything else
+        run: uv run pytest -q -m "not integration"

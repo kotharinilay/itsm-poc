@@ -138,7 +138,22 @@ class TestDependsIsConfinedToTheTransportBoundary:
         Service Locator is prohibited, and this is the structural half of that: a dependency not
         reachable from ``composition.py`` is a dependency nothing should be using.
         """
-        adapters = {"SystemClock"}
+        adapters = {
+            "SystemClock",
+            # Stage 7. Listed individually rather than matched by a naming convention, so adding a
+            # repository is a deliberate line in this set — and constructing one anywhere but the
+            # composition root fails here rather than quietly working.
+            "TenantRegistry",
+            "WorkItemRepository",
+            "SessionRepository",
+            "ApprovalRepository",
+            "ConsentRepository",
+            "OperationRepository",
+            "OperationCatalogue",
+            "IdempotencyStore",
+            "Outbox",
+            "AuditSink",
+        }
         users = {
             str(path.relative_to(SRC)).replace("\\", "/")
             for path in sorted(SRC.rglob("*.py"))

@@ -1,0 +1,330 @@
+{
+  "components": {
+    "schemas": {
+      "ApprovalVerdict": {
+        "description": "What a human decided on an approval request (``data-model.md``, ``approval.verdict``).\n\n**Exactly two members, and that is load-bearing.** This is deliberately NOT\n:class:`ApprovalState`, which is the work item's field and also carries ``pending`` and\n``expired``. Typing a verdict as that enum would let ``record_verdict(EXPIRED)`` type-check —\na system-synthesized verdict, which §17.7 and FR-INTR-008 prohibit outright:\n\n    \"No timeout, no auto-reject, no system-synthesized verdict.\"\n\nExpiry is a work-item transition performed by the expiry sweeper. It is never a recorded human\ndecision, and ``approved_by`` always means a human approved (§17.8).\n\nThere is no ``REJECT_AND_TAKE_OVER`` member either. §17.6 lists it as a staff *action*, but it\nis a rejection plus a session transition to ``staff_controlled`` — two things, recorded\nseparately. A third verdict value would make the takeover invisible to anything reading the\nverdict alone.",
+        "enum": [
+          "approved",
+          "rejected"
+        ],
+        "title": "ApprovalVerdict",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "StaffMessageRequest": {
+        "additionalProperties": false,
+        "description": "A message sent into a taken-over session.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "StaffMessageRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VerdictRequest": {
+        "additionalProperties": false,
+        "description": "A staff decision on one approval.\n\n``verdict`` is :class:`~ragcore.domain.work.ApprovalVerdict` — **two members**. There is no\n``expired`` to send, so a system-synthesized verdict is unrepresentable on this contract\nrather than merely prohibited by it (spec FR-INTR-008).\n\nDeliberately absent: ``decidedBy``, ``roles``, ``tenantId``, ``expiresAt``. The approver is\nthe authenticated caller, the roles are the ones they hold at this moment, the organisation\ncomes from the approval's own work item, and the window is computed server-side as\n``decided_at`` plus fifteen minutes. Every one of those is authority, and none of them is a\nthing a request may assert.",
+        "properties": {
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/ApprovalVerdict"
+          }
+        },
+        "required": [
+          "verdict"
+        ],
+        "title": "VerdictRequest",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The staff audience. Generated from the running service; not hand-maintained. Identity is derived at the gateway and no operation accepts a tenant, role or audience parameter.",
+    "title": "Synthia Staff API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/staff/v1/approvals/{approvalId}/verdict": {
+      "post": {
+        "description": "Approve or reject. Accepts ``technician``.\n\nThree properties this route commits to, all enforced below it rather than here:\n\n* **First valid verdict wins.** A later one is recorded but does not change the outcome\n  (spec FR-INTR-010), which the repository's conditional write decides — two staff opening\n  the same queue item is a race, not an error.\n* **Approval never executes.** On approval the window is set and a trigger is published, and\n  **the request returns before execution runs**. A response reporting success would be\n  reporting something that has not happened.\n* **No approval by timeout.** Nothing anywhere produces a verdict except this route.",
+        "operationId": "record_verdict_api_staff_v1_approvals__approvalId__verdict_post",
+        "parameters": [
+          {
+            "description": "The approval being decided.",
+            "in": "path",
+            "name": "approvalId",
+            "required": true,
+            "schema": {
+              "description": "The approval being decided.",
+              "format": "uuid",
+              "title": "Approvalid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerdictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Verdict Api Staff V1 Approvals  Approvalid  Verdict Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Record Verdict",
+        "tags": [
+          "staff"
+        ]
+      }
+    },
+    "/api/staff/v1/sessions/{sessionId}/messages": {
+      "post": {
+        "description": "Send a message into a taken-over session. Accepts ``technician``.",
+        "operationId": "send_staff_message_api_staff_v1_sessions__sessionId__messages_post",
+        "parameters": [
+          {
+            "description": "The session being operated on.",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "description": "The session being operated on.",
+              "format": "uuid",
+              "title": "Sessionid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Send Staff Message Api Staff V1 Sessions  Sessionid  Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Send Staff Message",
+        "tags": [
+          "staff"
+        ]
+      }
+    },
+    "/api/staff/v1/sessions/{sessionId}/takeover": {
+      "post": {
+        "description": "Transition a session to staff-controlled. Accepts ``technician``.\n\nAn authenticated state transition, not a socket message, and a **single** transition: where\ntwo staff attempt it concurrently one wins and the other is told (spec FR-INTR-013).\n\nIt does **not** transfer requester authority. Consent for that user's own account or device\nstill belongs to the original end user, so a taken-over session does not become a route by\nwhich staff consent on somebody's behalf.",
+        "operationId": "take_over_session_api_staff_v1_sessions__sessionId__takeover_post",
+        "parameters": [
+          {
+            "description": "The session being operated on.",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "description": "The session being operated on.",
+              "format": "uuid",
+              "title": "Sessionid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Take Over Session Api Staff V1 Sessions  Sessionid  Takeover Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Take Over Session",
+        "tags": [
+          "staff"
+        ]
+      }
+    },
+    "/api/staff/v1/work/{workItemId}/cancel": {
+      "post": {
+        "description": "Cancel before execution is claimed. Accepts ``technician``.\n\nPermitted before the claim. After the claim, execution completes and the outcome is recorded\nnormally (spec FR-EXEC-009) — a half-cancelled side effect is worse than a completed one that\nis honestly reported.",
+        "operationId": "cancel_work_api_staff_v1_work__workItemId__cancel_post",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Work Api Staff V1 Work  Workitemid  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cancel Work",
+        "tags": [
+          "staff"
+        ]
+      }
+    }
+  }
+}

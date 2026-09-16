@@ -1,0 +1,35 @@
+"""${message}
+
+Revision ID: ${up_revision}
+Revises: ${down_revision | comma,n}
+Created: ${create_date}
+
+Every revision is reversible. ``downgrade`` is not decoration: ``test_up_down_consistency``
+runs it, and a revision that cannot be undone is a revision that cannot be rolled back at
+three in the morning.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+${imports if imports else ""}
+
+revision: str = ${repr(up_revision)}
+down_revision: str | None = ${repr(down_revision)}
+branch_labels: str | Sequence[str] | None = ${repr(branch_labels)}
+depends_on: str | Sequence[str] | None = ${repr(depends_on)}
+
+SCHEMA = "platform"
+
+
+def upgrade() -> None:
+    """Apply the change."""
+    ${upgrades if upgrades else "pass"}
+
+
+def downgrade() -> None:
+    """Undo it, completely."""
+    ${downgrades if downgrades else "pass"}

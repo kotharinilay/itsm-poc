@@ -1,0 +1,90 @@
+name: contracts
+
+# Spec FR-DEMO-013 / SC-DEMO-011: the API contract is an ARTIFACT emitted from the running services,
+# not a document maintained beside them. A route whose emitted shape stops matching its declared
+# contract fails the build rather than surfacing at a client.
+#
+# Both stacks emit, then ONE comparator checks everything. A second comparator would drift, and the
+# drift would be invisible until the weaker of the two was the one that mattered.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'ragcore/src/ragcore/api/**'
+      - 'dotnet/src/Synthia.Api/**'
+      - 'dotnet/src/Synthia.Contracts/**'
+      - 'build/contracts/**'
+      - 'build/scripts/openapi_diff.py'
+      - '.github/workflows/contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  openapi:
+    name: emit, compare, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ragcore/uv.lock
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Sync (locked)
+        working-directory: ragcore
+        run: uv sync --all-groups --frozen
+
+      # Emitted into a directory that is NOT the committed one, so the comparison is between what
+      # the services now produce and what the repository says they produce. Emitting over the top
+      # would compare a file with itself and pass unconditionally.
+      - name: Emit RagCore contracts
+        working-directory: ragcore
+        run: uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/contracts/ragcore"
+
+      # The .NET documents come from the running application through the contract tests, so the
+      # artifact published here is produced by the same generator that serves /openapi/{audience}.json.
+      - name: Emit .NET contracts
+        working-directory: dotnet
+        run: dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj --filter "FullyQualifiedName~OpenApiEmissionTests" --nologo
+
+      - name: Collect .NET contracts
+        run: |
+          mkdir -p "${{ runner.temp }}/contracts/dotnet"
+          cp build/contracts/dotnet/*.openapi.json "${{ runner.temp }}/contracts/dotnet/"
+
+      # THE GATE. Exit 1 on a breaking change, 2 when a document has no committed baseline —
+      # a new API must be published deliberately, not by whatever CI happened to generate.
+      - name: Compare against the committed contracts
+        run: |
+          python build/scripts/openapi_diff.py \
+            --baseline build/contracts \
+            --current "${{ runner.temp }}/contracts"
+
+      # A stale baseline is worse than none: the comparator would pass a breaking change because
+      # the thing it compares against already contains it. This catches the case where somebody
+      # changed a route and did not re-emit.
+      - name: Fail if the committed contracts are stale
+        run: |
+          if ! diff -r build/contracts "${{ runner.temp }}/contracts" > /tmp/contract.diff; then
+            echo "::error::The committed contracts are stale. Re-emit and commit them."
+            cat /tmp/contract.diff
+            exit 1
+          fi
+
+      # Versioned by API version and commit, attached to the build rather than committed by hand.
+      - name: Publish contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-v1-${{ github.sha }}
+          path: ${{ runner.temp }}/contracts
+          if-no-files-found: error

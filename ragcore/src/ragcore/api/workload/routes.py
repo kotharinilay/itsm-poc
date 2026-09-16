@@ -26,7 +26,7 @@ from fastapi import APIRouter, Path, status
 from pydantic import Field
 
 from ragcore.api.deps import PrincipalDep
-from ragcore.api.schemas import ApiModel, HealthStatus
+from ragcore.api.schemas import ApiModel
 from ragcore.domain.governance import VerificationOutcome
 
 router = APIRouter(prefix="/api/workload/v1", tags=["workload"])
@@ -75,14 +75,3 @@ async def record_outcome(
     """Record the outcome with its verification result."""
     del work_item_id, body, principal
     return {"detail": NOT_IMPLEMENTED}
-
-
-@router.get("/health")
-async def health() -> HealthStatus:
-    """Liveness for the execution leg.
-
-    Unauthenticated and context-free by design: it takes no principal and reveals nothing about an
-    organisation, a session or a decision. A health check that needed identity would be a health
-    check that could not run before identity was working.
-    """
-    return HealthStatus()

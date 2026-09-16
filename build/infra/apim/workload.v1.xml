@@ -1,0 +1,108 @@
+<!--
+  WORKLOAD API (/api/workload/v1) - APIM policy.
+
+  Runs after the global policy. Derives the non-human principal and states it in the closed
+  contract.
+
+  THE WORKLOAD TENANT IS NOT A CUSTOMER TENANT. The token's tid is the Workload's own Entra
+  provenance - the Operator tenant it was issued in - and is NEVER interpreted as the customer
+  tenant (spec 11.2). It is forwarded because the contract has a slot for it and because the
+  principal's own provenance is auditable information, but the backend resolves the customer
+  tenant from work_item.tenant_id and from nothing else. That resolution is not visible here and
+  must not be: a gateway that could name the customer tenant for a workload request would be a
+  second place the answer comes from.
+
+  App-only, never delegated. This API MUST NOT accept a delegated user token (spec 11.3): a
+  workload that could present a human's token could act with that human's authority while
+  appearing in the audit record as a machine.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <validate-azure-ad-token
+        tenant-id="{{operator-tenant-id}}"
+        header-name="Authorization"
+        output-token-variable-name="jwt"
+        failed-validation-httpcode="401"
+        failed-validation-error-message="Unauthorized">
+      <client-application-ids>
+        <application-id>{{workload-client-application-id}}</application-id>
+      </client-application-ids>
+      <audiences>
+        <audience>{{workload-api-audience}}</audience>
+      </audiences>
+      <required-claims>
+        <!--
+          An app-only token carries app roles in `roles` and carries no `scp`. Requiring the app
+          role is the positive half of the check; the negative half is below, because a required
+          claim can only assert presence and the thing that matters here is an ABSENCE.
+        -->
+        <claim name="roles" match="any">
+          <value>{{workload-app-role}}</value>
+        </claim>
+      </required-claims>
+    </validate-azure-ad-token>
+
+    <!--
+      REFUSE A DELEGATED TOKEN EXPLICITLY. `scp` is present only on a delegated token, so its
+      presence on this audience means a human credential is being used to reach the workload
+      surface. Refused rather than downgraded: there is no safe interpretation of a human token
+      here, and treating it as app-only would be exactly the impersonation this audience exists
+      to make impossible.
+    -->
+    <choose>
+      <when condition="@(((Jwt)context.Variables["jwt"]).Claims.ContainsKey("scp"))">
+        <return-response>
+          <set-status code="403" reason="Forbidden" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/problem+json</value>
+          </set-header>
+          <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/forbidden\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"This audience does not accept a delegated credential.\"}")</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <set-header name="X-Idp-Tenant-Id" exists-action="override">
+      <value>@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("tid", ""))</value>
+    </set-header>
+
+    <!-- The service principal's object id. A machine identity, and never a human one. -->
+    <set-header name="X-Idp-Principal-Id" exists-action="override">
+      <value>@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("oid", ""))</value>
+    </set-header>
+
+    <!--
+      The `none` sentinel: a single-member set that never combines with a staff role (spec 11.5).
+      The workload holds no platform role because it makes no authorization decision of its own -
+      it executes what deterministic governance already authorized.
+    -->
+    <set-header name="X-Idp-Roles" exists-action="override">
+      <value>none</value>
+    </set-header>
+
+    <set-header name="X-Idp-Credential-Class" exists-action="override">
+      <value>app</value>
+    </set-header>
+
+    <set-header name="X-Idp-Client-Surface" exists-action="override">
+      <value>workload</value>
+    </set-header>
+
+    <choose>
+      <when condition="@(string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Idp-Tenant-Id", "")) || string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Idp-Principal-Id", "")))">
+        <return-response>
+          <set-status code="401" reason="Unauthorized" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/problem+json</value>
+          </set-header>
+          <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/unauthenticated\",\"title\":\"Unauthenticated\",\"status\":401,\"detail\":\"The token carried no usable identity.\"}")</set-body>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

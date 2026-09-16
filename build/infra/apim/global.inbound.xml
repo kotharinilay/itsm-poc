@@ -1,0 +1,145 @@
+<!--
+  APIM GLOBAL (all-APIs) POLICY. The trust boundary, in the order it must run.
+
+  This policy is the platform's single identity derivation point (constitution Principle I). Every
+  application request passes through it before any API-scoped policy runs, and the order below is
+  not adjustable:
+
+    1. Prove the request came from THIS platform's Front Door.       (edge provenance)
+    2. Delete every inbound copy of the identity contract.           (anti-spoofing)
+    3. Establish correlation.                                        (observability)
+    4. Present the gateway client certificate to the backend.        (gateway provenance)
+
+  STEP 2 IS WHY A BACKEND CAN TRUST THE CONTRACT AT ALL. The deletion is unconditional and happens
+  before any token is validated, so there is no ordering in which a caller-supplied X-Idp-Roles
+  survives long enough to be read. It is deleted rather than overwritten because an API whose
+  policy forgot to set one would otherwise inherit the caller's value.
+
+  Referenced by build/policy/edge-trust.json. Changing a header name here without changing it there
+  breaks the contract tests on both stacks, which is the intended coupling.
+-->
+<policies>
+  <inbound>
+
+    <!--
+      (1) EDGE PROVENANCE. The network control restricts the origin to the AzureFrontDoor.Backend
+      service tag, but that tag covers EVERY Azure customer's Front Door - an attacker provisions
+      their own profile, points it here, and has satisfied the network control. The FDID is what
+      makes this origin specific to this platform.
+
+      Neither control is sufficient alone (spec 10.3). This is the application half of that pair.
+
+      403 with no detail: a caller who has not come through the edge learns that it was refused and
+      nothing about why, because the reason names the control.
+    -->
+    <choose>
+      <when condition="@(!context.Request.Headers.GetValueOrDefault("X-Azure-FDID", string.Empty).Equals("{{front-door-id}}", StringComparison.Ordinal))">
+        <return-response>
+          <set-status code="403" reason="Forbidden" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/problem+json</value>
+          </set-header>
+          <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/edge-required\",\"title\":\"Edge required\",\"status\":403,\"detail\":\"This API is reachable only through the platform edge.\"}")</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <!--
+      (2) DELETE EVERY INBOUND COPY OF THE CLOSED CONTRACT (spec 11.5).
+
+      All five, unconditionally, before validation. These names are the whole contract; a sixth is
+      not added here without adding it to build/policy/edge-trust.json, where both stacks read the
+      list and assert its length.
+    -->
+    <set-header name="X-Idp-Tenant-Id" exists-action="delete" />
+    <set-header name="X-Idp-Principal-Id" exists-action="delete" />
+    <set-header name="X-Idp-Roles" exists-action="delete" />
+    <set-header name="X-Idp-Credential-Class" exists-action="delete" />
+    <set-header name="X-Idp-Client-Surface" exists-action="delete" />
+
+    <!--
+      The forwarded-certificate header is deleted for exactly the same reason, and it is the more
+      dangerous of the two: a caller who could set it would be asserting gateway provenance itself,
+      which is the control every other control here rests on. Container Apps ingress re-sets it
+      from the certificate it actually validated, so nothing downstream loses anything.
+    -->
+    <set-header name="X-Forwarded-Client-Cert" exists-action="delete" />
+
+    <!--
+      (3) CORRELATION. Established before anything can refuse the request, so a refusal is
+      correlatable and the identifier a user quotes leads somewhere (spec FR-OPS-001). Taken from
+      the caller when present so a client-initiated journey stays one journey; minted otherwise.
+    -->
+    <choose>
+      <when condition="@(string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty)))">
+        <set-header name="X-Correlation-Id" exists-action="override">
+          <value>@(context.RequestId.ToString())</value>
+        </set-header>
+      </when>
+    </choose>
+
+    <!--
+      (4) GATEWAY PROVENANCE TO THE BACKEND. APIM presents this certificate on the backend
+      connection; Container Apps ingress validates it and republishes its SHA-256 hash as
+      X-Forwarded-Client-Cert, which both backends check against their allow-list.
+
+      The certificate lives in Key Vault and is referenced here through the APIM certificate
+      entity that points at it. APIM reads it with its own managed identity, so there is no
+      standing secret anywhere in this arrangement: the vault holds the private key, APIM holds a
+      reference, and the backends hold only a public hash.
+
+      REFERENCED BY certificate-id, NEVER BY THUMBPRINT, and this is not a style preference. A
+      Key Vault certificate's thumbprint changes when it is rotated, and a policy identifying it
+      by thumbprint SILENTLY FAILS TO RESOLVE the new certificate - the policy stops attaching a
+      client certificate at all, and every backend call starts failing provenance. certificate-id
+      names the APIM entity, which survives rotation.
+
+      See docs/runbooks/rotate-gateway-certificate.md for why rotation is nonetheless a deliberate
+      release here rather than the 4-hour automatic sync: the backends pin the LEAF hash, so the
+      allow-list has to widen before the certificate changes, and nothing in Azure sequences those
+      two for us.
+    -->
+    <authentication-certificate certificate-id="{{gateway-client-certificate-id}}" />
+
+    <!-- Defence in depth at the edge. The WAF rate-limits too; this bounds a caller that has already passed it. -->
+    <rate-limit-by-key calls="600" renewal-period="60" counter-key="@(context.Request.IpAddress)" />
+
+  </inbound>
+
+  <backend>
+    <forward-request />
+  </backend>
+
+  <outbound>
+    <!--
+      Nothing the platform derived leaves the boundary. The identity contract is inbound-only; a
+      response echoing a tenant or role would hand a caller the vocabulary of the trust boundary.
+    -->
+    <set-header name="X-Idp-Tenant-Id" exists-action="delete" />
+    <set-header name="X-Idp-Principal-Id" exists-action="delete" />
+    <set-header name="X-Idp-Roles" exists-action="delete" />
+    <set-header name="X-Idp-Credential-Class" exists-action="delete" />
+    <set-header name="X-Idp-Client-Surface" exists-action="delete" />
+    <set-header name="X-Forwarded-Client-Cert" exists-action="delete" />
+
+    <!-- Server fingerprints are free reconnaissance. -->
+    <set-header name="X-Powered-By" exists-action="delete" />
+    <set-header name="Server" exists-action="delete" />
+
+    <set-header name="X-Correlation-Id" exists-action="override">
+      <value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value>
+    </set-header>
+  </outbound>
+
+  <on-error>
+    <!--
+      A failure inside the boundary returns the platform's problem shape and nothing else. The
+      default APIM error body names the policy that failed, which describes the control to whoever
+      triggered it.
+    -->
+    <set-header name="Content-Type" exists-action="override">
+      <value>application/problem+json</value>
+    </set-header>
+    <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/gateway-error\",\"title\":\"Gateway error\",\"status\":" + context.Response.StatusCode.ToString() + ",\"detail\":\"The request could not be processed at the gateway.\",\"correlationId\":\"" + context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty) + "\"}")</set-body>
+  </on-error>
+</policies>

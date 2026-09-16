@@ -1,0 +1,215 @@
+{
+  "$comment": [
+    "THE AZURE IDENTITY POLICY. One registry, two enforcers.",
+    "",
+    "Every Azure resource this platform reaches is listed here exactly once, together with whether",
+    "managed identity is required for it and — where it is not — the named reason. Both deployables",
+    "enforce this file: ragcore/tests/security/test_azure_identity.py and",
+    "dotnet/tests/Synthia.ArchitectureTests/AzureIdentityTests.cs. A third test on each side asserts",
+    "that the two enforcers cover the same resources, so a resource cannot be quietly dropped from",
+    "one platform while passing on the other.",
+    "",
+    "WHY A SHARED FILE RATHER THAN A CONSTANT IN EACH LANGUAGE: two lists drift, and the drift is",
+    "invisible until the day the weaker of the two is the one that mattered. A rule that is easier",
+    "to satisfy on one stack than the other is a rule that decides where the insecure code gets",
+    "written.",
+    "",
+    "TO ADD AN EXEMPTION you edit this file, name the provider limitation, and give it an owner and a",
+    "review date. That is deliberately more friction than adding a connection string, because the",
+    "exemption is the thing that needs review, not the credential."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "rule": {
+    "statement": "Azure SDK clients authenticate as a managed identity in deployed environments. Application-owned Azure credentials — client secrets, shared access keys, SAS tokens, account keys, passwords — are rejected except where a provider explicitly does not support managed identity, and every such exception is named below.",
+    "appliesTo": [
+      "development",
+      "staging",
+      "production"
+    ],
+    "localDevelopment": "DefaultAzureCredential resolves a developer identity locally through the same code path, so there is no separate local branch to get wrong. A credential type that only works on a laptop is still a violation: the rule is about what the code can express, not about where it happens to run."
+  },
+
+  "credentialChain": {
+    "dotnet": "DefaultAzureCredential",
+    "python": "DefaultAzureCredential",
+    "constructedOnce": true,
+    "$comment": "One credential instance per process, shared by every client. A client that constructs its own is how a second, weaker auth path appears next to the first."
+  },
+
+  "resources": [
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL Flexible Server",
+      "managedIdentity": "required",
+      "authMode": "entra-token-as-password",
+      "notes": "Entra authentication is supported. The access token is presented in the password position, which is exactly why a literal password in a DSN is indistinguishable from correct usage at a glance — and why the DSN rule below is a separate assertion rather than folded into the credential rule.",
+      "forbiddenInConfiguration": [
+        "password in the connection string",
+        "sslmode=disable"
+      ]
+    },
+    {
+      "id": "servicebus",
+      "name": "Azure Service Bus",
+      "managedIdentity": "required",
+      "authMode": "entra-rbac",
+      "notes": "Namespace is a fully qualified name, never a credential-bearing connection string.",
+      "forbiddenInConfiguration": [
+        "SharedAccessKey",
+        "SharedAccessKeyName",
+        "SharedAccessSignature",
+        "Endpoint=sb://"
+      ]
+    },
+    {
+      "id": "signalr",
+      "name": "Azure SignalR",
+      "managedIdentity": "required",
+      "authMode": "entra-token",
+      "notes": "The data-plane REST client uses an Entra token for scope https://signalr.azure.com/.default.",
+      "forbiddenInConfiguration": [
+        "AccessKey",
+        "Endpoint=https://.*service.signalr.net;AccessKey"
+      ]
+    },
+    {
+      "id": "keyvault",
+      "name": "Azure Key Vault",
+      "managedIdentity": "required",
+      "authMode": "entra-rbac",
+      "notes": "Key Vault is the sole source of secret material, so a secret used to reach Key Vault would defeat the entire arrangement. There is no configuration under which this exemption could be granted.",
+      "exemptionPermitted": false,
+      "forbiddenInConfiguration": [
+        "client secret",
+        "certificate password"
+      ]
+    },
+    {
+      "id": "aisearch",
+      "name": "Azure AI Search",
+      "managedIdentity": "required",
+      "authMode": "entra-rbac",
+      "notes": "Both admin and query keys are application-owned credentials and are rejected.",
+      "forbiddenInConfiguration": [
+        "AzureKeyCredential",
+        "admin key",
+        "query key",
+        "api-key"
+      ]
+    },
+    {
+      "id": "foundry",
+      "name": "Azure AI Foundry / model gateway dependencies",
+      "managedIdentity": "required",
+      "authMode": "entra-rbac",
+      "notes": "Reached only through the AI Gateway, which is a policy function rather than an identity boundary — so the identity presented to it, and the identity it presents onward, are both managed identities. An API key here would also bypass per-organisation metering, because the key is not tied to a caller.",
+      "forbiddenInConfiguration": [
+        "AzureKeyCredential",
+        "api_key",
+        "OPENAI_API_KEY"
+      ]
+    },
+    {
+      "id": "monitor",
+      "name": "Application Insights / Azure Monitor",
+      "managedIdentity": "required",
+      "authMode": "entra-rbac-ingestion",
+      "notes": "Entra-authenticated ingestion is supported and is what this platform uses. The Application Insights connection string is configuration rather than a credential — it carries an ingestion endpoint and an instrumentation key, not a secret — but it is still resolved by reference so that no environment-specific value is committed.",
+      "forbiddenInConfiguration": [
+        "InstrumentationKey= committed literally"
+      ]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "managedIdentity": "conditional",
+      "authMode": "entra-rbac-where-supported",
+      "condition": "Azure Cache for Redis and Azure Managed Redis support Entra ID authentication on the tiers and configurations this platform selects. Managed identity is REQUIRED wherever the selected configuration supports it.",
+      "notes": "Listed as conditional rather than required because the support genuinely depends on the deployed tier — not because a password is an acceptable default. If a configuration is selected that does not support Entra authentication, that is an exemption and belongs in the list below with a named owner. Redis is transient-only in this platform, which lowers the blast radius of a compromise but does not change the rule.",
+      "forbiddenInConfiguration": [
+        "password",
+        "access key"
+      ]
+    }
+  ],
+
+  "exemptions": [
+    {
+      "$comment": [
+        "NAMED EXEMPTIONS. Empty, and that is the intended state.",
+        "",
+        "An entry here means a provider genuinely does not support managed identity — not that",
+        "managed identity was inconvenient to wire up. Each entry requires: the resource id, the",
+        "provider limitation in one sentence, the credential type used instead, where it is stored",
+        "(which must be Key Vault), an owner, and a review date.",
+        "",
+        "Third-party systems reached through MCP — ServiceNow, OneLogin, Duo — are NOT listed here.",
+        "They are not Azure resources, and their credentials are already governed by",
+        "tenant_entitlement.credential_reference, which holds a Key Vault reference and never a value."
+      ]
+    },
+    {
+      "resource": "containerapps-ingress",
+      "name": "Azure Container Apps ingress — gateway provenance",
+      "providerLimitation": "Container Apps built-in authentication (Easy Auth), which is what would validate a managed-identity token at the ingress layer, is documented only for external ingress-enabled apps. These backends are internal-only by design, and validating the token in application code instead is prohibited by constitution Principle I — services MUST NOT parse an access token. Mutual TLS is the mechanism Container Apps documents for this case, with no such restriction.",
+      "credentialType": "client certificate (mutual TLS), presented by APIM and validated by ingress",
+      "storedIn": "keyvault",
+      "owner": "platform-engineering",
+      "reviewBy": "2027-03-16",
+      "$comment": [
+        "WHAT IS ACTUALLY EXEMPTED HERE IS NARROW, and worth stating precisely so the review has",
+        "something to review. No component holds a standing secret: the private key is in Key Vault,",
+        "APIM reads it as a managed identity, and the backends hold only a public SHA-256 hash. The",
+        "exemption is therefore not 'a credential lives outside the vault' — it is that this",
+        "credential has a LIFECYCLE and an EXPIRY, which a managed identity would not.",
+        "",
+        "That residual is managed rather than accepted: rotation is a sequenced release",
+        "(docs/runbooks/rotate-gateway-certificate.md) and expiry is alerted 45 days ahead",
+        "(expiryMonitoring in build/policy/edge-trust.json). Both are asserted by the edge trust",
+        "tests on each stack, so removing either one fails the build.",
+        "",
+        "REVISIT THIS WHEN Container Apps documents Easy Auth for internal ingress. At that point",
+        "APIM's authentication-managed-identity policy plus an ingress-injected principal check",
+        "would remove the certificate entirely, and this entry with it. The backend middleware is",
+        "already shaped for that swap: it compares a platform-injected header against an allow-list,",
+        "and only the header name and the allow-list contents would change."
+      ]
+    }
+  ],
+
+  "forbiddenEverywhere": {
+    "$comment": "Matched against production source and committed configuration on both stacks, irrespective of resource. These are the shapes an application-owned Azure credential actually takes.",
+    "credentialTypes": [
+      "ClientSecretCredential",
+      "UsernamePasswordCredential",
+      "AzureKeyCredential",
+      "AzureSasCredential",
+      "AzureNamedKeyCredential",
+      "StorageSharedKeyCredential"
+    ],
+    "connectionStringTokens": [
+      "SharedAccessKey=",
+      "SharedAccessKeyName=",
+      "SharedAccessSignature=",
+      "AccountKey=",
+      "AccessKey=",
+      "sig=",
+      "client_secret",
+      "clientsecret"
+    ],
+    "configurationKeys": [
+      "clientSecret",
+      "client_secret",
+      "applicationSecret",
+      "appSecret",
+      "accountKey",
+      "accessKey",
+      "apiKey",
+      "api_key",
+      "sasToken",
+      "password"
+    ]
+  }
+}

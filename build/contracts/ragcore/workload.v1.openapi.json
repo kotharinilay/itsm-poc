@@ -1,0 +1,211 @@
+{
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "OutcomeRequest": {
+        "additionalProperties": false,
+        "description": "The outcome of one execution attempt.\n\n``verification`` is **mandatory and has no default**. That is the whole design of this schema:\na caller must state what the platform actually knows, and the absence of a default means \"we\ndid not check\" cannot be silently recorded as success.\n\nA ``client_attested`` outcome MUST NOT be reported to a user or written to the system of\nrecord as confirmed resolution (ADR-0004). It is a claim; the field name says so.",
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationOutcome"
+          }
+        },
+        "required": [
+          "status",
+          "verification"
+        ],
+        "title": "OutcomeRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VerificationOutcome": {
+        "description": "What the platform actually knows about an execution's outcome.\n\nA client-reported result is a claim, not proof. The platform MUST NOT claim to know more\nthan it does (constitution Principle VIII, ADR-0004).",
+        "enum": [
+          "server_confirmed",
+          "client_attested",
+          "contradicted"
+        ],
+        "title": "VerificationOutcome",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "description": "The workload audience. Generated from the running service; not hand-maintained. Identity is derived at the gateway and no operation accepts a tenant, role or audience parameter.",
+    "title": "Synthia Workload API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/workload/v1/work/{workItemId}/claim": {
+      "post": {
+        "description": "Atomically claim a work item. 409 if already claimed, expired, or not authorized.\n\n**Idempotency boundary 1**, and the one that absorbs at-least-once delivery: a conditional\nupdate on ``claimed_at IS NULL``, so a duplicate trigger produces exactly one execution.\nBoundary 2 — the idempotency key carried to the external system — protects the far side and\ndoes not substitute for this.",
+        "operationId": "claim_work_api_workload_v1_work__workItemId__claim_post",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Claim Work Api Workload V1 Work  Workitemid  Claim Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Claim Work",
+        "tags": [
+          "workload"
+        ]
+      }
+    },
+    "/api/workload/v1/work/{workItemId}/outcome": {
+      "post": {
+        "description": "Record the outcome with its verification result.",
+        "operationId": "record_outcome_api_workload_v1_work__workItemId__outcome_post",
+        "parameters": [
+          {
+            "description": "The durable work record.",
+            "in": "path",
+            "name": "workItemId",
+            "required": true,
+            "schema": {
+              "description": "The durable work record.",
+              "format": "uuid",
+              "title": "Workitemid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Outcome Api Workload V1 Work  Workitemid  Outcome Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Record Outcome",
+        "tags": [
+          "workload"
+        ]
+      }
+    }
+  }
+}

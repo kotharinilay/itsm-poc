@@ -1,0 +1,159 @@
+{
+  "$comment": [
+    "EXPIRY MONITORING FOR THE GATEWAY CLIENT CERTIFICATE.",
+    "",
+    "This is not operational hygiene. It is the control that makes the pinned-version rotation",
+    "strategy safe to have chosen (build/policy/edge-trust.json -> gatewayCertificate.rotation).",
+    "Automatic Key Vault sync into APIM is deliberately disabled, which means NOTHING MOVES THIS",
+    "CERTIFICATE ON OUR BEHALF ANY MORE. Expiry is therefore the residual risk of the entire edge",
+    "design, and these alerts are what convert it from a silent countdown into a scheduled release.",
+    "",
+    "WHAT AN EXPIRED CERTIFICATE ACTUALLY LOOKS LIKE, because it is worth knowing before it",
+    "happens: every application request on every audience, on both deployables, fails with 403",
+    "simultaneously. Health probes keep passing - they are exempt from gateway provenance - so the",
+    "container apps stay green and in rotation while serving nothing. There is no deployment and no",
+    "code change to correlate against. Without these alerts the first signal is a customer.",
+    "",
+    "ENFORCED BY build/scripts/check-edge-path.sh and the edge trust tests on both stacks, so the",
+    "policy's claim that expiry is monitored cannot outlive the infrastructure that monitors it.",
+    "",
+    "Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret."
+  ],
+
+  "$thresholds": [
+    "THREE CHANNELS AT THREE DISTANCES, AND THE MIDDLE ONE IS NOT NEGOTIABLE BY US.",
+    "",
+    "  45 days - Key Vault certificate lifetime action, email to the certificate contacts.",
+    "            Configurable, and set to our own number. This is the one that should catch it.",
+    "  30 days - Event Grid CertificateNearExpiry -> Azure Monitor alert -> action group. This is",
+    "            the one that PAGES. Azure fixes the certificate near-expiry event at 30 days and",
+    "            offers no setting; only the KEY near-expiry event is configurable. So 45 days is",
+    "            the earliest we can be told, and 30 days is the earliest we can be woken up.",
+    "   0 days - CertificateExpired. By this point it is an outage, and the alert exists so that",
+    "            the cause is named in the first minute rather than the first hour.",
+    "",
+    "The 45-day channel is email, which is the weaker mechanism, and it is first precisely because",
+    "the stronger one cannot be moved earlier. Treating the 30-day page as the real deadline and",
+    "the 45-day mail as an advance courtesy is the correct way to read this."
+  ],
+
+  "certificate": {
+    "vault": "${KEY_VAULT_NAME}",
+    "name": "synthia-gateway-client",
+    "$comment": "The certificate APIM presents to Container Apps ingress. Referenced by name, which is what Key Vault events carry in their subject."
+  },
+
+  "certificatePolicyLifetimeActions": [
+    {
+      "trigger": { "daysBeforeExpiry": 45 },
+      "action": { "actionType": "EmailContacts" },
+      "$comment": [
+        "EmailContacts, not AutoRenew, and the choice is deliberate.",
+        "",
+        "AutoRenew would create a new certificate VERSION in the vault. That is harmless to running",
+        "traffic - APIM is pinned to a version and would not move - but it would quietly produce a",
+        "second live certificate whose existence nobody had decided on, and the backend allow-list",
+        "would still pin the old hash. The renewal would look done while nothing had actually",
+        "rotated, which is a worse state than not having renewed at all.",
+        "",
+        "Rotation here is a sequenced release (docs/runbooks/rotate-gateway-certificate.md). The",
+        "notification exists to schedule that release, not to substitute for it."
+      ]
+    }
+  ],
+
+  "systemTopic": {
+    "name": "synthia-keyvault-events",
+    "source": "${KEY_VAULT_RESOURCE_ID}",
+    "topicType": "Microsoft.KeyVault.vaults",
+    "identity": { "type": "SystemAssigned" }
+  },
+
+  "actionGroup": {
+    "name": "synthia-edge-oncall",
+    "shortName": "SynEdge",
+    "$comment": [
+      "The on-call rotation that owns the edge. Receivers are supplied by the pipeline rather than",
+      "committed: an on-call list in a repository is a list that goes stale and a directory of who",
+      "to phone at 3am for anyone who can read the repo.",
+      "",
+      "One action group for all three severities, with the severity carried on the alert. Splitting",
+      "them into three groups puts the routing decision in three places, and the one somebody",
+      "forgets to update is the one that matters."
+    ],
+    "receivers": "${EDGE_ONCALL_RECEIVERS}"
+  },
+
+  "eventSubscriptions": [
+    {
+      "name": "gateway-certificate-near-expiry",
+      "$comment": [
+        "THE ONE THAT PAGES. Fires 30 days out - fixed by Azure, see $thresholds.",
+        "",
+        "Sev2 rather than Sev3: 30 days is comfortable only until it is 29, and the remediation is a",
+        "co-ordinated two-stage release across both deployables rather than a single deploy. It needs",
+        "to enter a sprint, not a backlog."
+      ],
+      "filter": {
+        "includedEventTypes": ["Microsoft.KeyVault.CertificateNearExpiry"],
+        "subjectBeginsWith": "synthia-gateway-client"
+      },
+      "destination": {
+        "endpointType": "MonitorAlert",
+        "properties": {
+          "severity": "Sev2",
+          "description": "The gateway client certificate expires in 30 days. APIM presents it to Container Apps ingress and both backends pin its hash; when it expires every application request on every audience fails 403 while health probes keep passing. Rotation is a sequenced release: docs/runbooks/rotate-gateway-certificate.md.",
+          "actionGroups": ["${EDGE_ONCALL_ACTION_GROUP_ID}"]
+        }
+      }
+    },
+    {
+      "name": "gateway-certificate-expired",
+      "$comment": [
+        "Sev0. This is not a warning - by the time it fires the platform is down, and the alert's",
+        "only job is to make the cause unambiguous immediately.",
+        "",
+        "It exists because the failure is otherwise deeply misleading: every replica healthy, every",
+        "probe green, no deployment in the window, and a uniform 403 that looks like an authorization",
+        "defect rather than an expired certificate. Teams have spent hours on less."
+      ],
+      "filter": {
+        "includedEventTypes": ["Microsoft.KeyVault.CertificateExpired"],
+        "subjectBeginsWith": "synthia-gateway-client"
+      },
+      "destination": {
+        "endpointType": "MonitorAlert",
+        "properties": {
+          "severity": "Sev0",
+          "description": "The gateway client certificate has EXPIRED. Every application request on every audience is now failing with 403 gateway-provenance-required on both deployables; health probes are unaffected and replicas will appear healthy. Recovery: docs/runbooks/rotate-gateway-certificate.md, section 'If it goes wrong'.",
+          "actionGroups": ["${EDGE_ONCALL_ACTION_GROUP_ID}"]
+        }
+      }
+    },
+    {
+      "name": "gateway-certificate-new-version",
+      "$comment": [
+        "Informational, and genuinely useful rather than noise: a new version appearing in the vault",
+        "is the signal that somebody has begun a rotation. Because APIM is pinned to a version, that",
+        "new version changes NOTHING on its own - traffic keeps flowing on the old certificate.",
+        "",
+        "That is exactly why it is worth alerting on. A half-finished rotation is invisible: the new",
+        "certificate exists, it looks like the job was done, and the allow-list was never widened.",
+        "This alert is what makes the gap between step 1 and step 5 of the runbook visible while it",
+        "is still open."
+      ],
+      "filter": {
+        "includedEventTypes": ["Microsoft.KeyVault.CertificateNewVersionCreated"],
+        "subjectBeginsWith": "synthia-gateway-client"
+      },
+      "destination": {
+        "endpointType": "MonitorAlert",
+        "properties": {
+          "severity": "Sev3",
+          "description": "A new version of the gateway client certificate exists in Key Vault. Nothing has rotated yet - APIM is pinned to a version and traffic is unaffected. If a rotation is in progress, it is not complete until the allow-list has been widened on both deployables, APIM has been repointed, and the outgoing hash removed: docs/runbooks/rotate-gateway-certificate.md.",
+          "actionGroups": ["${EDGE_ONCALL_ACTION_GROUP_ID}"]
+        }
+      }
+    }
+  ]
+}

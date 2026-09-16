@@ -1,9 +1,9 @@
-# Azure Container Apps configuration for the read-only .NET monolith.
+# Azure Container Apps configuration for the RagCore execution leg.
 #
-# This is the runtime half of the contract; ContainerAppsOptions in the application is the other
-# half, and the two must agree. The application validates its side at start (research R-019), so a
-# drain configured here that the application cannot honour fails the deployment rather than a
-# request.
+# The sibling of monolith.yaml, and deliberately the same shape where the shape is a control: the
+# ingress block below is identical because the trust boundary must not be easier to satisfy on one
+# deployable than the other. A rule that is cheaper to meet on one stack decides where the insecure
+# code gets written.
 #
 # Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret: every
 # secret arrives as a secret-reference environment variable resolved from Key Vault through the
@@ -11,7 +11,7 @@
 
 apiVersion: 2024-03-01
 type: Microsoft.App/containerApps
-name: synthia-monolith
+name: synthia-ragcore
 
 identity:
   # User-assigned managed identity. Zero standing secrets: the application holds nothing that could
@@ -35,7 +35,7 @@ properties:
       # is not sufficient alone: it admits anything already inside the VNet. The application half
       # is the client certificate below.
       external: false
-      targetPort: 8080
+      targetPort: 8000
       transport: http
       allowInsecure: false
 
@@ -52,11 +52,8 @@ properties:
     secrets:
       # Key Vault references, resolved through the managed identity at revision start. The values
       # never appear in this file, in the image, or in a pipeline log.
-      - name: read-database-connection-string
-        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-read-database-connection-string
-        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
-      - name: applicationinsights-connection-string
-        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-appinsights-connection-string
+      - name: database-dsn
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-ragcore-database-dsn
         identity: ${MANAGED_IDENTITY_RESOURCE_ID}
 
     registries:
@@ -64,44 +61,32 @@ properties:
         identity: ${MANAGED_IDENTITY_RESOURCE_ID}
 
   template:
-    # 25 seconds, matching ContainerAppsOptions.ShutdownTimeoutSeconds and the host's own
-    # ShutdownTimeout. THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE (plan Stage 10). On SIGTERM this
-    # API stops accepting requests and finishes those in flight; nothing is claimed here because the
-    # deployable is read-only, so nothing is at risk of the approved-but-not-executed condition that
-    # a draining worker can produce. That case belongs to RagCore.
-    terminationGracePeriodSeconds: 25
+    # THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE (plan Stage 10), and it matters more here than
+    # on the read-only monolith: this deployable claims work. A replica killed mid-execution is the
+    # approved-but-not-executed condition, which is why the drain is longer than the monolith's and
+    # why nothing here depends on it succeeding - the work item's claim expiry is the real control.
+    terminationGracePeriodSeconds: 60
 
     containers:
-      - name: synthia-monolith
+      - name: synthia-ragcore
         # Digest-pinned, never a floating tag. A tag is a pointer somebody else can move.
-        image: ${CONTAINER_REGISTRY}/synthia-monolith@${IMAGE_DIGEST}
+        image: ${CONTAINER_REGISTRY}/synthia-ragcore@${IMAGE_DIGEST}
 
         resources:
           # Explicit limits, not defaults. An unbounded container is one that takes the node down
           # with it rather than failing on its own.
-          cpu: 1.0
-          memory: 2Gi
+          cpu: 2.0
+          memory: 4Gi
 
         env:
-          - name: ASPNETCORE_ENVIRONMENT
-            value: ${ASPNETCORE_ENVIRONMENT}
-          - name: ReadDatabase__ConnectionString
-            secretRef: read-database-connection-string
-          - name: ReadDatabase__CommandTimeoutSeconds
-            value: "30"
-          - name: ReadDatabase__EnableSensitiveDataLogging
-            # Off outside a developer machine, always. Parameter values on a tenant-scoped query are
-            # customer data, and logs MUST NOT leak sensitive customer payloads or any cross-tenant
-            # information (constitution Principle VIII).
-            value: "false"
-          - name: Observability__ServiceName
-            value: synthia-monolith
-          - name: Observability__DeploymentEnvironment
-            value: ${ASPNETCORE_ENVIRONMENT}
-          - name: Observability__AzureMonitorConnectionString
-            secretRef: applicationinsights-connection-string
-          - name: KeyVault__VaultUri
+          - name: SYNTHIA_ENVIRONMENT
+            value: ${SYNTHIA_ENVIRONMENT}
+          - name: SYNTHIA_DB_DSN
+            secretRef: database-dsn
+          - name: SYNTHIA_KEYVAULT_VAULT_URI
             value: ${KEY_VAULT_URI}
+          - name: SYNTHIA_OTEL_SERVICE_NAME
+            value: synthia-ragcore
 
           # The SHA-256 hashes of the gateway client certificates this replica will accept,
           # comma-separated. NOT a secret: it is the hash of a public certificate, and holding it
@@ -119,53 +104,53 @@ properties:
           # Required: an empty value fails the process at start (see build/policy/edge-trust.json),
           # because the alternative is a service that accepts forged identity and looks perfectly
           # healthy doing it.
-          - name: EdgeTrust__GatewayCertificateThumbprints
+          - name: SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS
             value: ${GATEWAY_CERTIFICATE_THUMBPRINTS}
-          - name: ContainerApps__ShutdownTimeoutSeconds
-            value: "25"
-          - name: ContainerApps__Port
-            value: "8080"
 
         probes:
+          # These paths sit OUTSIDE every audience prefix, which is what lets them be served without
+          # gateway provenance: the probe comes from the Container Apps infrastructure on the
+          # internal network, does not traverse APIM, and carries no certificate. A probe published
+          # under /api/... would have to be both publicly routed by Front Door and answerable
+          # unauthenticated from the inside - a contradiction, not a configuration.
+
           # Liveness is process-only and performs no dependency check (constitution §Health). A
           # liveness probe that checked the database would restart every replica when the database
           # had a bad minute, turning a dependency blip into an outage.
           - type: Liveness
             httpGet:
               path: /health/live
-              port: 8080
+              port: 8000
             initialDelaySeconds: 5
             periodSeconds: 15
             timeoutSeconds: 3
             failureThreshold: 3
 
-          # Readiness covers the read database and critical dependencies. A replica failing this is
-          # taken out of rotation, not restarted — the correct response to a dependency that is
-          # temporarily unreachable.
+          # Readiness covers critical dependencies. A replica failing this is taken out of
+          # rotation, not restarted — the correct response to a dependency that is temporarily
+          # unreachable.
           - type: Readiness
             httpGet:
               path: /health/ready
-              port: 8080
+              port: 8000
             initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
-          # Startup gives a cold replica room to JIT and open its first connection without the
+          # Startup gives a cold replica room to import and open its first connection without the
           # liveness probe killing it mid-start.
           - type: Startup
             httpGet:
               path: /health/live
-              port: 8080
+              port: 8000
             initialDelaySeconds: 2
             periodSeconds: 3
             timeoutSeconds: 3
             failureThreshold: 20
 
         volumeMounts:
-          # READ-ONLY ROOT FILESYSTEM, with every writable path named rather than implied. The
-          # runtime needs somewhere to write temporary files; nothing else does, because this
-          # deployable writes no data of any kind.
+          # READ-ONLY ROOT FILESYSTEM, with every writable path named rather than implied.
           - volumeName: tmp
             mountPath: /tmp
 
@@ -175,9 +160,9 @@ properties:
 
     scale:
       minReplicas: 2
-      maxReplicas: 10
+      maxReplicas: 20
       rules:
         - name: http-concurrency
           http:
             metadata:
-              concurrentRequests: "50"
+              concurrentRequests: "20"

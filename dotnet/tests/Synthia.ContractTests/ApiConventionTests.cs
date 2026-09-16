@@ -230,22 +230,30 @@ public sealed class ApiConventionTests : IClassFixture<WebApplicationFixture>
     [Fact]
     public async Task The_openapi_document_describes_the_api_in_camel_case()
     {
+        // ONE DOCUMENT PER AUDIENCE. There is deliberately no combined `/openapi/v1.json`: a
+        // merged document would let a customer-facing client enumerate the staff surface. So this
+        // asks each audience separately and asserts each carries only its own paths, which is a
+        // stronger statement than the combined document could make.
         using HttpClient client = _fixture.CreateClient();
 
-        using HttpResponseMessage response = await client.GetAsync(
-            new Uri("/openapi/v1.json", UriKind.Relative));
+        foreach (string audience in new[] { "customer", "staff" })
+        {
+            using HttpResponseMessage response = await client.GetAsync(
+                new Uri($"/openapi/{audience}.json", UriKind.Relative));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        JsonElement document = await response.Content.ReadFromJsonAsync<JsonElement>();
-        JsonElement paths = document.GetProperty("paths");
+            JsonElement document = await response.Content.ReadFromJsonAsync<JsonElement>();
+            JsonElement paths = document.GetProperty("paths");
 
-        Assert.Contains(
-            paths.EnumerateObject(),
-            path => path.Name.StartsWith("/api/customer/v1/views", StringComparison.Ordinal));
-        Assert.Contains(
-            paths.EnumerateObject(),
-            path => path.Name.StartsWith("/api/staff/v1/views", StringComparison.Ordinal));
+            Assert.Contains(
+                paths.EnumerateObject(),
+                path => path.Name.StartsWith($"/api/{audience}/v1/views", StringComparison.Ordinal));
+
+            Assert.DoesNotContain(
+                paths.EnumerateObject(),
+                path => !path.Name.StartsWith($"/api/{audience}/v1", StringComparison.Ordinal));
+        }
     }
 
     private static async Task<HttpResponseMessage> StaffRequest(HttpClient client, string path)
@@ -285,8 +293,38 @@ public sealed class WebApplicationFixture : IDisposable
     private readonly SynthiaApiFactory _factory = new();
 
     /// <summary>Creates a client against the running application.</summary>
+    /// <remarks>
+    /// Carries gateway provenance, because that is how every real request arrives. A client
+    /// without it is the attacker's position and is created by <see cref="CreateDirectClient"/>.
+    /// </remarks>
     /// <returns>The client.</returns>
     public HttpClient CreateClient() => _factory.CreateClient();
+
+    /// <summary>Creates a client that reaches the application without traversing the gateway.</summary>
+    /// <returns>The client, with no forwarded certificate.</returns>
+    public HttpClient CreateDirectClient() => _factory.CreateDirectClient();
+
+    /// <summary>Creates a client presenting a certificate this deployment does not accept.</summary>
+    /// <param name="hash">The certificate hash to present.</param>
+    /// <returns>The client.</returns>
+    public HttpClient CreateClientPresenting(string hash)
+    {
+        HttpClient client = _factory.CreateDirectClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(
+            "X-Forwarded-Client-Cert",
+            FakeGateway.ForwardedClientCert(hash));
+        return client;
+    }
+
+    /// <summary>Creates a client sending a raw forwarded-certificate header.</summary>
+    /// <param name="headerValue">The exact header value, malformed or otherwise.</param>
+    /// <returns>The client.</returns>
+    public HttpClient CreateClientSendingRaw(string headerValue)
+    {
+        HttpClient client = _factory.CreateDirectClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Forwarded-Client-Cert", headerValue);
+        return client;
+    }
 
     /// <summary>The literal patterns of every mapped API route.</summary>
     /// <returns>Route patterns under <c>/api</c>.</returns>

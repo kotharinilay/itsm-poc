@@ -1,0 +1,171 @@
+{
+  "$comment": [
+    "AZURE FRONT DOOR (Premium) + WAF - the sole public edge.",
+    "",
+    "Front Door is not optional (ADR-002, spec 2657). It is the only public DNS name and the only",
+    "public IP this platform has; APIM and both backends are private. A request that did not come",
+    "through here did not come from a client.",
+    "",
+    "Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret.",
+    "The Front Door id below is an identifier, not a credential - it is checked at APIM to make the",
+    "origin specific to this platform, and its value being known to an attacker buys nothing while",
+    "the network control also holds. That is what 'neither control is sufficient alone' means in",
+    "practice (spec 10.3): each one is weak in a different direction.",
+    "",
+    "Premium rather than Standard for one reason that matters here: Private Link to the APIM origin.",
+    "Standard cannot reach a private origin, which would force APIM to hold a public endpoint and",
+    "would reduce the first hop's network control to an IP-range filter."
+  ],
+
+  "profile": {
+    "name": "synthia-edge",
+    "sku": "Premium_AzureFrontDoor",
+    "resourceGroup": "${RESOURCE_GROUP}",
+    "frontDoorId": "${FRONT_DOOR_ID}",
+    "$comment": "frontDoorId is emitted by the deployment and bound into the APIM named value `front-door-id`. The two MUST be the same value; build/scripts/check-edge-path.sh asserts the APIM policy reads that named value rather than a literal."
+  },
+
+  "endpoints": [
+    {
+      "name": "synthia-api",
+      "hostName": "${API_HOSTNAME}",
+      "enabledState": "Enabled"
+    }
+  ],
+
+  "originGroups": [
+    {
+      "name": "apim",
+      "$comment": [
+        "EXACTLY ONE ORIGIN GROUP, pointing at exactly one origin: APIM. There is no second route",
+        "to a backend, no 'internal' endpoint and no bypass for health. A backend origin added here",
+        "would be a path around the trust boundary that looks, in the portal, like a routing entry."
+      ],
+      "loadBalancing": {
+        "sampleSize": 4,
+        "successfulSamplesRequired": 3,
+        "additionalLatencyInMilliseconds": 50
+      },
+      "healthProbe": {
+        "path": "/status-0123456789abcdef",
+        "protocol": "Https",
+        "probeRequestType": "HEAD",
+        "intervalInSeconds": 30,
+        "$comment": "APIM's own built-in status endpoint. It reports the gateway, not an application, so it neither traverses nor bypasses the identity boundary."
+      },
+      "origins": [
+        {
+          "name": "apim-gateway",
+          "hostName": "${APIM_GATEWAY_HOSTNAME}",
+          "httpsPort": 443,
+          "originHostHeader": "${APIM_GATEWAY_HOSTNAME}",
+          "enforceCertificateNameCheck": true,
+          "priority": 1,
+          "weight": 1000,
+          "sharedPrivateLinkResource": {
+            "privateLink": "${APIM_RESOURCE_ID}",
+            "groupId": "Gateway",
+            "requestMessage": "Front Door to APIM, the only origin path.",
+            "$comment": "Private Link, so APIM has no public ingress at all. This is the network half of the frontdoor-to-apim hop in build/policy/edge-trust.json; the X-Azure-FDID check in build/infra/apim/global.inbound.xml is the application half."
+          }
+        }
+      ]
+    }
+  ],
+
+  "routes": [
+    {
+      "name": "api",
+      "endpoint": "synthia-api",
+      "originGroup": "apim",
+      "supportedProtocols": ["Https"],
+      "httpsRedirect": "Enabled",
+      "forwardingProtocol": "HttpsOnly",
+      "patternsToMatch": ["/api/*"],
+      "$comment": [
+        "ONE PATTERN, and it is the audience prefix set. /api/customer/v1, /api/staff/v1 and",
+        "/api/workload/v1 all match; nothing else does. A wildcard /* here would publish whatever",
+        "APIM happens to expose today and whatever it is given tomorrow.",
+        "",
+        "Caching is deliberately absent. Every response on these paths is tenant-scoped, and a",
+        "shared edge cache keyed on URL is a cross-tenant leak waiting for two callers to request",
+        "the same path (constitution Principle: tenant isolation at every layer)."
+      ]
+    }
+  ],
+
+  "securityPolicies": [
+    {
+      "name": "waf",
+      "endpoints": ["synthia-api"],
+      "patternsToMatch": ["/*"],
+      "wafPolicy": "${WAF_POLICY_RESOURCE_ID}"
+    }
+  ],
+
+  "wafPolicy": {
+    "name": "synthiaedgewaf",
+    "sku": "Premium_AzureFrontDoor",
+    "policySettings": {
+      "enabledState": "Enabled",
+      "mode": "Prevention",
+      "$comment": "Prevention, not Detection. Detection mode is a WAF that writes reports about the attack it allowed through.",
+      "requestBodyCheck": "Enabled"
+    },
+    "managedRuleSets": [
+      {
+        "ruleSetType": "Microsoft_DefaultRuleSet",
+        "ruleSetVersion": "2.1",
+        "ruleSetAction": "Block"
+      },
+      {
+        "ruleSetType": "Microsoft_BotManagerRuleSet",
+        "ruleSetVersion": "1.0"
+      }
+    ],
+    "customRules": [
+      {
+        "name": "RateLimitPerClient",
+        "priority": 100,
+        "ruleType": "RateLimitRule",
+        "rateLimitDurationInMinutes": 1,
+        "rateLimitThreshold": 1200,
+        "action": "Block",
+        "matchConditions": [
+          {
+            "matchVariable": "RequestUri",
+            "operator": "Contains",
+            "matchValue": ["/api/"]
+          }
+        ],
+        "$comment": "A ceiling, not the authorization control. APIM rate-limits again per caller, and neither is a substitute for the other: this one bounds an anonymous flood before it costs gateway capacity."
+      },
+      {
+        "name": "BlockSelfAssertedIdentityHeaders",
+        "priority": 200,
+        "ruleType": "MatchRule",
+        "action": "Block",
+        "matchConditions": [
+          {
+            "matchVariable": "RequestHeader",
+            "selector": "X-Idp-Tenant-Id",
+            "operator": "Any"
+          }
+        ],
+        "$comment": [
+          "DEFENCE IN DEPTH, AND NOTHING MORE. APIM deletes every inbound copy of the contract",
+          "unconditionally, so this rule is not what makes spoofing fail - it is what makes an",
+          "ATTEMPT visible at the outermost layer, in the WAF log, before it has consumed anything",
+          "further in.",
+          "",
+          "It matches one header rather than all five on purpose. A caller forging identity sends",
+          "the tenant; matching the whole set here would duplicate, in a place nobody reviews",
+          "alongside the policy, a list whose single authoritative copy is edge-trust.json.",
+          "",
+          "This rule MUST NOT be relied on as the anti-spoofing control. If APIM's deletion were",
+          "ever removed, a request with only X-Idp-Roles would pass here and reach a backend."
+        ]
+      }
+    ]
+  }
+}

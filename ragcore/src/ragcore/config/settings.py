@@ -26,6 +26,8 @@ from typing import Literal
 from pydantic import Field, PostgresDsn, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ragcore.config.secrets import SecretRef
+
 
 class DatabaseSettings(BaseSettings):
     """PostgreSQL — the single authority for platform durable state.
@@ -121,6 +123,102 @@ class ObservabilitySettings(BaseSettings):
     """Sampling is decided per correlated journey, not per span (spec FR-OPS-012)."""
 
 
+class EdgeTrustSettings(BaseSettings):
+    """How this process proves a request arrived through APIM.
+
+    **APIM is the identity/trust boundary.** This service consumes the closed ``X-Idp-*`` contract
+    and never parses a token, which is only safe while it can tell an APIM-stamped header from one
+    a caller typed. The certificate hash below is what tells it apart
+    (:mod:`ragcore.api.middleware.provenance`, ``build/policy/edge-trust.json``).
+
+    **Required, with no default and no environment branch.** Every other setting in this module has
+    a defensible empty state; this one does not. An unconfigured vault fails loudly on the first
+    secret it needs, whereas an unconfigured allow-list fails *silently*, by accepting forged
+    identity, and produces a service that looks perfectly healthy. There is therefore no local
+    bypass — which matches how identity is already treated here, since a developer running this
+    process directly must already supply the five ``X-Idp-*`` headers by hand.
+
+    **Not secret material.** A thumbprint is the hash of a public certificate, so it is ordinary
+    configuration rather than a Key Vault reference. Naming it ``*_secret_name`` would wrongly
+    suggest that keeping it quiet was load-bearing.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SYNTHIA_EDGE_", extra="forbid", frozen=True)
+
+    gateway_certificate_thumbprints: str = ""
+    """SHA-256 hashes of the accepted gateway client certificates, comma-separated.
+
+    Comma-separated because rotation is an overlap: both the outgoing and the incoming hash sit here
+    while APIM is cut over, so there is no instant at which neither is accepted.
+    """
+
+    @field_validator("gateway_certificate_thumbprints")
+    @classmethod
+    def _must_be_hex_digests(cls, value: str) -> str:
+        """Refuse a malformed allow-list at startup rather than at first request.
+
+        Raises:
+            ValueError: When an entry is not a 64-character hex SHA-256 digest. A truncated or
+                colon-formatted thumbprint pasted from a certificate viewer would otherwise match
+                nothing, and a control that matches nothing rejects every request — an outage
+                whose cause is a formatting difference nobody can see.
+        """
+        for entry in value.split(","):
+            candidate = entry.strip().strip('"').replace(":", "").lower()
+            if not candidate:
+                continue
+            if len(candidate) != 64 or any(
+                character not in "0123456789abcdef" for character in candidate
+            ):
+                raise ValueError(
+                    "each gateway certificate thumbprint must be a 64-character hex SHA-256 "
+                    f"digest, got one of length {len(candidate)}"
+                )
+        return value
+
+
+class KeyVaultSettings(BaseSettings):
+    """Where secret material comes from. **The only source there is.**
+
+    There is deliberately no client-secret and no certificate-path setting here: a credential
+    configured to *read* the vault would be a standing secret living outside the vault, which is
+    precisely the problem the vault exists to remove. The vault is reached through managed identity
+    (:mod:`ragcore.infrastructure.azure_credentials`) and through nothing else.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SYNTHIA_KEYVAULT_", extra="forbid", frozen=True)
+
+    vault_uri: str = ""
+    """The vault URI, or empty to resolve no secrets from a vault.
+
+    Empty is legitimate on a developer machine, where settings come from the environment. It is not
+    a supported deployed configuration, and the deployment pipeline is what enforces that — a
+    running process cannot tell which environment it wishes it were in.
+    """
+
+    @field_validator("vault_uri")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        """Refuse a plaintext vault URI at startup.
+
+        Raises:
+            ValueError: When the URI is set and is not ``https``. A secret fetched over plaintext is
+                a secret in transit to anybody watching, and the SDK's own failure for this names
+                neither the setting nor the file it came from.
+        """
+        if value and not value.startswith("https://"):
+            raise ValueError(
+                f"vault_uri must be an absolute https URI, got {value!r}. "
+                "Secret material is not fetched over plaintext."
+            )
+        return value
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether a vault is configured for this process."""
+        return bool(self.vault_uri)
+
+
 class Settings(BaseSettings):
     """Application settings, validated at startup so a missing value fails the process."""
 
@@ -141,6 +239,8 @@ class Settings(BaseSettings):
     """
 
     database: DatabaseSettings
+    edge_trust: EdgeTrustSettings = EdgeTrustSettings()
+    key_vault: KeyVaultSettings = KeyVaultSettings()
     messaging: MessagingSettings = MessagingSettings()
     gateway: ModelGatewaySettings = ModelGatewaySettings()
     observability: ObservabilitySettings = ObservabilitySettings()
@@ -152,6 +252,29 @@ class Settings(BaseSettings):
     for no other reason; raising it past fifteen minutes would weaken a control the specification
     fixes, so the type does not allow it.
     """
+
+    def required_secret_references(self) -> tuple[SecretRef, ...]:
+        """Every secret this process cannot start without.
+
+        **Declared here rather than discovered at the point of use.** A secret resolved lazily fails
+        on whichever request first needed it, in whichever replica happened to serve it — a
+        configuration defect wearing the costume of an intermittent outage. Resolving the whole set
+        at startup turns that into a deployment that does not start.
+
+        A setting holding an empty secret *name* contributes nothing here: the name being absent is
+        an ordinary "this process does not use that" and is caught, where it matters, by the
+        component that needs it. What this list exists to catch is a name that is present and does
+        not resolve.
+
+        Returns:
+            The references, in declaration order. Empty when no vault is configured, which is the
+            developer-machine case.
+        """
+        if not self.key_vault.is_configured:
+            return ()
+
+        names = (self.observability.connection_string_secret_name,)
+        return tuple(SecretRef(name) for name in names if name)
 
 
 @lru_cache(maxsize=1)

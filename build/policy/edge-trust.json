@@ -1,0 +1,343 @@
+{
+  "$comment": [
+    "THE EDGE TRUST POLICY. One registry, two enforcers, one guard.",
+    "",
+    "This file defines the only path by which an application API request may reach a backend, and",
+    "the controls that make that path provable rather than merely intended:",
+    "",
+    "    client -> Front Door + WAF -> APIM -> backend",
+    "",
+    "APIM is the identity/trust boundary. It is the only place a token is validated and the only",
+    "place the closed X-Idp-* contract comes into existence. Backends consume that contract and",
+    "never re-derive it.",
+    "",
+    "WHY THIS FILE EXISTS. Until it did, the model rested on reachability alone: the backends could",
+    "not distinguish an APIM-stamped X-Idp-Tenant-Id from one a caller typed, and said so in their",
+    "own comments. The constitution is explicit that the network control is NOT sufficient alone",
+    "(spec 10.3, 'Neither control is sufficient alone'). A second, application-level control is",
+    "therefore required at every leg, and it is defined here so that both stacks enforce the same",
+    "one rather than two that drift.",
+    "",
+    "ENFORCED BY:",
+    "  dotnet/src/Synthia.Api/Middleware/GatewayProvenanceMiddleware.cs",
+    "  ragcore/src/ragcore/api/middleware/provenance.py",
+    "VALIDATED BY:",
+    "  dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs",
+    "  dotnet/tests/Synthia.ArchitectureTests/EdgeTrustPolicyTests.cs",
+    "  ragcore/tests/security/test_gateway_provenance.py",
+    "  ragcore/tests/security/test_edge_trust_policy.py",
+    "  build/scripts/check-edge-path.sh  (proven to fail by verify-edge-guard.sh)"
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "chain": {
+    "statement": "Every application API request traverses Front Door + WAF, then APIM, then the backend. There is no other path, including for service-to-service and Workload calls (spec 13.4).",
+    "hops": [
+      {
+        "id": "client-to-frontdoor",
+        "from": "client",
+        "to": "Front Door + WAF",
+        "networkControl": "Front Door is the only public DNS name and the only public IP. Backends have no public ingress.",
+        "applicationControl": "WAF managed rule sets and rate limiting. TLS 1.2 minimum, HTTPS-only.",
+        "$comment": "Boundary 1 in spec 10.2. Nothing is trusted here; all input is hostile until validated."
+      },
+      {
+        "id": "frontdoor-to-apim",
+        "from": "Front Door + WAF",
+        "to": "APIM",
+        "networkControl": "APIM accepts origin traffic only from the AzureFrontDoor.Backend service tag; every other source is denied by NSG and by APIM's own network configuration.",
+        "applicationControl": "APIM rejects any request whose X-Azure-FDID does not equal this platform's Front Door identifier.",
+        "provenanceHeader": "X-Azure-FDID",
+        "$comment": [
+          "The service tag alone is insufficient: it admits EVERY Azure customer's Front Door,",
+          "so an attacker provisions their own profile and points it at this origin. The FDID",
+          "check is what makes the origin specific to this platform. Neither control is",
+          "sufficient alone (spec 10.3) - this is the pair that sentence names."
+        ]
+      },
+      {
+        "id": "apim-to-backend",
+        "from": "APIM",
+        "to": "backend (Container Apps, internal ingress)",
+        "networkControl": "Container Apps ingress is internal on every application container app; external ingress is prohibited. The backend has no public FQDN and is reachable only from inside the environment's VNet, into which APIM is injected.",
+        "applicationControl": "APIM presents a client certificate. Ingress validates it and republishes it as X-Forwarded-Client-Cert. The backend refuses any audience request whose forwarded certificate hash is not in the configured allow-list.",
+        "provenanceHeader": "X-Forwarded-Client-Cert",
+        "$comment": [
+          "A CERTIFICATE, NOT A SHARED SECRET. A shared secret in a header is a bearer token: it",
+          "appears in configuration, in any log that captures headers, and in the memory of every",
+          "replica that holds it, and it is replayable by anyone who sees it once. The certificate",
+          "is held by APIM, the backend holds only a hash of it, and rotation is an overlap in the",
+          "allow-list rather than a synchronised secret swap.",
+          "",
+          "VNet injection alone is insufficient for the same reason the service tag was: it admits",
+          "anything already inside the VNet - a compromised sidecar, a misconfigured job, a second",
+          "container app - and each of those could then mint any tenant and any role it liked."
+        ]
+      }
+    ]
+  },
+
+  "identityContract": {
+    "statement": "The closed Gateway-derived header contract (spec 11.5). APIM deletes any inbound copy before validation and sets these on the outbound request. Backends consume them and MUST NOT parse a token.",
+    "headers": [
+      "X-Idp-Tenant-Id",
+      "X-Idp-Principal-Id",
+      "X-Idp-Roles",
+      "X-Idp-Credential-Class",
+      "X-Idp-Client-Surface"
+    ],
+    "closed": true,
+    "strippedInboundAtGateway": true,
+    "$comment": [
+      "CLOSED means five, exactly. A sixth header carrying authority is a second identity",
+      "derivation wearing a different name, and the enforcers assert the list length so that",
+      "adding one requires editing this file rather than editing one service."
+    ]
+  },
+
+  "audiences": [
+    {
+      "id": "customer",
+      "pathPrefix": "/api/customer/v1",
+      "credentialClass": "delegated",
+      "roles": "end_user",
+      "servedBy": ["dotnet", "ragcore"]
+    },
+    {
+      "id": "staff",
+      "pathPrefix": "/api/staff/v1",
+      "credentialClass": "delegated",
+      "roles": "non-empty subset of administrator, senior_technician, technician",
+      "servedBy": ["dotnet", "ragcore"]
+    },
+    {
+      "id": "workload",
+      "pathPrefix": "/api/workload/v1",
+      "credentialClass": "app",
+      "roles": "none",
+      "servedBy": ["ragcore"]
+    }
+  ],
+
+  "provenanceExempt": {
+    "$comment": [
+      "THE ONLY PATHS THAT MAY BE SERVED WITHOUT PROVENANCE, and the reason each one must be.",
+      "",
+      "Health probes originate from the Container Apps infrastructure itself, not from APIM. They",
+      "cannot carry a gateway certificate and there is nothing they could carry instead. They are",
+      "also the only anonymous surface (spec 13.6) and they carry no identity, so a request that",
+      "reaches one has gained nothing.",
+      "",
+      "This is a prefix list rather than an allow-list of exact paths for a reason the boundary",
+      "guard depends on: an allow-list grows an entry at a time, and the entry somebody adds",
+      "without thinking is the one that matters. A prefix cannot be extended without moving a",
+      "route under /health, which is visible in review."
+    ],
+    "pathPrefixes": ["/health"]
+  },
+
+  "backendRules": {
+    "neverParseTokens": {
+      "statement": "No backend validates, decodes or inspects a bearer token. There is no JWT library on the audience path and no signing key to rotate at this tier.",
+      "forbiddenInProductionSource": [
+        "JwtBearer",
+        "AddAuthentication",
+        "JwtSecurityToken",
+        "TokenValidationParameters",
+        "jwt.decode",
+        "jose.jwt",
+        "PyJWT",
+        "python-jose",
+        "msal"
+      ]
+    },
+    "neverTrustClientAssertedAuthority": {
+      "statement": "Tenant, role, audience, principal and impersonation targets are never accepted from a client field, in any position - header, query parameter, path segment or body.",
+      "forbiddenClientFields": [
+        "tenant",
+        "tenantid",
+        "organisation",
+        "organization",
+        "orgid",
+        "role",
+        "roles",
+        "staffrole",
+        "audience",
+        "aud",
+        "principal",
+        "principalid",
+        "oid",
+        "actas",
+        "onbehalfof",
+        "impersonate"
+      ],
+      "$comment": [
+        "Compared with case folded and separators stripped, so tenant_id, tenantId, X-Tenant-Id",
+        "and TENANT-ID are one entry rather than four somebody has to remember.",
+        "",
+        "ONE EXCEPTION, and it is a narrowing: tenantId as a read filter on the staff audience.",
+        "It selects within the set the caller may already see and confers nothing; the tenant",
+        "query filter still applies underneath it, so a value outside that set returns no rows."
+      ],
+      "narrowingExceptions": [
+        {
+          "field": "tenantId",
+          "audience": "staff",
+          "kind": "read filter",
+          "confersAuthority": false
+        }
+      ]
+    },
+    "rejectSpoofedIdentity": {
+      "statement": "An X-Idp-* header on a request that cannot prove gateway provenance is refused. The request is rejected, not sanitised: stripping the header and continuing would serve an attacker a 200 and leave the attempt indistinguishable from an ordinary call in the logs.",
+      "status": 403,
+      "problemType": "gateway-provenance-required"
+    },
+    "noExternalIngress": {
+      "statement": "No application container app declares external ingress. This is the network half of the apim-to-backend hop and is asserted against the committed manifests.",
+      "appliesTo": "build/docker/containerapps/*.yaml"
+    },
+    "noDirectServiceToService": {
+      "statement": "A service MUST NOT call another platform service by its internal address (spec 13.4). Cross-service application calls go out through the approved egress path and back in through Front Door and APIM.",
+      "forbiddenInProductionSource": [
+        "http://ragcore",
+        "https://ragcore",
+        "http://synthia-monolith",
+        "https://synthia-monolith",
+        ".internal.azurecontainerapps.io"
+      ]
+    }
+  },
+
+  "gatewayCertificate": {
+    "hashAlgorithm": "sha256",
+    "encoding": "lowercase hex, 64 characters",
+    "forwardedAs": "X-Forwarded-Client-Cert",
+    "element": "Hash",
+    "allowListSetting": {
+      "dotnet": "EdgeTrust__GatewayCertificateThumbprints",
+      "ragcore": "SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS"
+    },
+
+    "source": {
+      "store": "Azure Key Vault",
+      "referencedFromApimBy": "certificate-id",
+      "apimReadsVaultAs": "managed identity",
+      "$comment": [
+        "THE VAULT HOLDS THE PRIVATE KEY, APIM HOLDS A REFERENCE, THE BACKENDS HOLD A PUBLIC HASH.",
+        "No component in this arrangement holds a standing secret, which is what keeps a client",
+        "certificate consistent with build/policy/azure-identity.json rather than an exception to",
+        "it. The exemption entry in that file records the residual: the certificate has a lifecycle",
+        "and an expiry, which a managed identity would not.",
+        "",
+        "REFERENCED BY certificate-id, NEVER BY THUMBPRINT. A Key Vault certificate's thumbprint",
+        "changes on rotation, and an APIM policy identifying it by thumbprint silently fails to",
+        "resolve the new certificate - it stops attaching a client certificate at all. That failure",
+        "has no error at the gateway; it surfaces only as every backend call losing provenance at",
+        "once. check-edge-path.sh asserts the policy does not use the thumbprint attribute."
+      ]
+    },
+
+    "rotation": {
+      "strategy": "pinned-version",
+      "automaticSyncDisabled": true,
+      "runbook": "docs/runbooks/rotate-gateway-certificate.md",
+      "$comment": [
+        "AUTOMATIC ROTATION IS DELIBERATELY TURNED OFF, by pinning a version in the Key Vault",
+        "certificate identifier. This is the one place where the safer-looking Azure default is the",
+        "dangerous option, so the reasoning is recorded rather than assumed.",
+        "",
+        "APIM syncs a Key Vault certificate within four hours of it changing. The backends pin the",
+        "LEAF hash. So an ordinary certificate renewal in the vault would propagate to APIM on its",
+        "own schedule and then every request would begin failing provenance - a total outage, with",
+        "no deployment, no code change and no alert that names the cause, triggered by a",
+        "certificate doing exactly what it was configured to do.",
+        "",
+        "Nothing in Azure sequences the vault update against the backend allow-list. Until the",
+        "deployment pipeline does that sequencing itself, the correct answer is to make rotation a",
+        "reviewed release rather than a background job that can take production down unattended.",
+        "",
+        "THE ORDER IS THE CONTROL, and it is widen-then-switch:",
+        "  1. Add the incoming hash to the allow-list on BOTH deployables. Both are now accepted.",
+        "  2. Point the APIM certificate entity at the new Key Vault version.",
+        "  3. Confirm traffic is flowing on the new certificate.",
+        "  4. Remove the outgoing hash.",
+        "There is no instant in that sequence at which neither certificate is accepted. Performing",
+        "step 2 before step 1 is a full outage, which is why the runbook leads with the ordering",
+        "rather than ending with it."
+      ]
+    },
+
+    "expiryMonitoring": {
+      "required": true,
+      "definedIn": "build/infra/monitoring/gateway-certificate-expiry.json",
+      "alertLeadTimeDays": 45,
+      "pagingLeadTimeDays": 30,
+      "channels": [
+        {
+          "leadTimeDays": 45,
+          "mechanism": "Key Vault certificate lifetime action, EmailContacts",
+          "configurable": true,
+          "pages": false
+        },
+        {
+          "leadTimeDays": 30,
+          "mechanism": "Event Grid CertificateNearExpiry to an Azure Monitor alert",
+          "configurable": false,
+          "pages": true,
+          "severity": "Sev2"
+        },
+        {
+          "leadTimeDays": 0,
+          "mechanism": "Event Grid CertificateExpired to an Azure Monitor alert",
+          "configurable": false,
+          "pages": true,
+          "severity": "Sev0"
+        }
+      ],
+      "$comment": [
+        "EXPIRY IS THE RESIDUAL RISK OF THIS WHOLE DESIGN, and pinning the version is what makes it",
+        "a real one: nothing renews the certificate on our behalf any more.",
+        "",
+        "An expired gateway certificate is a total, simultaneous outage of every audience on both",
+        "deployables, and it arrives on a date that was knowable for a year. Worse, it is a",
+        "misleading outage: health probes are exempt from gateway provenance, so every replica stays",
+        "green and in rotation while serving nothing, with no deployment in the window to blame. The",
+        "alerting is therefore not operational hygiene - it is the control that makes the",
+        "pinned-version strategy safe to choose, and the two are adopted together or not at all.",
+        "",
+        "WHY TWO LEAD TIMES RATHER THAN THE ONE WE WANTED. Azure fixes the certificate near-expiry",
+        "event at 30 days and exposes no setting for it; only the KEY near-expiry event is",
+        "configurable, via the key rotation policy. So the earliest we can be TOLD is 45 days, by",
+        "the Key Vault lifetime action, and that channel is email. The earliest we can be WOKEN is",
+        "30 days.",
+        "",
+        "Both numbers are recorded because treating the 45 as the deadline would be a mistake: it is",
+        "the weaker mechanism, and an unread mailbox during a holiday period consumes the whole",
+        "difference. THE 30-DAY PAGE IS THE REAL DEADLINE. The 45-day mail is an advance courtesy",
+        "that buys scheduling room, and it is first only because the stronger signal cannot be",
+        "moved earlier."
+      ]
+    },
+    "$comment": [
+      "REQUIRED CONFIGURATION, WITH NO DEFAULT AND NO ENVIRONMENT BRANCH. An empty allow-list",
+      "fails the process at startup rather than starting one that accepts anything.",
+      "",
+      "This is deliberately harsher than the Key Vault setting next door, which is legitimately",
+      "absent on a developer machine. The difference is the failure mode: an unconfigured vault",
+      "fails loudly on the first secret it needs, whereas an unconfigured allow-list would fail",
+      "silently, by accepting forged identity, and would look exactly like a working service.",
+      "",
+      "There is consequently no local bypass - which matches how identity is already treated. A",
+      "developer running either backend directly already has to supply the five X-Idp-* headers",
+      "by hand, because the gateway that would normally set them is not there. Supplying a",
+      "development certificate hash alongside them is the same exercise, and it means the code",
+      "path exercised locally is the code path that runs in production.",
+      "",
+      "The thumbprint is not secret material. It is the hash of a public certificate, so it is",
+      "ordinary configuration rather than a Key Vault reference - and treating it as a secret",
+      "would wrongly suggest that knowing it is worth anything."
+    ]
+  }
+}

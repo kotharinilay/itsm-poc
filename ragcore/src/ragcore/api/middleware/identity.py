@@ -5,6 +5,12 @@ same closed header contract (constitution Principle I). This middleware reads th
 nothing else. There is no JWT library imported here and no public key to rotate, because there is
 no token to validate at this tier.
 
+**This middleware does not decide whether the contract is trustworthy** —
+:mod:`ragcore.api.middleware.provenance` does, and runs first. The separation is intentional: one
+module answers "did this come from the gateway", the other answers "did the client claim authority
+it may not claim", and collapsing them would make it possible to satisfy the second while skipping
+the first.
+
 **Any request supplying tenant or role is rejected outright** (spec FR-IDENT-002). Not ignored —
 *rejected*. The distinction matters: silently ignoring a ``tenant_id`` query parameter leaves a
 caller believing it worked, and leaves the next reader of the code unsure whether some path
@@ -116,9 +122,15 @@ class IdentityHeaderMiddleware:
 def _self_asserted_field(scope: Scope) -> str | None:
     """Return the first forbidden field a client supplied, or ``None``.
 
-    Gateway-derived headers are exempt by name: APIM sets them, and APIM is upstream of anything
-    a client can reach. A client that sets one directly is not a case this middleware can
-    distinguish — the Gateway strips and re-sets them, which is where that boundary belongs.
+    Gateway-derived headers are exempt by name, and that exemption is only sound because
+    :class:`~ragcore.api.middleware.provenance.GatewayProvenanceMiddleware` runs *outside* this one
+    and has already refused anything that cannot prove it arrived through APIM. By the time a
+    request reaches here, an ``X-Idp-*`` header is APIM's or the request does not exist.
+
+    Two independent controls stand behind that, because neither is sufficient alone (spec 10.3):
+    APIM deletes every inbound copy of the contract before validation, and Container Apps ingress
+    republishes the client certificate this process checks. Removing either one turns the exemption
+    below into an open door.
     """
     headers: Iterable[tuple[bytes, bytes]] = scope.get("headers", [])
     for raw_name, _ in headers:

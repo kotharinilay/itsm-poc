@@ -10,7 +10,11 @@ list below runs in the order it reads:
 
 1. **Correlation** outermost, so even a request the next layer refuses is correlatable and its
    refusal echoes an identifier a user can quote.
-2. **Identity** next, rejecting self-asserted authority *before* routing — so no endpoint, and no
+2. **Gateway provenance** next, refusing anything that cannot prove it arrived through APIM. It runs
+   *before* identity because identity is only meaningful once provenance holds: the ``X-Idp-*``
+   contract is trusted precisely and only because APIM set it, and a request that did not come
+   through APIM must be refused before any of it is read.
+3. **Identity** last, rejecting self-asserted authority *before* routing — so no endpoint, and no
    dependency, ever sees a request carrying a client-supplied tenant or role.
 
 **Migrations do not run here.** Nothing in this module touches DDL. Migrations run as a gated job
@@ -27,13 +31,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ragcore.api.customer.routes import router as customer_router
+from ragcore.api.health import router as health_router
 from ragcore.api.middleware.correlation import CorrelationIdMiddleware
 from ragcore.api.middleware.identity import IdentityHeaderMiddleware
 from ragcore.api.middleware.problems import install_problem_handlers
+from ragcore.api.middleware.provenance import (
+    GatewayProvenanceMiddleware,
+    require_thumbprints,
+)
 from ragcore.api.staff.routes import router as staff_router
 from ragcore.api.workload.routes import router as workload_router
 from ragcore.config.composition import Container, build_container
-from ragcore.config.settings import Settings
+from ragcore.config.secrets import KeyVaultSecretResolver, resolve_required
+from ragcore.config.settings import Settings, get_settings
+from ragcore.infrastructure.azure_credentials import close_azure_credential
 
 TITLE = "Synthia RagCore"
 DESCRIPTION = (
@@ -54,6 +65,27 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
     Returns:
         The application, with middleware, problem handlers and all three audience routers.
     """
+    # Settings are resolved HERE rather than only inside the lifespan, because gateway provenance
+    # is configured on the middleware and middleware is bound when the application is built. That
+    # ordering is deliberate: an allow-list read at request time would make an unconfigured process
+    # start cleanly and fail per request, and a security control that degrades into a 403 storm is
+    # one that gets switched off under pressure. The lifespan still owns the container.
+    resolved_settings = (
+        settings
+        if settings is not None
+        else container.settings
+        if container is not None
+        else get_settings()
+    )
+
+    # Parsed and checked HERE, before anything else is built. `add_middleware` only records the
+    # class and its arguments — Starlette constructs the stack on first use — so a check that lived
+    # solely in the middleware constructor would fire when the application started *serving*
+    # rather than when it was *built*, and the gap between those two moments is exactly where a
+    # misconfigured process can look healthy.
+    accepted_thumbprints = require_thumbprints(
+        resolved_settings.edge_trust.gateway_certificate_thumbprints
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -66,10 +98,31 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
         **Cancellation-safe.** Shutdown work belongs after the ``yield``, where Starlette runs it
         during a controlled shutdown. Nothing here catches :class:`asyncio.CancelledError`.
         """
-        app.state.container = container if container is not None else build_container(settings)
+        app.state.container = (
+            container if container is not None else build_container(resolved_settings)
+        )
+        resolved = app.state.container.settings
+
+        # Secret references resolve HERE, before the application begins serving, and a failure
+        # stops the process (research R-019). Resolving lazily would fail on whichever request
+        # first needed the secret, in whichever replica happened to serve it — a configuration
+        # defect wearing the costume of an intermittent outage.
+        #
+        # Skipped when no vault is configured, which is the developer-machine case and the only
+        # one. A deployed environment without a vault is a deployment defect, and the pipeline is
+        # what catches it: a running process cannot tell which environment it wishes it were in.
+        if resolved.key_vault.is_configured:
+            await resolve_required(
+                KeyVaultSecretResolver(resolved.key_vault.vault_uri),
+                resolved.required_secret_references(),
+            )
+
         try:
             yield
         finally:
+            # The shared credential owns an HTTP session; a session nobody closes is a warning on
+            # every test run and a descriptor leak in a long-lived worker.
+            await close_azure_credential()
             app.state.container = None
 
     app = FastAPI(
@@ -83,11 +136,26 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
     )
 
     # Read bottom-up: Starlette wraps each added middleware around the ones added before it, so
-    # identity is inside correlation and every request is correlated before anything refuses it.
+    # the running order is correlation, then provenance, then identity — every request is
+    # correlated before anything refuses it, and nothing reads the identity contract until the
+    # request has proved it came through the gateway that set it.
+    #
+    # The allow-list is resolved HERE, at construction, not per request. A process that cannot
+    # prove provenance must not start (see GatewayProvenanceUnconfiguredError), and `create_app`
+    # is where that failure becomes a container that does not start rather than a 403 storm.
     app.add_middleware(IdentityHeaderMiddleware)
+    app.add_middleware(
+        GatewayProvenanceMiddleware,
+        accepted_thumbprints=accepted_thumbprints,
+    )
     app.add_middleware(CorrelationIdMiddleware)
 
     install_problem_handlers(app)
+
+    # Outside every audience prefix, and outside the trust boundary with it: the probes come from
+    # the Container Apps infrastructure on the internal network, not through APIM, so they carry no
+    # certificate and no identity. See ragcore.api.health.
+    app.include_router(health_router)
 
     app.include_router(customer_router)
     app.include_router(staff_router)

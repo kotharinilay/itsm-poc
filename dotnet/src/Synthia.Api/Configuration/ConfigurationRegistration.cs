@@ -102,6 +102,22 @@ internal static class ConfigurationRegistration
                 "(plan Stage 10).")
             .ValidateOnStart();
 
+        // GATEWAY PROVENANCE. Validated at start like every other setting, and fatal when absent:
+        // a process without an allow-list cannot tell an APIM-stamped identity header from a
+        // forged one, and would serve the forged one without a single unusual log line.
+        services.AddOptions<EdgeTrustOptions>()
+            .BindConfiguration(EdgeTrustOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<IValidateOptions<EdgeTrustOptions>, EdgeTrustOptionsValidator>();
+
+        // Startup fails when a required secret reference does not resolve. Registered as an
+        // IValidateOptions so the existing ValidateOnStart() above drives it — the check belongs to
+        // the same gate as every other configuration rule rather than to a separate startup hook
+        // somebody could forget to call.
+        services.AddSingleton<IValidateOptions<KeyVaultOptions>, RequiredSecretsValidator>();
+
         // The host's own drain must match the platform's, or the two disagree about how long an
         // in-flight request has. A host that gives up sooner drops requests Container Apps was
         // still waiting for; one that gives up later is killed mid-request anyway (plan Stage 10).

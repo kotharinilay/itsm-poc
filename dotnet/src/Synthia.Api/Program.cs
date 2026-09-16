@@ -57,7 +57,22 @@ builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => JsonConventions.Apply(options.SerializerOptions));
 
 // Built-in OpenAPI, generated from the application contracts rather than hand-maintained.
-builder.Services.AddOpenApi();
+//
+// ONE DOCUMENT PER AUDIENCE, and a merged document is prohibited: publishing them together would
+// let a customer-facing client discover the staff surface. The split is by path prefix because the
+// prefix IS the audience — the same fact APIM routes on and IdentityContextMiddleware resolves.
+//
+// This deployable serves customer and staff only. The workload audience belongs to RagCore, which
+// emits its own document; there is deliberately no empty workload document here, because an empty
+// contract reads as "this surface has no operations" rather than "this surface is somewhere else".
+foreach (string audience in new[] { "customer", "staff" })
+{
+    string prefix = $"api/{audience}/v1";
+
+    builder.Services.AddOpenApi(audience, options =>
+        options.ShouldInclude = description =>
+            description.RelativePath?.StartsWith(prefix, StringComparison.Ordinal) ?? false);
+}
 
 // The section name rather than IOptions<ReadDatabaseOptions>. That options type belongs to
 // Synthia.Persistence, and the composition root deliberately cannot reference it (plan §Dependency
@@ -73,14 +88,22 @@ WebApplication app = builder.Build();
 // Correlation and trace context are established BEFORE request logging, which is what makes every
 // record of a request carry its identifier — including the record of the request failing.
 // Authentication runs before tenant resolution and authorization.
+//
+// GATEWAY PROVENANCE RUNS BEFORE IDENTITY, and the order is not interchangeable. The identity
+// contract is trusted precisely and only because APIM set it; a request that did not come through
+// APIM must be refused before any part of that contract is read.
 app.UseExceptionHandler();
 app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<GatewayProvenanceMiddleware>();
 app.UseMiddleware<IdentityContextMiddleware>();
 
 app.MapSynthiaHealth();
 app.MapCustomerViewEndpoints();
 app.MapStaffViewEndpoints();
 
+// Served in development for humans, and requested by the contract tests in every environment they
+// run in. The artifact CI publishes comes from the same generator, so what is reviewed is what is
+// served.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

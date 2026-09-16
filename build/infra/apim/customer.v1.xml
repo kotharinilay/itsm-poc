@@ -1,0 +1,102 @@
+<!--
+  CUSTOMER API (/api/customer/v1) - APIM policy.
+
+  Runs after the global policy, which has already proved edge provenance, deleted every inbound
+  copy of the identity contract, and attached the gateway client certificate. This policy does the
+  one thing left: derive identity, exactly once, and state it in the closed contract.
+
+  THE ROLE ON THIS AUDIENCE IS ALWAYS end_user, and that is the whole point of a separate policy
+  per audience. Any person acting on a customer surface is an end user - including staff - and
+  their staff roles MUST NOT be consulted here (constitution Principle II). There is deliberately
+  no code path below that reads a role claim, so a staff member cannot promote themselves by
+  arriving here with a token that happens to carry one.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <!--
+      Multi-tenant: the customer application registration accepts any Entra tenant, and admission
+      is decided later by the platform tenant registry. AUTHENTICATION IS NOT AUTHORIZATION
+      (constitution Principle I) - a valid token from an unregistered organisation is a valid
+      token, and the backend refuses it on registry state, not here. The gateway holds no tenant
+      state (spec 11.1); a tid allow-list here was considered and rejected for that reason.
+    -->
+    <validate-azure-ad-token
+        tenant-id="organizations"
+        header-name="Authorization"
+        output-token-variable-name="jwt"
+        failed-validation-httpcode="401"
+        failed-validation-error-message="Unauthorized">
+      <client-application-ids>
+        <application-id>{{customer-client-application-id}}</application-id>
+      </client-application-ids>
+      <audiences>
+        <audience>{{customer-api-audience}}</audience>
+      </audiences>
+      <required-claims>
+        <!--
+          scp is present on a delegated token and absent on an app-only one. Requiring it is how
+          this audience refuses an app-only credential: the customer API is delegated-user access
+          only (spec 11.3), and a workload arriving with its own token must not be able to act as
+          a customer.
+        -->
+        <claim name="scp" match="any">
+          <value>{{customer-api-scope}}</value>
+        </claim>
+      </required-claims>
+    </validate-azure-ad-token>
+
+    <!--
+      (tid, oid) and nothing else is an identity key (constitution Principle I). email, upn and
+      preferred_username are deliberately not read: they are user-supplied, mutable, and reusable
+      after an account is deleted.
+    -->
+    <set-header name="X-Idp-Tenant-Id" exists-action="override">
+      <value>@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("tid", ""))</value>
+    </set-header>
+    <set-header name="X-Idp-Principal-Id" exists-action="override">
+      <value>@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("oid", ""))</value>
+    </set-header>
+
+    <!-- Constant. See the header comment: the customer surface has exactly one role. -->
+    <set-header name="X-Idp-Roles" exists-action="override">
+      <value>end_user</value>
+    </set-header>
+
+    <set-header name="X-Idp-Credential-Class" exists-action="override">
+      <value>delegated</value>
+    </set-header>
+
+    <!--
+      Attribution only, and never tenant authority (spec 11.5). It names which client application
+      the caller used - desktop, portal - so an audit record can say so. It is taken from the
+      validated token's azp rather than from a request header precisely because a header would be
+      caller-controlled and would then be attribution a caller could write.
+    -->
+    <set-header name="X-Idp-Client-Surface" exists-action="override">
+      <value>@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("azp", ""))</value>
+    </set-header>
+
+    <!--
+      A token that validated but carries no tid or oid is not an identity this platform can use.
+      Refused here rather than forwarded as empty headers, which the backend would reject anyway -
+      but with a worse error and one more hop of doubt about where the emptiness came from.
+    -->
+    <choose>
+      <when condition="@(string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Idp-Tenant-Id", "")) || string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("X-Idp-Principal-Id", "")))">
+        <return-response>
+          <set-status code="401" reason="Unauthorized" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/problem+json</value>
+          </set-header>
+          <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/unauthenticated\",\"title\":\"Unauthenticated\",\"status\":401,\"detail\":\"The token carried no usable identity.\"}")</set-body>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

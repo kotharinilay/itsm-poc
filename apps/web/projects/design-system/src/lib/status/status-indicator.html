@@ -1,0 +1,5 @@
+<span class="ds-status" [class]="'ds-status--' + descriptor().tone">
+  <!-- Decorative: the glyph is a redundant visual channel, the text below is the real name. -->
+  <span class="ds-status__glyph" aria-hidden="true">{{ descriptor().glyph }}</span>
+  <span class="ds-status__label">{{ accessibleName() }}</span>
+</span>

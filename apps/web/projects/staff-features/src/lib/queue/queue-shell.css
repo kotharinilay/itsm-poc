@@ -1,0 +1,11 @@
+.sf-queue__table {
+  border-collapse: collapse;
+  inline-size: 100%;
+}
+
+.sf-queue__table th,
+.sf-queue__table td {
+  text-align: start;
+  padding: 0.5rem;
+  border-block-end: 1px solid currentcolor;
+}

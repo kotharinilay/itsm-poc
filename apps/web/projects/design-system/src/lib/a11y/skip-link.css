@@ -1,0 +1,20 @@
+.ds-skip-link {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  inset-block-start: -100%;
+  z-index: 1000;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  background: Canvas;
+  color: CanvasText;
+  border: 2px solid currentcolor;
+  text-decoration: underline;
+}
+
+/* Revealed on focus only — invisible to the pointer, reachable by the keyboard. */
+.ds-skip-link:focus-visible,
+.ds-skip-link:focus {
+  inset-block-start: 0.5rem;
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}

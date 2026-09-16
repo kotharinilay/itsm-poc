@@ -1,0 +1,16 @@
+<section class="sf-reporting" aria-labelledby="sf-reporting-heading">
+  <h2 id="sf-reporting-heading">Reporting</h2>
+
+  <ds-async-state-container
+    [state]="audit()"
+    loadingLabel="Loading audit records…"
+    emptyTitle="No audit records match"
+    emptyDetail="Narrow or widen the search to see records."
+  >
+    <ul class="sf-reporting__list"></ul>
+  </ds-async-state-container>
+
+  <p class="sf-reporting__scaffold-note">
+    This surface is scaffolded. Reporting behaviour is not implemented.
+  </p>
+</section>

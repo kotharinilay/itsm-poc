@@ -1,0 +1,18 @@
+/*
+ * Type coverage for the specs that run on Node rather than in a browser.
+ *
+ * `no-authz.spec.ts` reads source text, which a Karma test cannot do, so it lives outside `src/`
+ * and runs under `node --test`. The e2e sweep is Playwright. Neither belongs in an application or
+ * library tsconfig, but both must still typecheck.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/tools",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["projects/*/*.spec.ts", "e2e/**/*.ts", "playwright.config.ts"]
+}

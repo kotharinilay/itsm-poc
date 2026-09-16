@@ -1,0 +1,17 @@
+<section class="sf-take-over" aria-labelledby="sf-take-over-heading">
+  <h2 id="sf-take-over-heading">Live sessions</h2>
+
+  <ds-async-state-container
+    [state]="sessions()"
+    loadingLabel="Loading live sessions…"
+    emptyTitle="No sessions are live"
+    emptyDetail="Sessions appear here while people are being helped."
+  >
+    <ul class="sf-take-over__list"></ul>
+  </ds-async-state-container>
+
+  <p class="sf-take-over__scaffold-note">
+    This surface is scaffolded. Take-over joins an existing session as an additional sender; it
+    never starts one.
+  </p>
+</section>

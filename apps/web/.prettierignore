@@ -3,3 +3,7 @@ node_modules/
 .angular/
 coverage/
 package-lock.json
+out-tsc/
+test-results/
+playwright-report/
+blob-report/

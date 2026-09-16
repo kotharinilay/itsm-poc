@@ -6,6 +6,9 @@
     "outDir": "../../out-tsc/lib",
     "declaration": true,
     "declarationMap": true,
+    // `inlineSources` requires a source map; ng-packagr emits one, `tsc -b` does not unless
+    // asked. Stated explicitly so `npm run typecheck` and the package build agree.
+    "sourceMap": true,
     "inlineSources": true,
     "types": []
   },

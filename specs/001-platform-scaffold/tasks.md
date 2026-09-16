@@ -317,7 +317,7 @@ passes without right up until it has to cross a boundary that does not exist.
 - [X] T226 Define the **Front Door + WAF** public edge in `build/infra/frontdoor/` — the single public entry point for all three audiences, WAF in prevention mode with a documented managed rule set, origin reaching APIM over Private Link so neither APIM nor the containers are **publicly reachable** — Boundary: edge | Validates: Spec §FR-DEMO-019, Plan §Platform Environment
 - [X] T227 Define **APIM** as the trust boundary in `build/infra/apim/` — terminates the public edge, routes `/api/{customer,staff,workload}/v1/...` to the correct deployable, and is the **only** network path to either container — Boundary: gateway | Validates: Spec §FR-DEMO-004a, Contracts §README rule 4
 - [X] T228 Implement **identity derivation at APIM** in `build/infra/apim/global.inbound.xml` (cross-cutting) and `build/infra/apim/{customer,staff,workload}.v1.xml` (one per audience) — validates the Entra token once and emits the closed `X-Idp-*` contract of **exactly five values**: `X-Idp-Tenant-Id`, `X-Idp-Principal-Id`, `X-Idp-Roles` (complete set, canonical order), `X-Idp-Credential-Class`, `X-Idp-Client-Surface`. **Audience is not a header** — it is the route prefix APIM matched, so a caller cannot promote themselves by supplying one. **Neither deployable parses a token**; both consume the contract — Boundary: identity | Validates: Constitution P-I, P-II, Spec §FR-IDENT-011, Contracts §README
-- [X] T229 Implement **trusted tenant, audience and role propagation** from the derived header contract through both deployables in `ragcore/src/ragcore/api/middleware/identity.py` and `dotnet/src/Synthia.Api/Middleware/`, so tenant and roles reach every layer from trusted context and from nowhere else — Boundary: identity | Validates: Spec §FR-IDENT-002, §FR-DEMO-010
+- [X] T229 Implement **trusted tenant, audience and role propagation** from the derived header contract through both deployables in `ragcore/src/ragcore/api/middleware/identity.py` and `dotnet/src/Synthia.Api/Middleware/IdentityContextMiddleware.cs`, so tenant and roles reach every layer from trusted context and from nowhere else — Boundary: identity | Validates: Spec §FR-IDENT-002, §FR-DEMO-010
 - [X] T230 Implement **rejection of client-supplied authority headers** at APIM and, as defence in depth, at both deployables — any inbound `X-Idp-*` header arriving from a client is stripped at the gateway, and a deployable receiving one that did not come from APIM refuses the request rather than trusting it — Boundary: identity | Validates: Spec §FR-IDENT-002, §SC-DEMO-003b, Constitution P-I
 - [X] T230a [P] Write a test in `ragcore/tests/security/test_gateway_provenance.py` and `dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs` asserting a request carrying a **well-formed but self-supplied** `X-Idp-*` header set is refused — the shape a real bypass takes, and the case a naive negative test misses. Refused **on provenance, before any header is parsed**, so a better-formed forgery fares no better — Boundary: identity | Validates: Spec §SC-DEMO-002, §SC-DEMO-003b, §FR-IDENT-012
 
@@ -445,16 +445,16 @@ confirm the nine Stage 13 validation gates in plan.md.
 ### Reference fixtures and the inertness guard
 
 - [ ] T239 [P] [US6] Seed the **sample-flow reference operations** in `ragcore/src/ragcore/governance/fixtures.py` — inert, `is_reference_fixture=true`, `requires_elevation=false`, producing **no external effect** and excluded from production configuration — Boundary: Governance | Validates: Spec §FR-DEMO-014, §FR-SCOPE-005
-- [ ] T240 [P] [US6] Write an inertness guard in `ragcore/tests/e2e/test_sample_flows_are_inert.py` asserting no sample flow reaches an external system, a model, the retrieval index or the cache, and that **no sample flow is presented as product capability** on any surface — Boundary: scaffold honesty | Validates: Spec §FR-DEMO-014, §FR-DEMO-015, §SC-DEMO-012
+- [ ] T240 [P] [US6] Write an inertness guard in `ragcore/tests/e2e/test_sample_flows_are_inert.py` asserting no sample flow reaches an external system, a model, the retrieval index or the cache, and that **no sample flow is presented as product capability** on any surface, and that **0 of UC-01 through UC-12** are implemented or stood in for — Boundary: scaffold honesty | Validates: Spec §FR-DEMO-014, §FR-DEMO-015, §SC-DEMO-012, §SC-DEMO-013
 
 ### Flow 1 — Customer API
 
-- [ ] T241 [US6] Implement `POST /api/customer/v1/sample-flows/round-trip` in `ragcore/src/ragcore/api/customer/sample_flows.py` — accepts no tenant, role or audience parameter, derives organisation from trusted context, opens the durable record and returns the correlation identifier — Boundary: Customer API | Validates: Spec §FR-DEMO-001, Contracts §sample-flows
-- [ ] T242 [US6] Implement `GET /api/customer/v1/sample-flows/round-trip/{id}` in the same module as the **client state refresh**, returning the outcome the workload leg persisted — Boundary: Customer API | Validates: Spec §FR-DEMO-001
+- [ ] T241 [US6] Implement `POST /api/customer/v1/sample-flows/round-trip` in `ragcore/src/ragcore/api/customer/sample_flows.py` — accepts no tenant, role or audience parameter, derives organisation from trusted context, opens the durable record and returns the correlation identifier — Boundary: Customer API | Validates: Spec §FR-DEMO-001, §FR-DEMO-005, Contracts §sample-flows
+- [ ] T242 [US6] Implement `GET /api/customer/v1/sample-flows/round-trip/{id}` in the same module as the **client state refresh**, returning the outcome the workload leg persisted — the **read back** of FR-DEMO-005 — Boundary: Customer API | Validates: Spec §FR-DEMO-001, §FR-DEMO-005
 
 ### Flow 2 — Staff API
 
-- [ ] T243 [US6] Implement `GET /api/staff/v1/sample-flows/records` in `dotnet/src/Synthia.Api/Endpoints/StaffSampleFlows.cs` reading **`vw_*_v1` only**, with the target organisation resolved from the platform object being read and never from the request — Boundary: Staff API | Validates: Spec §FR-DEMO-002, Contracts §read-views
+- [ ] T243 [US6] Implement `GET /api/staff/v1/sample-flows/records` in `dotnet/src/Synthia.Api/Endpoints/StaffSampleFlows.cs` reading **`vw_*_v1` only**, with the target organisation resolved from the platform object being read and never from the request — Boundary: Staff API | Validates: Spec §FR-DEMO-002, §SC-DEMO-007, Contracts §read-views
 - [ ] T244 [P] [US6] Write a test in `dotnet/tests/Synthia.IntegrationTests/BaseTableDeniedTests.cs` asserting the monolith's database principal **cannot** read a base table — the refusal comes from PostgreSQL, not from application code — Boundary: read contract | Validates: Spec §FR-DEMO-002, ADR-0003
 
 ### Flow 3 — Workload API
@@ -465,6 +465,14 @@ confirm the nine Stage 13 validation gates in plan.md.
 
 - [ ] T246 [US6] Implement `POST /api/customer/v1/sample-flows/service-hop` in `ragcore/src/ragcore/api/customer/sample_flows.py` reaching the workload boundary **through APIM**, app-only, and returning what the callee reports about the caller's identity — Boundary: service boundary | Validates: Spec §FR-DEMO-004
 - [ ] T247 [US6] Write the **bypass negative suite** in `ragcore/tests/security/test_no_direct_route.py` asserting a request presented straight to a deployable fails across every audience — including one carrying a **well-formed but self-supplied gateway header contract** — and that no pod-to-pod route is reachable — Boundary: service boundary | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a, §SC-DEMO-003b
+
+> **T230a and T247 overlap deliberately, and the split is the point.** Both refuse a well-formed
+> self-supplied `X-Idp-*` set; both cite `SC-DEMO-003b`. T230a poses the attack **in process**, against
+> the real pipeline, and runs on every commit — it is fast, needs no Azure, and catches a middleware
+> regression the day it lands. T247 poses it **against the deployed topology** and catches what no
+> in-process test can: an ingress misconfigured to `accept`, a network path that should not resolve,
+> a certificate that is not actually required. Neither subsumes the other, and collapsing them would
+> either make the fast check need a deployment or let the deployed check stand in for one.
 
 ### Flow 5 — Service Bus
 
@@ -478,6 +486,17 @@ confirm the nine Stage 13 validation gates in plan.md.
 
 ### Flow 7 — Persistence and outbox
 
+`FR-DEMO-005` is the persistence half — a write, a read back, and a concurrent write resolving to
+exactly one outcome. The write and read back are T241 and T242 on the customer flow; T252a is the
+concurrent leg. `FR-DEMO-006` is the outbox half, in T252 and T253.
+
+The concurrent leg is asserted **again** here even though `ragcore/tests/concurrency/test_optimistic.py`
+already covers optimistic concurrency at the persistence layer. That suite proves the conditional
+update behaves; this one proves the property survives the whole sample flow through the deployed path,
+where two requests race across replicas rather than two sessions racing in one process. The first can
+pass while the second fails.
+
+- [ ] T252a [US6] Demonstrate the **concurrent write** in the sample flow — two simultaneous requests against the same durable record in `ragcore/tests/concurrency/test_sample_flow_concurrent_write.py`, asserting exactly **one** resolves to an effect and the loser is told it lost rather than made to wait. **Nothing blocks and nothing locks**: the loser returns promptly with a conflict, which is the property a distributed lock would regress by hanging instead of failing — Boundary: persistence | Validates: Spec §FR-DEMO-005
 - [ ] T252 [US6] Wire the sample flow's state change and its outbox row into **one transaction** in `ragcore/src/ragcore/application/sample_flows.py`, so the two are durable together or not at all — Boundary: messaging | Validates: Spec §FR-DEMO-006
 - [ ] T253 [P] [US6] Write a crash test in `ragcore/tests/integration/test_sample_flow_outbox_crash.py` inducing a failure between the state change and the publish, asserting **0 messages lost and 0 effects duplicated** — Boundary: messaging | Validates: Spec §SC-DEMO-008
 

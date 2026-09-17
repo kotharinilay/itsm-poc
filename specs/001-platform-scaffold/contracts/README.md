@@ -16,9 +16,14 @@ contract and neither parses a token.
 | `/api/customer/v1/views/...` | .NET | Customer | Read models |
 | `/api/staff/v1/...` | RagCore | Staff | Approval verdict, take-over, cancellation |
 | `/api/staff/v1/views/...` | .NET | Staff | Queues, step trail, dashboards |
+| `/api/workload/v1/integrations/...` | **Integrations Service** | Workload | Tool catalogue; synchronous system-of-record operations |
 | `/api/workload/v1/...` | RagCore | Workload | Execution-leg operations |
 
-A client legitimately calls both deployables. They are two backends behind one trust boundary.
+**Longest matching path wins**, the same rule that puts `/views` on the monolith.
+
+A client legitimately calls **two** of the three deployables — RagCore and the .NET read API. They are
+two backends behind one trust boundary. **The Integrations Service is not client-facing**: only
+RagCore calls it, on the workload audience, through APIM like any other caller.
 
 ## Conventions binding every endpoint
 
@@ -145,7 +150,8 @@ silence.
 | [sample-flows.md](./sample-flows.md) | The scaffold's inert acceptance flows, and OpenAPI emission |
 | [customer-api.md](./customer-api.md) | Customer audience — RagCore and .NET |
 | [staff-api.md](./staff-api.md) | Staff audience — RagCore and .NET |
-| [workload-api.md](./workload-api.md) | Workload audience |
+| [workload-api.md](./workload-api.md) | Workload audience — RagCore's execution leg |
+| [integrations-api.md](./integrations-api.md) | **The Integrations Service** — catalogue, synchronous system-of-record operations |
 | [read-views.md](./read-views.md) | PostgreSQL view contract between the deployables |
 | [notifications.md](./notifications.md) | SignalR envelope |
 | [triggers.md](./triggers.md) | Service Bus trigger message |

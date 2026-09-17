@@ -387,6 +387,60 @@ rebuilt by re-running ingestion.
 
 ---
 
+## R-022 — Where do integrations live? *(added 2026-09-18)*
+
+**Decision**: In a **separate Python deployable**, the Integrations Service, parallel to RagCore.
+Decided at the architecture level by `Synthia-Platform-Specification.md` §21.6 and
+[ADR-0007](../../docs/adr/0007-integration-service-boundary.md); recorded here so the plan's reader
+finds the reasoning where the other structural decisions sit.
+
+**Rationale**: RagCore processes untrusted model output, retrieved content and chat text by design.
+Co-locating every organisation's connector credentials with it makes an orchestrator compromise a
+credential breach for every customer system — the accepted risk the platform specification records in
+§18.2 and §35.2 as OQ-02. Moving credential resolution and external egress into a separate runtime
+discharges the most damaging half of it. §14.1 already described these three contexts as independently
+addressable; ADR-0001 collapsed them, and this narrows that divergence rather than adding one.
+
+**Alternatives considered**:
+
+- *Keep integrations inside RagCore.* Rejected — leaves OQ-02's damaging half unaddressed and leaves
+  §14.1 and §9.2 describing a structure that does not exist.
+- *Split RagCore into user-facing and execution runtimes* (§18.2's own recommendation for OQ-02).
+  Rejected as insufficient: it separates the *platform* credential classes but leaves connector
+  credentials wherever the adapters live.
+- *One service per integration context.* Rejected as the premature distributed decomposition
+  Principle V names as a defect — three deployables with no boundary between them that anything
+  enforces.
+
+**Consequence**: gateway hops return to the tool path that ADR-0001 removed, so the §34.2 hop-count
+baseline moves again and **OQ-06 cannot be closed until it is re-measured**. No performance figure is
+an acceptance criterion in the interim. A directed application dependency now exists, RagCore →
+Integrations, with results returning over Service Bus rather than as a call — which is what keeps the
+graph acyclic.
+
+---
+
+## R-023 — Do the two Python services share a library? *(added 2026-09-18)*
+
+**Decision**: **No.** Separate `pyproject.toml`, separate lockfile, separate virtual environment,
+separate CI pipeline. Correlation middleware, the problem-details shape, the settings base and the
+telemetry setup are **duplicated**, deliberately.
+
+**Rationale**: constitution Principle VI — DRY applies *within* a module boundary, and unrelated
+modules must not be forced into a shared abstraction merely to remove duplication, because duplication
+across boundaries is cheaper than a false shared contract. More concretely: a shared package would be
+a **build-level dependency between two deployables required to have none**, and it would not appear as
+a cross-tree path, so `build/scripts/check-boundaries.sh` could not catch it.
+
+**Alternatives considered**: a `synthia-common` package, rejected above; vendoring by copy with a sync
+script, rejected as the same coupling with worse ergonomics and no enforcement.
+
+**Consequence**: the two services' middleware will drift. That is accepted — each is small, each is
+tested in its own suite, and a divergence in one service's error contract is caught by its own
+publishability gate rather than by a shared type nobody owns.
+
+---
+
 ## Outstanding — not resolved here
 
 | Item | Why it is not resolved | Impact if left |
@@ -396,3 +450,6 @@ rebuilt by re-running ingestion.
 | Script signing for GA | ADR-0004 residual gap | Integrity rests on API trustworthiness until closed. Blocks catalogue expansion beyond non-destructive entries |
 | "Destructive" taxonomy | ADR-0004 | The §35.4 shipping gate cannot be lifted |
 | Resume/checkpoint reconciliation contract | Platform specification OQ-08 | Behaviour undefined when a trigger arrives at an unexpected checkpoint position |
+| Which system-of-record operations are synchronous | ADR-0007 §Unresolved. §22.3 classifies six write classes identically; §22.5 makes only case creation clearly blocking | The Integrations contract cannot be frozen. Case creation is specified; the other five are not guessed |
+| The job row's result columns and their column-scoped `GRANT` | ADR-0007 §Unresolved | `FR-INTEG-020` and `FR-DEMO-025` are provable only once the DDL exists — the protection lives at the database permission boundary |
+| OQ-06 latency re-baseline | Deferred again by R-022's restored gateway hops | None. No performance figure gates a release |

@@ -253,6 +253,72 @@ filesystem with every writable path named.
 A failure in any of these blocks the merge. No performance figure appears in this table — nothing is
 gated on responsiveness (constitution Section 2).
 
+## Validating the Integrations Service boundary *(added 2026-09-18)*
+
+Stage 17's golden path C. Each runs against a **deployed** environment (`FR-DEMO-019`) and acts only on
+the inert reference connector. Numbering continues the sequence above; identifiers are never reused.
+
+### V20 — RagCore cannot reach an external connector (SC-DEMO-015)
+
+Three separate observations, **all required**. From RagCore's runtime: attempt a direct connection to
+the inert reference connector and observe it fail at the network layer; attempt to resolve a connector
+secret and observe Key Vault refuse; run the architecture check asserting no adapter, connector or
+provider client remains in the RagCore tree.
+
+*Attempting it is the point.* An assertion that the path is unused passes equally on a system where
+the path exists and simply has no caller yet.
+
+### V21 — The synchronous call goes through APIM (SC-DEMO-016)
+
+Read the tool catalogue and perform an inert case-like operation, both through the deployed edge.
+Then attempt the same calls by the service's internal address, and again with a well-formed but
+**self-supplied** identity contract. Expect success on the first, refusal on both others.
+
+### V22 — Asynchronous execution over the message transport (SC-DEMO-017)
+
+Dispatch an inert capability. Inspect the command on the queue: it carries `jobId`, `correlationId`
+and `kind`, and **nothing else**. Confirm the Integrations Service read its capability and parameters
+from the job row.
+
+### V23 — Duplicate delivery, both boundaries, separately (SC-DEMO-018)
+
+Two independent runs, not one:
+
+1. Deliver a resume trigger twice; confirm the **atomic claim** in RagCore absorbed it.
+2. Deliver an execution command twice; confirm the **derived idempotency key** in the Integrations
+   Service absorbed it, and that exactly one execution record exists.
+
+Then remove each boundary in turn and confirm **its own** proof fails. A single end-to-end duplicate
+test passes whenever either mechanism holds, and would stay green on the day one silently broke.
+
+### V24 — The organisation is not taken from a payload (SC-DEMO-019)
+
+Publish a command carrying an organisation field; expect it dead-lettered with an alert and never
+processed. Separately, publish a valid command whose payload asserts a *different* organisation than
+the job row; expect the effect bound to the job row's organisation.
+
+### V25 — Connector secrets are unreachable from RagCore (SC-DEMO-020)
+
+Enumerate what RagCore's managed identity can resolve in Key Vault: zero connector secrets. Scan its
+source, configuration, environment and image: zero connector secrets.
+
+### V26 — Results correlate back to the originating work (SC-DEMO-021)
+
+Follow one correlation identifier from the edge, through the gateway hop, across both queues, into the
+execution record and back to the work item. One identifier, whole journey, three deployables.
+
+### V27 — Integrations is independently observable (SC-DEMO-022)
+
+Query the Integrations Service's traces, connector metrics and execution records **without reading
+RagCore's telemetry**, and answer: what was attempted, against which connector, with what outcome and
+how long it took.
+
+### V28 — Degradation when Integrations is down (SC-DEMO-023)
+
+Stop the Integrations Service. Confirm conversation, retrieval and guidance still succeed, and that a
+capability requiring an external effect falls back to manual resolution or escalation **visibly** —
+nothing is reported to a user as completed.
+
 ## Known limits of the scaffold
 
 - **No use case resolves.** UC-01 through UC-12 are placeholders. Every action-requiring request

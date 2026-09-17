@@ -21,6 +21,29 @@ That is the entire payload. It carries — and may carry — **nothing else**.
 Explicitly forbidden in a trigger: tenant, requester, roles, action, target, approval state, expiry,
 command content, credentials, or any other authority-bearing value.
 
+**The integration command and result carry `jobId` in place of `workItemId`** *(added 2026-09-18,
+ADR-0007)*:
+
+```json
+{
+  "jobId": "…",
+  "correlationId": "…",
+  "kind": "integration.execute"
+}
+```
+
+**Still three fields, and the payload rule above is unamended.** A job identifier is an opaque
+platform identifier of exactly the same class as a work identifier: it names a durable row, carries no
+organisation, actor, capability, target or authority, and grants nothing on its own. The Integrations
+Service reads its instruction from the row that identifier names, **never from the message that
+carried it** — a service that executed what a message told it to would turn an at-least-once
+redelivery, or a malformed publish, into an ungoverned external call.
+
+**A message carrying any additional field is refused and dead-lettered with an alert, not sanitised**
+(spec `FR-DEMO-025`). Stripping the field and continuing would return success to whoever sent it and
+leave the attempt indistinguishable from an ordinary message — the same reasoning that makes a forged
+identity contract a refusal rather than a cleanup on the HTTP side.
+
 ## Trigger kinds
 
 `kind` names the decision that made the work resumable. It is a **routing hint only** — the consumer
@@ -34,6 +57,15 @@ reads the authority from the durable work record either way, and a consumer that
 | `consent.granted` | The work item's own requester consented | The work item's `requested_by_oid`, and no one else | Execution |
 | `consent.refused` | That requester refused | As above | Closure |
 | `sample.flow` | The scaffold is proving the seam itself | Nobody — no decision was made | Inert sample execution |
+| `integration.execute` | RagCore has an authorized capability to run | Nobody — the authority is already on the work record | The Integrations Service |
+| `integration.completed` | An execution finished; its outcome is durable | Nobody | RagCore, to read the result and continue |
+| `integration.failed` | An execution did not complete | Nobody | RagCore, to record and escalate. **Never a re-dispatch** |
+
+**The three integration kinds travel on their own queues**, separate from the resume trigger:
+`synthia-integration-commands` and `synthia-integration-results`. Each lifecycle has its own expiry
+and dead-letter semantics, and mixing them into one queue would make dead-letter triage ambiguous —
+an operator would not know whether a dead-lettered message meant *approved work never ran* or *a
+result never returned*, which call for different actions.
 
 The values mirror the `verdict` enums in `data-model.md` — `approved`/`rejected` for approval,
 `granted`/`refused` for consent — so the message never introduces vocabulary the database does not

@@ -2,16 +2,36 @@
 
 **Date**: 2026-09-15 | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
-PostgreSQL is the single authoritative durable store (constitution Principle IV). RagCore owns every
-table and every migration; the .NET monolith reads only through versioned views defined in
+PostgreSQL is the single authoritative durable store (constitution Principle IV). The .NET monolith
+reads only through versioned views defined in
 [contracts/read-views.md](./contracts/read-views.md).
 
-**Schemas**
+**Schemas** *(revised 2026-09-18 — ADR-0007)*
 
 | Schema | Owner | Contents |
 |---|---|---|
-| `platform` | RagCore / Alembic | Every table below |
+| `platform` | RagCore / Alembic | Every table below except those marked `integration` |
+| `integration` | **Integrations Service** / the same Alembic project | Connector registry, connector binding, execution record, its own outbox and idempotency ledger |
 | `langgraph` | LangGraph checkpointer's own `setup()` | Checkpoint tables. Excluded from Alembic autogenerate |
+
+**One database, one Alembic project, two owning services.** ADR-0007 keeps a single gated migration
+job and a single ordering; what changes is that `integration` tables are the Integrations Service's to
+write and RagCore's to leave alone.
+
+**The Integrations Service's grants are the security control, not a convention.**
+
+| Grant | Scope |
+|---|---|
+| Write | Everything in `integration` |
+| **Column-scoped `UPDATE`** | **The result columns of `integration_job` only**, addressed by `job_id` |
+| Read | Published `vw_*_v1` views |
+| **None** | Any `platform` base table; any non-result column of `integration_job` |
+
+**It must not be able to modify the instruction it was given.** `catalogue_id`, `catalogue_version`,
+`parameters` and `tenant_id` on `integration_job` are not writable by it. A service that could rewrite
+its own instruction could execute an operation other than the one governance authorized — a Principle
+VIII hard failure. Enforced at the database permission boundary in the manner of
+`0017_work_item_immutability` and `0019_database_principals`, never in application code.
 
 **Conventions** (constitution v3.1.0): every mutable row carries a `version` column for **optimistic
 concurrency** — no pessimistic or distributed locking exists. Standard audit columns (`created_at`,
@@ -434,6 +454,103 @@ The twelfth bounded context (§32.12), realised as a RagCore worker — research
 **Rules**: runs are **idempotent** — re-running from a watermark MUST NOT duplicate documents. The
 retrieval index is derived, so a lost index is rebuilt by re-running ingestion rather than restored.
 Ingestion never writes authority.
+
+---
+
+## Integration job — the durable instruction *(added 2026-09-18)*
+
+**Schema `platform`. Written by RagCore. Its result columns, and only those, are writable by the
+Integrations Service.** This is the record that lets the command message stay opaque.
+
+| Field | Type | Notes |
+|---|---|---|
+| `job_id` | uuid, PK | The opaque identifier the message carries |
+| `work_item_id` | uuid, FK, not null | The authority record being spent |
+| `operation_id` | uuid, FK, not null | The operation within it |
+| `tenant_id` | uuid, not null | **The organisation. Recovered from here, never from the message** |
+| `catalogue_id` | text, not null | The capability RagCore selected |
+| `catalogue_version` | int, not null | Bound at selection time |
+| `parameters` | jsonb, not null | The arguments. **Data** — the destination comes from the connector binding, never from here |
+| `status` | enum, not null | `created`, `dispatched`, `completed`, `failed`, `expired` |
+| `result_status` | enum, null | **Result column** — `executed`, `failed` |
+| `result_verification` | enum, null | **Result column** — `server_confirmed`, `client_attested`, `contradicted` |
+| `result_execution_id` | uuid, null | **Result column** — points into `integration.execution_record` |
+| `result_recorded_at` | timestamptz, null | **Result column** |
+| `created_at`, `dispatched_at`, `expires_at` | timestamptz | `expires_at` inherits the work item's window |
+| `version` | int, not null | Optimistic concurrency |
+
+**Rules**
+- The four `result_*` columns are the **entire** writable surface for the Integrations Service. A
+  `GRANT` names them explicitly; `tests/security/test_integration_grants.py` asserts an attempted
+  write to any other column is refused **by PostgreSQL**, not by application code.
+- A job is written in the **same transaction** as the state change that caused it, alongside its
+  outbox row. The message is published afterwards.
+- `parameters` is never read from a message. `FR-INTEG-014`.
+
+---
+
+## Connector registry and connector binding — `integration` schema *(added 2026-09-18)*
+
+**Owned and written by the Integrations Service.** Neither table exists today; both are greenfield,
+which is why ADR-0007's ownership decision splits nothing.
+
+**`connector`** — one row per external system.
+
+| Field | Type | Notes |
+|---|---|---|
+| `connector_id` | text, PK | `servicenow`, `graph`, `onelogin`, `duo`, `reference` |
+| `kind` | enum, not null | `native`, `mcp` |
+| `base_endpoint` | text, not null | **The destination. Never derived from parameters, model output or retrieved content** (`FR-EXT-018`) |
+| `is_reference_fixture` | bool, not null | True for the inert reference connector. Excluded from production configuration |
+
+**`connector_binding`** — how one catalogue capability executes.
+
+| Field | Type | Notes |
+|---|---|---|
+| `catalogue_id` | text, PK | Matches `platform.governance_record.catalogue_id` |
+| `catalogue_version` | int, PK | Composite. Binds an approval to one executable shape |
+| `connector_id` | text, FK, not null | |
+| `operation_path` | text, not null | |
+| `signing_profile` | text, null | Key Vault reference — **never a value** |
+| `idempotency_policy` | enum, not null | `derived_key`, `none` |
+
+**Rules**
+- **No treatment, no accepted roles, no risk tier.** Those stay in `platform.governance_record`,
+  because treatment assignment is deterministic governance's decision (`FR-INTEG-008`). A binding
+  says *how* a capability runs; the governance record says *whether and by whom* it may.
+- The catalogue identifier and version are the join, so a binding cannot silently apply to a version
+  nobody approved.
+
+---
+
+## Execution record — `integration` schema *(added 2026-09-18)*
+
+**What was attempted externally.** Distinct from `platform.operation`, which is what the platform
+*concluded* — two different facts, and a single row for both would report the first as the second on
+the day they differ.
+
+| Field | Type | Notes |
+|---|---|---|
+| `execution_id` | uuid, PK | |
+| `job_id` | uuid, not null | Correlates to the originating work — `FR-DEMO-027` |
+| `tenant_id` | uuid, not null | Recovered from the job row |
+| `connector_id` | text, FK, not null | |
+| `catalogue_id`, `catalogue_version` | text, int, not null | What was invoked |
+| `idempotency_key` | text, not null, unique | **Derived, never random** — boundary 2 |
+| `external_reference` | text, null | The far side's own identifier, where it returns one |
+| `outcome` | enum, not null | `succeeded`, `failed`, `refused_unentitled`, `refused_unregistered`, `refused_window`, `unreachable` |
+| `normalized_result` | jsonb, null | Contract-checked at the boundary. **Data, never instruction** |
+| `attempted_at`, `completed_at` | timestamptz | |
+| `correlation_id` | text, not null | The journey |
+
+**Rules**
+- Append-only. An attempt is never rewritten; a second attempt is a second row.
+- `unique(idempotency_key)` **is** idempotency boundary 2. A redelivered command derives the same key
+  and loses the insert, so at most one external effect occurs — `SC-DEMO-018`.
+- The four `refused_*` outcomes are distinct from `failed` and from `unreachable` because they need
+  different operator actions, and because `FR-EXT-022` requires *entitled but unreachable* to be
+  reported distinctly from *not entitled*.
+- `normalized_result` MUST NOT contain credentials, tokens or another organisation's data.
 
 ---
 

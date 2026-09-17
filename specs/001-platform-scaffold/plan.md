@@ -8,8 +8,14 @@
 
 ## Summary
 
-Build a monorepo containing five applications across two deployables, proving the load-bearing
+Build a monorepo containing six applications across **three** deployables, proving the load-bearing
 **platform infrastructure** end to end while containing no product use cases.
+
+**Revised 2026-09-18 — the Integrations Service boundary.** `Synthia-Platform-Specification.md` §21.6
+and [ADR-0007](../../docs/adr/0007-integration-service-boundary.md) make **Integrations a separately
+deployed Python service parallel to RagCore**. This plan no longer treats integrations as a RagCore
+package. The contexts and their responsibilities are unchanged; their runtime placement is not.
+Stages 1–13 remain valid as built except where §Stage 16 names the migration out of RagCore.
 
 **Revised 2026-09-16 — scaffold scope correction.** The architecture below is unchanged. What changed
 is what the scaffold must *demonstrate*: platform integration through inert sample flows
@@ -25,16 +31,26 @@ engineering contract the build must satisfy: transactional outbox, optimistic co
 policy, startup configuration validation, container hardening, the twelfth bounded context
 (`Ingestion`), and fifteen required test categories.
 
-**RagCore** (Python 3.12, LangGraph) owns orchestration, execution and all state-changing operations.
-The **.NET 10 modular monolith** is read-only. There is no application-level dependency between them;
-they meet only at PostgreSQL and asynchronous messaging. Three client surfaces come from one Angular
+**RagCore** (Python 3.12, LangGraph) owns orchestration, reasoning, governance, approval, the authority
+record and the atomic claim — **and reaches no external system**. The **Integrations Service**
+(Python 3.12, FastAPI) owns the tool catalogue, the connector registry and all traffic to external
+systems. The **.NET 10 modular monolith** is read-only. Three client surfaces come from one Angular
 workspace, with Electron as a thin host that decides nothing.
 
-Work is organised into **fourteen ordered stages**: eleven scaffold stages containing no product
+**The dependency graph is directed and acyclic**: `RagCore → Integrations`, and nothing in reverse.
+RagCore and the monolith still have no application-level dependency in either direction. Results
+return over Service Bus rather than as a call, which is what keeps the graph acyclic — a callback from
+Integrations to RagCore would turn two services into a distributed monolith and is the single edge
+most worth refusing in review.
+
+Work is organised into **seventeen ordered stages**: eleven scaffold stages containing no product
 behaviour, two architectural golden paths — A proves the synchronous governed machine, B proves the
-asynchronous platform integration — and only then the twelve use cases. The four execution treatments
-remain catalogue data throughout and are classified deterministically; the two human-decided ones are
-not *exercised* by the scaffold (spec `FR-DEMO-016`, `FR-DEMO-017`).
+asynchronous platform integration — **three Integrations Service stages (15–17) that must complete
+before Stage 14** — and only then the twelve use cases. Stage numbers are **append-only and never
+reused**, following the same permanence rule the spec applies to requirement identifiers, so 15–17
+carry numbers higher than the stage they precede. The four execution treatments remain catalogue data
+throughout and are classified deterministically; the two human-decided ones are not *exercised* by the
+scaffold (spec `FR-DEMO-016`, `FR-DEMO-017`).
 
 ## Technical Context
 
@@ -49,8 +65,11 @@ Web — Angular standalone components, Angular CDK.
 
 **Storage**: PostgreSQL Flexible Server — the single authoritative durable store, holding platform
 state, LangGraph checkpoints in their own schema, the transactional outbox, idempotency records and
-audit. Azure AI Search is a **derived** retrieval index. Redis is **transient only**. Key Vault is the
-sole source of secret material.
+audit. **One database, two schemas**: `platform`, owned and written by RagCore, and `integration`,
+owned and written by the Integrations Service. **One Alembic project** applies both, as one gated job.
+Integrations reads platform state through published views only and may write **only** the result
+fields of an integration job row. Azure AI Search is a **derived** retrieval index. Redis is
+**transient only**. Key Vault is the sole source of secret material.
 
 **Model layer**: Azure OpenAI and Foundry for reasoning and embeddings, on private endpoints, reached
 **only** through the **AI Gateway** — provider routing, provider-normalised token metering,
@@ -64,7 +83,7 @@ Playwright and axe-core.
 **Target Platform**: Azure Container Apps (internal environment) behind Front Door + WAF and APIM;
 Electron desktop on customer-managed Windows endpoints.
 
-**Project Type**: Multi-application monorepo — two backend deployables, three client surfaces.
+**Project Type**: Multi-application monorepo — **three** backend deployables, three client surfaces.
 
 **Performance Goals**: **None committed.** Constitution Section 2 and spec `PT-001`–`PT-003` make every
 performance figure good-to-have; no release is gated on one.
@@ -91,9 +110,10 @@ how it is reached.
 |---|---|---|
 | Front Door + WAF | The public edge. Every flow enters here | Yes — `FR-DEMO-019` |
 | API Management (APIM) | The trust boundary. **Identity is derived once, here**; neither deployable parses a token | Yes — `FR-DEMO-004a`, `FR-DEMO-019` |
-| Azure Container Apps | Internal environment hosting both deployables and the workers | Yes |
-| PostgreSQL Flexible Server | The single authoritative durable store | Yes — `FR-DEMO-005`, `FR-DEMO-006` |
-| Azure Service Bus | The asynchronous seam between deployables | Yes — `FR-DEMO-007` |
+| Azure Container Apps | Internal environment hosting **all three deployables** and the workers | Yes |
+| PostgreSQL Flexible Server | The single authoritative durable store, two schemas | Yes — `FR-DEMO-005`, `FR-DEMO-006` |
+| Azure Service Bus | The asynchronous seam between deployables. **Three queues**: the resume trigger, the integration command, the integration result | Yes — `FR-DEMO-007`, `FR-DEMO-023` |
+| **Inert reference connector** | A stub external endpoint reachable **only** from the Integrations Service. A scaffold fixture producing no real effect | Yes — `FR-DEMO-020`–`FR-DEMO-022` |
 | Azure SignalR | Server-to-client realtime delivery. A leaf, never a link | Yes — `FR-DEMO-008` |
 | Azure Key Vault | The sole source of secret material | Yes — `FR-DEMO-012` |
 | Application Insights / Azure Monitor | Telemetry sink for traces, metrics and structured logs | Yes — `FR-DEMO-009` |
@@ -118,6 +138,10 @@ These are build-gating rules, not guidance. `SC-DEMO-003` and `SC-DEMO-004` meas
 3. **Key Vault is the sole source of secret material.** Any credential that genuinely cannot be
    replaced by managed identity — a third-party system's API key, for instance — lives there and is
    resolved by reference at the point of use.
+3a. **Connector credentials are held by the Integrations Service alone.** Its managed identity carries
+   the Key Vault role for per-organisation connector secrets; **RagCore's identity does not, and the
+   role is removed rather than duplicated**. This is a role assignment, not a code convention, and
+   `SC-DEMO-020` measures it by attempting the resolution from RagCore and observing Key Vault refuse.
 4. **No secret is ever committed.** Not in source, not in tests, not in committed configuration. CI
    secret scanning enforces this and a finding fails the build.
 5. **No Azure client secret in application configuration.** A configuration key that could hold one is
@@ -136,8 +160,13 @@ These are build-gating rules, not guidance. `SC-DEMO-003` and `SC-DEMO-004` meas
   separate documents, because one merged document would let a customer-facing client discover the
   staff and workload surfaces.
 - **CI emits versioned artifacts** on every build and publishes them. The contract-artifact location
-  is `build/contracts/{dotnet,ragcore}/{audience}.v1.openapi.json` — five documents, versioned by the
-  API version in the path and, as a build artifact, by the commit that produced them.
+  is `build/contracts/{dotnet,ragcore,integrations}/{audience}.v1.openapi.json` — **six documents**
+  as of 2026-09-18, versioned by the API version in the path and, as a build artifact, by the commit
+  that produced them.
+- **The Integrations Service emits `integrations/workload.v1.openapi.json`.** It serves the workload
+  audience only — it is not client-facing — and its document is separate from RagCore's workload
+  document even though both sit under the same audience. **One document per audience per deployable**
+  is the rule, and the compatibility gate therefore diffs per deployable rather than per audience.
 - **Contract tests validate the emitted documents**, not hand-written copies. A route whose emitted
   shape stops matching its declared contract fails the build rather than surfacing at a client.
 
@@ -163,7 +192,7 @@ document and reintroduced exactly the drift this section exists to prevent.
 
 | # | Principle | How the design satisfies it | Status |
 |---|---|---|---|
-| I | Identity derived once; authority never asserted | Identity derived at APIM only; both deployables consume the closed header contract and neither parses a token. No endpoint accepts tenant, role or audience. Tenant admission is trusted identity plus registry state. | **PASS** |
+| I | Identity derived once; authority never asserted | Identity derived at APIM only; **all three deployables** consume the closed header contract and none parses a token. No endpoint accepts tenant, role or audience. Tenant admission is trusted identity plus registry state. | **PASS** |
 | II | Authorization separate and non-hierarchical | Set-intersection helper in both stacks, with no ordering or comparison operator defined on roles. `Synthia_Agents → technician`, `Synthia_Admins → administrator`. **`senior_technician` is implemented as a defined role that no operation accepts** — see below. Customer surfaces apply no role check; the staff portal has no session-origination route. | **PASS** |
 | III | Deterministic governance decides; model proposes | Governance is a distinct RagCore package. The agent loop reaches `read` tools only; every `action` passes the gate. Discovery never grants entitlement. Approval binds approver, tenant, work item, operation, target, version, expiry and audit. | **PASS** |
 | IV | Isolation absolute; one authority per concern | Tenant filter in repository and retrieval layers with no unfiltered path. PostgreSQL authoritative; ServiceNow the case system of record; AI Search derived; Redis transient; exactly one checkpoint store. | **PASS** |
@@ -196,6 +225,44 @@ a word:
 
 No principle moved from PASS. No new violation, no new justified exception, and the Complexity
 Tracking table is unchanged — the correction adds no project, no library and no abstraction.
+
+### Re-evaluation after the Integrations Service boundary (2026-09-18)
+
+This change adds a deployable, which is the kind of change the constitution is most sceptical of. Six
+principles deserve a word:
+
+- **Principle I — identity derived once.** Unchanged and extended. The new service does not parse a
+  token and consumes only the closed header contract; APIM re-derives identity on the hop. The one
+  genuinely new risk — a tenant arriving in a Service Bus payload — is closed by deriving the
+  organisation from durable state and, separately, refusing an out-of-contract field
+  (`FR-DEMO-025`). **PASS.**
+- **Principle III — the model proposes, governance authorizes.** Not weakened. Treatment assignment
+  and role intersection **stay in RagCore** (`FR-INTEG-008`); the new service re-verifies *facts* and
+  originates no authorization. A serialised `PROCEED` crossing the boundary would be a model-free but
+  still *asserted* authority, which is why Stage 16 re-derives it instead. **PASS.**
+- **Principle IV — one authority per concern.** The sharpest check. There is **no second durable
+  authority**: `governance_record` stays in RagCore, `operation` remains the platform's conclusion,
+  audit remains one store, and the Integrations Service owns only what nothing else owned — the
+  connector registry and the execution record. The connector binding table did not previously exist,
+  so nothing is split. **PASS.**
+- **Principle V — boundaries mandatory; decomposition by ADR only.** This is the principle the change
+  is governed by, and it cuts both ways: it *requires* an ADR for a context to become a service, and
+  it *warns* that premature distributed decomposition is a defect. ADR-0007 exists and carries the
+  justification — the blast radius of an orchestrator compromise currently includes every customer
+  system credential. **PASS, conditional on ADR-0007 remaining Accepted.**
+- **Principle VI — no speculative abstraction.** The live temptation is a shared Python library for
+  what the two services have in common. Refused: duplication across a boundary is cheaper than a false
+  shared contract, and a shared package would be a build-level dependency between deployables required
+  to have none. Recorded in Complexity Tracking. **PASS.**
+- **Principle VIII — provable by audit and test.** One correlation identifier still spans the journey,
+  by W3C Trace Context, across the gateway hop and both queues. Two Principle VIII hard failures gain
+  new surface and new tests: duplicate consequential execution from a retry — now proven at **both**
+  boundaries independently — and execution without required authority, now re-verified at the point of
+  effect. **PASS.**
+
+**One new justified exception**, recorded in Complexity Tracking: a third deployable, and gateway hops
+restored to the tool path that ADR-0001 removed. The latency consequence is real and is tracked as
+OQ-06; no performance figure is an acceptance criterion, so nothing is gated on it.
 
 ### `senior_technician` — present, accepted by nothing
 
@@ -244,7 +311,7 @@ specs/001-platform-scaffold/
 synthia/
 ├── .github/workflows/                   # CI: per-stack pipelines + boundary checks
 ├── build/
-│   ├── docker/                          # Dockerfiles for both deployables
+│   ├── docker/                          # Dockerfiles for all three deployables
 │   ├── infra/ai-gateway/                # AI Gateway policy configuration
 │   └── scripts/                         # boundary-check and gate scripts
 ├── docs/adr/                            # ADR-0001..0005
@@ -290,8 +357,46 @@ synthia/
 │   ├── migrations/versions/             # Alembic — owns every table AND every published view
 │   ├── workers/                         # resume, outbox dispatch, expiry sweep, retention, ingestion
 │   └── tests/                           # the fifteen categories
+│
+├── integrations/                        # THE INTEGRATIONS SERVICE — separate deployable (ADR-0007)
+│   ├── src/integrations/
+│   │   ├── api/                         # FastAPI transport ONLY. No business policy
+│   │   │   ├── workload/                # catalogue read; inert system-of-record operations
+│   │   │   ├── middleware/              # correlation, identity (header contract), problems, provenance
+│   │   │   ├── health.py                # /health/live · /health/ready · /health/startup
+│   │   │   └── openapi.py               # emitted from the running service, never hand-written
+│   │   ├── application/                 # use cases + PORTS (Protocols) adapters implement
+│   │   ├── domain/                      # pure model. No I/O, no imports beyond stdlib
+│   │   ├── policy/                      # execution-time access + policy RE-CHECK (FR-INTEG-019)
+│   │   ├── catalogue/                   # tool catalogue + connector registry + entitlement read
+│   │   ├── credentials/                 # per-organisation Key Vault resolution. The ONLY such path
+│   │   ├── connectors/                  # servicenow/, graph/, onelogin/, duo/, reference/
+│   │   ├── mcp/                         # MCP client; discovery NEVER confers entitlement
+│   │   ├── execution/                   # invocation, derived idempotency key, normalization
+│   │   ├── messaging/                   # command consumer, result publisher, own outbox, DLQ
+│   │   ├── persistence/                 # `integration` schema models, repos, view readers
+│   │   ├── observability/               # OTel, structured logging, correlation, connector metrics
+│   │   ├── config/                      # Pydantic Settings, Key Vault refs, startup validation
+│   │   └── egress/                      # typed HTTP clients, resilience, explicit per-call timeout
+│   ├── workers/                         # command consumer, result dispatcher, DLQ surfacer
+│   └── tests/                           # the fifteen categories, this service's own
 └── README.md
 ```
+
+**Why these boundaries and not fewer.** Three of the splits carry a rule that collapses if they merge:
+
+- **`policy/` is separate from `catalogue/`** because the re-check is a different act from the lookup.
+  Folding the re-check into the reader is how "we already fetched the catalogue" silently becomes
+  standing permission (`FR-INTEG-019`).
+- **`credentials/` is separate from `connectors/`** so that one module is the only path from an
+  entitlement row to a usable secret. A second path is a second place to review.
+- **`mcp/` is separate from `connectors/`** because MCP's discover/invoke type separation is what
+  enforces "discovery is not entitlement". Merging it into a generic connector package puts that
+  enforcement where nothing guards it.
+
+**The service is NOT RagCore's package renamed.** It carries no `graph/`, no `retrieval/`, no
+`integrations/model/`, and no tool-selection reasoning. Model egress and content safety stay in
+RagCore: that is reasoning, not integration.
 
 ### Dependency direction
 
@@ -310,14 +415,35 @@ ELECTRON    main → ipc-contracts ← preload
 
 RAGCORE     api → application → domain
             graph | governance | execution | ingestion → application → domain
-            retrieval | integrations | messaging | notifications | persistence
+            retrieval | messaging | notifications | persistence
                                         → implement ports declared in application
             domain imports NOTHING outside the standard library
 
+INTEGRATIONS
+            api → application → domain
+            policy | catalogue | execution → application → domain
+            connectors | mcp | credentials | egress | messaging | persistence
+                                        → implement ports declared in application
+            credentials ← connectors | mcp        (the ONLY path to a connector secret)
+            domain imports NOTHING outside the standard library
+            NO graph, NO retrieval, NO model egress, NO tool-selection reasoning
+
 MODELS      ragcore → AI Gateway → model provider   (no direct provider access)
+            integrations ↛ AI Gateway               (it does no reasoning)
 
 ACROSS      dotnet ↛ ragcore    and    ragcore ↛ dotnet
             They meet only at PostgreSQL (versioned views) and Service Bus (opaque triggers).
+
+            ragcore → integrations                  (via APIM sync, via Service Bus async)
+            integrations ↛ ragcore                  (NO reverse call — this keeps the graph acyclic)
+            dotnet ↛ integrations  and  integrations ↛ dotnet
+
+            ragcore      ↛ ServiceNow · Graph · OneLogin · Duo · any MCP server
+            ragcore      ↛ connector secrets in Key Vault      (role assignment, not code)
+            integrations ↛ any platform base table             (reads vw_*_v1 only)
+            integrations ↛ any non-result column of a job row  (cannot rewrite its instruction)
+            integrations ↛ SignalR                             (notification is RagCore's leaf)
+            any deployable ↛ any other by internal address     (must traverse APIM)
 ```
 
 ### Where each bounded context lives
@@ -327,26 +453,34 @@ read model — and the two sit on opposite sides of the published-view contract.
 falls out of ADR-0001 rather than being chosen separately: RagCore owns every state change, the
 monolith reads. **A context appearing on both sides is the intended shape, not a boundary breach.**
 
-| Context | Write side — RagCore | Read model — monolith |
-|---|---|---|
-| Session | `application/sessions.py`, `api/customer/` | `Modules/Synthia.Modules.Sessions` |
-| Work | `execution/`, `application/` | `Modules/Synthia.Modules.Work` |
-| Governance | `governance/` | `Modules/Synthia.Modules.Governance` |
-| Approval | `application/approvals.py`, `api/staff/`, `api/customer/consent.py` | `Modules/Synthia.Modules.Approvals` |
-| Audit | `application/audit.py` | `Modules/Synthia.Modules.Audit` |
-| Tenant & Configuration | `config/`, `persistence/` | `Modules/Synthia.Modules.Tenancy` |
-| Agent / RagCore | `graph/` | — none. Working state is never published |
-| Retrieval | `retrieval/` | — none |
-| Tool Execution | `execution/`, `integrations/mcp/` | — none |
-| Integration — ServiceNow | `integrations/servicenow/` | — none |
-| Integration — Microsoft Graph | `integrations/graph/` | — none |
-| Ingestion | `ingestion/`, `workers/ingestion_run.py` | — none |
+*Revised 2026-09-18.* Three contexts now have their write side in the **Integrations Service**.
 
-**The rule that makes this checkable.** A context's write side is exactly one RagCore package; its read
-model is at most one monolith module; the two communicate **only** through a `vw_*_v1` view and never
-by call, reference or shared type. Six contexts have no read model because nothing outside RagCore
-needs to read them — and adding one to any of those six means adding a published view, which is a
-contract change under `contracts/read-views.md`, not an implementation detail.
+| Context | Write side | Read model — monolith |
+|---|---|---|
+| Session | RagCore `application/sessions.py`, `api/customer/` | `Modules/Synthia.Modules.Sessions` |
+| Work | RagCore `execution/`, `application/` | `Modules/Synthia.Modules.Work` |
+| Governance | RagCore `governance/` | `Modules/Synthia.Modules.Governance` |
+| Approval | RagCore `application/approvals.py`, `api/staff/`, `api/customer/consent.py` | `Modules/Synthia.Modules.Approvals` |
+| Audit | RagCore `application/audit.py` | `Modules/Synthia.Modules.Audit` |
+| Tenant & Configuration | RagCore `config/`, `persistence/` | `Modules/Synthia.Modules.Tenancy` |
+| Agent / RagCore | RagCore `graph/` | — none. Working state is never published |
+| Retrieval | RagCore `retrieval/` | — none |
+| **Tool Execution** | **Integrations** `catalogue/`, `policy/`, `execution/`, `mcp/` | — none |
+| **Integration — ServiceNow** | **Integrations** `connectors/servicenow/` | — none |
+| **Integration — Microsoft Graph** | **Integrations** `connectors/graph/` | — none |
+| Ingestion | RagCore `ingestion/`, `workers/ingestion_run.py` | — none |
+
+**The rule that makes this checkable.** A context's write side is exactly one package in exactly one
+deployable; its read model is at most one monolith module; the two communicate **only** through a
+`vw_*_v1` view and never by call, reference or shared type. Six contexts have no read model because
+nothing outside their owner needs to read them — and adding one means adding a published view, which
+is a contract change under `contracts/read-views.md`, not an implementation detail.
+
+**The three moved contexts keep their read-model answer — none — but gain a second reader.** The
+Integrations Service reads `platform` state through published views, exactly as the monolith does. The
+ADR-0001 view contract was written assuming the monolith was its only reader; extending it to a third
+reader is a real change to that contract's scope, not a free reuse, and `contracts/read-views.md` must
+say so.
 
 ### Composition roots
 
@@ -357,14 +491,24 @@ else is a defect in all four.
 |---|---|---|
 | .NET monolith | `Synthia.Api/Program.cs` | T035 — no Service Locator, no `BuildServiceProvider` during configuration |
 | RagCore | `ragcore/src/ragcore/config/composition.py` — builds every adapter and binds it to the port it implements; FastAPI `Depends` resolves from it and constructs nothing itself | Import-boundary test: no module outside it instantiates a concrete adapter |
+| Integrations Service | `integrations/src/integrations/config/composition.py` — same contract, its own root | Same import-boundary test, its own suite |
 | Angular workspace | `platform-core` providers, wired at each app's `bootstrapApplication` | ESLint library-boundary rules (T011) |
 | Electron host | `apps/desktop/src/main/index.ts` | The renderer receives only the `contextBridge` surface (T051) |
 
-**Structure Decision**: four top-level source trees — `apps/web`, `apps/desktop`, `dotnet`, `ragcore`.
-One Angular workspace so the customer feature libraries are genuinely shared rather than duplicated.
-The two backend trees are siblings with no build-level relationship, which makes the no-dependency rule
-structural: a reference cannot be added without appearing in a diff as a new cross-tree path, and
-`build/scripts/check-boundaries` fails CI if one does.
+**Structure Decision**: **five** top-level source trees — `apps/web`, `apps/desktop`, `dotnet`,
+`ragcore`, `integrations`. One Angular workspace so the customer feature libraries are genuinely
+shared rather than duplicated. The three backend trees are siblings with **no build-level
+relationship**, which makes the dependency rules structural: a reference cannot be added without
+appearing in a diff as a new cross-tree path, and `build/scripts/check-boundaries` fails CI if one
+does.
+
+`ragcore/` and `integrations/` are **separate Python projects** — separate `pyproject.toml`, separate
+`uv.lock`, separate virtual environment, separate CI pipeline. **Neither imports the other.** The
+temptation to extract a shared library for the things they have in common — correlation middleware,
+the problem-details shape, the settings base, the telemetry setup — is the one to refuse: constitution
+Principle VI holds that DRY applies *within* a module boundary and that duplication across boundaries
+is cheaper than a false shared contract. A shared package here would be a build-level dependency
+between two deployables that are required to have none.
 
 ## Divergences from the Authoritative Specification
 
@@ -374,14 +518,20 @@ change log.
 
 | # | Authoritative position | This plan | Recorded in | Status |
 |---|---|---|---|---|
-| 1 | §14.1 defines eleven independently addressable bounded contexts | Two application deployables; each context's **write side** becomes a RagCore package and its **read model**, where it has one, a monolith module — see the placement rule below | ADR-0001 | Accepted |
-| 2 | §31.4 shows a synchronous chain `Session → RagCore → Retrieval → Governance → Tool Execution` | RagCore owns that chain internally with no gateway hops between stages; the monolith is read-only | ADR-0001 | Accepted |
+| 1 | §14.1 defines eleven independently addressable bounded contexts | **Three** application deployables. Eight contexts' write sides are RagCore packages; **three — Tool Execution, Integration — ServiceNow, Integration — Microsoft Graph — are the Integrations Service**; read models, where they exist, are monolith modules | ADR-0001, **narrowed by ADR-0007** | Accepted |
+| 2 | §31.4 shows a synchronous chain `Session → RagCore → Retrieval → Governance → Tool Execution` | RagCore owns the chain **as far as Tool Execution** with no gateway hops between its stages; the tool-execution leg crosses to the Integrations Service | ADR-0001, **narrowed by ADR-0007** | Accepted |
 | 3 | §37.1 defers the customer web portal beyond the initial release | Included as a scaffolded Angular application with no product behaviour | Constitution divergence register | Accepted |
 | 4 | OneLogin and Duo appear nowhere in the specification | Sanctioned third-party target systems reached as MCP servers; an open set | ADR-0005 | Accepted |
 
+**Divergences 1 and 2 shrank on 2026-09-18 rather than growing.** ADR-0007 returns three contexts to
+the independently deployed shape §14.1 always described, so the plan now diverges from the
+specification in *fewer* places than before. §21.6 describes the Integrations Service directly; its
+existence is not a divergence.
+
 **Nothing else diverges.** The twelve bounded contexts are preserved as responsibilities — none added,
 none removed. Every piece of infrastructure appears in §9.3. §13.4's no-direct-service-to-service rule
-holds between the two deployables. If any of the four is withdrawn, this plan must be revised before
+holds between **all three** deployables, and the RagCore → Integrations path is its newest and most
+load-bearing instance. If any of the four is withdrawn, this plan must be revised before
 implementation continues.
 
 ### Recorded conflict, not resolved here
@@ -395,8 +545,13 @@ ADR-0001 and ADR-0003 must be amended before Stage 7.** This plan does not decid
 
 ## Implementation Stages
 
-Fourteen ordered stages. Stages 1–11 are **scaffolding only** and contain no product behaviour.
-Stages 12–13 prove the two architectural golden paths. Stage 14 is gated behind both.
+**Seventeen ordered stages.** Stages 1–11 are **scaffolding only** and contain no product behaviour.
+Stages 12–13 prove the first two architectural golden paths. **Stages 15–17 build the Integrations
+Service and prove its boundary, and run after Stage 13 and before Stage 14.** Stage 14 is gated behind
+all five.
+
+Execution order: `1 → 2 → … → 13 → 15 → 16 → 17 → 14`. Numbers are append-only and never reused, so
+the order is stated here rather than inferred from the integer.
 
 ---
 
@@ -632,7 +787,12 @@ all three interrupt points.
 ### Stage 7 — PostgreSQL and persistence scaffold
 
 **Objective.** The authoritative durable store, its migration discipline, and the read-view contract
-between the two deployables.
+between the deployables.
+
+> *Extended by Stage 16 (2026-09-18).* The `integration` schema, the `integration_job` table with its
+> column-scoped grants, and a third database principal are added there. The migration discipline
+> established here — one Alembic project, a gated job, never at startup, expand/contract — is
+> unchanged and governs them.
 
 **Architectural boundaries.** RagCore owns every table, every migration and every published view. The
 monolith reads views only.
@@ -706,6 +866,13 @@ dead-letters rather than executing, and dead-lettered approved work surfaces to 
 ---
 
 ### Stage 9 — Integration adapter scaffold
+
+> **Superseded in placement, not in substance — 2026-09-18.** This stage was built and its adapters
+> work. ADR-0007 moves them out of RagCore into the Integrations Service; **Stage 16 is the migration
+> and is where the work now lives.** The ports-and-adapters design, the no-provider-leak rule, the
+> resilience policy and the discovery-is-not-entitlement enforcement all carry over unchanged — which
+> is why Stage 16 is a move rather than a rewrite. Read this stage for the design; read Stage 16 for
+> where it ends up. Paths below are the *original* locations and are stale by design.
 
 **Objective.** Every external system behind an explicit port, with no provider type reaching inward.
 
@@ -1028,14 +1195,176 @@ product behaviour and this stage is about the platform beneath it.
 
 ---
 
+### Stages 15–17 — The Integrations Service *(added 2026-09-18)*
+
+**These three run after Stage 13 and before Stage 14**, despite their numbers. Stage numbers are
+append-only and never reused, so ordering is stated rather than inferred from the integer.
+
+---
+
+### Stage 15 — Integrations Service foundation
+
+**Objective.** A third deployable that starts, is reachable only through APIM, proves its own identity
+and configuration, and emits its own contract — carrying **no connector yet**.
+
+**Architectural boundaries.** The tree in §Project Structure. `api → application → domain`; `domain`
+imports nothing outside the standard library; no module outside `config/composition.py` instantiates a
+concrete adapter. **No import of `ragcore` in either direction, and no shared library between them.**
+
+**Components.** `integrations/src/integrations/{api,application,domain,config,observability,egress,
+persistence}/`; `integrations/tests/`; `build/docker/integrations.Dockerfile`;
+`build/docker/containerapps/integrations.yaml`; a new APIM backend and API entry in
+`build/infra/apim/apis.json`; a new identity in `build/infra/identity/managed-identities.json`;
+`.github/workflows/` pipeline.
+
+**Dependencies.** Stages 1–2 (tooling, boundary checks), 7 (PostgreSQL), 10 (observability and
+container baseline). Independent of Stages 3–6 and 8.
+
+**Contracts.** `/api/workload/v1/integrations/...` on the **workload audience**, app-only, with its own
+application role, reached by the longest-matching-path rule `apis.json` already proves with `/views`.
+Emits `build/contracts/integrations/workload.v1.openapi.json` from the running service, through the
+same five gates: generation, determinism, publishability, compatibility, freshness.
+
+**Engineering baseline — identical to RagCore's, independently implemented.** Typed Pydantic Settings
+with `ValidateOnStart`-equivalent startup validation that fails the process rather than degrading;
+structured logging with constant message templates; OpenTelemetry traces and metrics; W3C Trace
+Context correlation accepted, generated when absent, echoed and bound to the logging scope; RFC 9457
+`application/problem+json` with `correlationId` on every error; `/health/live` process-only and
+`/health/ready` covering database, message transport and Key Vault — **never an external customer
+system**, whose outage is an operational condition rather than an unready service; managed identity to
+every Azure resource; Key Vault by reference at the point of use; typed HTTP clients with a shared
+resilience policy and an **explicit timeout on every outbound call**; no secret in any log, span or
+error body.
+
+**Security.** Gateway provenance enforced before identity, refusing rather than sanitising. The service
+**MUST NOT parse a token** and consumes only the closed header contract. It MUST NOT trust an identity
+header a caller supplied. Its managed identity holds the Key Vault role for connector secrets; the
+same role is **removed from RagCore** in this stage, not in Stage 16 — the removal is what makes
+`FR-DEMO-026` provable, and doing it early means nothing can quietly depend on it.
+
+**Testing.** Configuration validation; health and readiness; contract emission and its five gates;
+architecture dependency — `integrations ↛ ragcore`, `ragcore ↛ integrations` as an import,
+`domain` purity, composition-root exclusivity; security — no token parsing, provenance refusal, no
+secret in logs.
+
+**Validation gates.** The service starts, fails fast on invalid configuration, answers both health
+endpoints, is reachable through APIM and **not** by any direct address, and emits a contract that
+passes all five gates. `build/scripts/check-boundaries.sh` understands three deployables.
+
+**Non-goals.** No connector. No execution. No message consumption.
+
+---
+
+### Stage 16 — Connector migration out of RagCore
+
+**Objective.** Move every external-system path out of RagCore and into the Integrations Service, and
+**prove RagCore can no longer reach one**.
+
+**Architectural boundaries.** Ports move with their consumers (constitution Principle V). The MCP
+discover/invoke type separation and the single credential path survive the move intact — they are the
+enforcement mechanisms, not conveniences.
+
+**Moves substantially unchanged** — already ports-and-adapters, same language, same baseline:
+
+| From RagCore | To Integrations |
+|---|---|
+| `integrations/servicenow/`, `integrations/graph/`, `integrations/onelogin/`, `integrations/duo/` | `connectors/` |
+| `integrations/mcp/client.py` | `mcp/` |
+| `integrations/credentials.py` (**with its port declaration**) | `credentials/` |
+| `integrations/http.py`, `integrations/validation.py` | `egress/` |
+| `execution/idempotency.py`, `execution/availability.py` | `execution/` |
+
+**Refactored.** `execution/executor.py` splits — invocation and verification move; the conclusion
+(`may_report_resolution`) **stays in RagCore**. `application/ports.py` — the tool, case, directory and
+discovery ports become *remote* on the RagCore side and *implemented* on the Integrations side.
+`graph/nodes/execution.py` becomes dispatch-and-suspend. `application/cases.py` and
+`application/escalation.py` route ServiceNow writes through the new service.
+
+**Redesigned.** The gate outcome cannot cross a process boundary as an asserted value and is
+**re-derived** from durable state (`FR-INTEG-019`) — a serialised `PROCEED` is a model-free but still
+*asserted* authority, which Principle I forbids. The connector registry is new. Queue-and-replay on
+system-of-record outage moves with its durability story.
+
+**Stays in RagCore, deliberately.** `integrations/model/` — the AI Gateway client, model egress and
+content safety. That is reasoning, not integration, and the Integrations Service has no model access.
+
+**Removed from RagCore.** The `integrations/` package except `model/`; the connector settings and
+secret references in `config/`; the Key Vault role (already withdrawn in Stage 15); every
+connector-related dependency in `pyproject.toml` and `uv.lock`.
+
+**Dependencies.** Stage 15. Touches Stages 6, 9 and 12 as built.
+
+**Schema.** `integration_job` in `platform` with its **column-scoped grants** — the first migration and
+the one to review as DDL rather than prose; the `integration` schema and its tables; a published view
+exposing the operation instruction; the Integrations database principal, readable on `vw_*` and on no
+base table. **One Alembic project, one gated job.**
+
+**Testing.** Every relocated adapter's tests move with it. New: architecture test asserting **no
+adapter, connector or provider client remains in RagCore**; migration tests for the new grants,
+asserting the refusal comes from PostgreSQL rather than application code; tenant isolation for the
+third database principal.
+
+**Validation gates.** RagCore contains no connector code and holds no connector credential. Every
+relocated adapter passes its own suite in its new home. The column-scoped grant refuses a write to a
+non-result column.
+
+**Non-goals.** No behaviour change to any adapter. No new connector.
+
+---
+
+### Stage 17 — Golden path C: the Integrations boundary proven
+
+**Objective.** Prove the boundary rather than describe it — spec `FR-DEMO-020` through `FR-DEMO-028`,
+measured by `SC-DEMO-015` through `SC-DEMO-023`.
+
+**Acceptance flows.** Each is driven through the **real deployed path** (`FR-DEMO-019`) and acts only
+on the inert reference connector.
+
+| Flow | Proves |
+|---|---|
+| Bypass attempt from RagCore | The direct connection fails at the network layer; the credential resolution fails at Key Vault; no connector code remains — `SC-DEMO-015` |
+| Synchronous catalogue read through APIM | Gateway-routed, app-only; a call by any other route fails, **including one carrying a well-formed but self-supplied identity contract** — `SC-DEMO-016` |
+| Synchronous inert system-of-record operation | The same path, the same fixture |
+| Asynchronous execution | Command and result over their own queues, carrying only `jobId`, correlation and kind — `SC-DEMO-017` |
+| Duplicate delivery, **twice, separately** | The claim absorbs a duplicate resume trigger; the derived key absorbs a redelivered command. **Each proof fails when its own boundary alone is removed** — `SC-DEMO-018` |
+| Out-of-contract organisation field | Refused and dead-lettered; and separately, a conflicting assertion still binds to the durable organisation — `SC-DEMO-019` |
+| Connector secret reachability | RagCore resolves zero; no secret in its source, configuration, environment or image — `SC-DEMO-020` |
+| Result correlation | Matched to the originating work item; one identifier across the gateway hop, both queues and all three deployables — `SC-DEMO-021` |
+| Independent observability | Distinct telemetry source, connector metrics, execution records queryable without RagCore — `SC-DEMO-022` |
+| Integrations stopped | Conversation, retrieval and guidance continue; effect-requiring capabilities fall back visibly — `SC-DEMO-023` |
+
+**Dependencies.** Stages 15–16, and a deployed environment.
+
+**Infrastructure.** Two new Service Bus queues with their own role assignments — RagCore sends on
+commands and listens on results; Integrations listens on commands and sends on results, **and nothing
+more**. Integrations runs its **own transactional outbox** for result publication.
+
+**Testing.** Integration and end-to-end across three deployables; idempotency and concurrency at both
+boundaries; security — every prohibition in the dependency graph shown unreachable. **The direct-path
+refusal proof (`FR-DEMO-004a`, `SC-DEMO-003a`, `SC-DEMO-003b`) is extended to the third deployable and
+is the single most important test in this stage**, because the new RagCore → Integrations edge is
+exactly the shape a bypass takes.
+
+**Validation gates.** All ten flows pass against a deployed environment. A gate nobody has seen fail is
+a gate whose failure mode is silence: `build/scripts/verify-*-guard.sh` plants each violation class and
+asserts the guards reject it.
+
+**Non-goals.** No real external system. No use-case behaviour.
+
+---
+
 ### Stage 14 — Use cases UC-01 through UC-12 *(gated)*
 
 **Objective.** Implement the twelve product use cases.
 
-**Entry gate.** **Stages 12 and 13 must both be validated first.** Until then this stage MUST NOT begin,
-and UC-01–UC-12 remain labelled placeholders.
+**Entry gate.** **Stages 12, 13, 15, 16 and 17 must all be validated first.** Until then this stage
+MUST NOT begin, and UC-01–UC-12 remain labelled placeholders.
 
-**Dependencies.** Stages 12–13, plus the product definitions, which do not yet exist.
+*Gate widened 2026-09-18.* Every use case executes through the Integrations Service, so building one
+before the boundary is proven would build it against a path that is about to move — and the first
+thing a use case would do is re-establish the direct external access ADR-0007 removes.
+
+**Dependencies.** Stages 12–13 and 15–17, plus the product definitions, which do not yet exist.
 
 **Non-goals for this plan.** The use cases are **not designed here**. No behaviour, catalogue entry or
 task for any of them is invented. Each will need its own specification pass.
@@ -1051,6 +1380,8 @@ the endpoint-execution open items in ADR-0004 — script signing and the destruc
 | 3 Angular apps + 4 libraries | Three surfaces are required and the desktop renderer must reuse customer UI rather than reimplement it. | One app with runtime surface switching would ship staff code to customer clients and make the staff-portal no-chat rule a runtime flag rather than a build-time fact. |
 | A model port before a second provider exists | Principle VI forbids provider-neutral abstraction before a second provider — but §13.5 *mandates* provider routing at the AI Gateway, so a second provider is architecturally assumed. | A direct provider client was rejected: no metering point, no budget enforcement, and provider coupling spread across every call site. |
 | Separate worker processes inside the RagCore deployable | The approval API must return before execution runs; claim, expiry sweep, outbox dispatch and dead-lettering cannot live in a request handler. | Resuming inside the request would hold the approver's HTTP call open and forfeit retry, expiry and dead-lettering. |
+| **A third deployable, and gateway hops restored to the tool path** | ADR-0007. RagCore processes untrusted model output, retrieved content and chat text; co-locating every organisation's connector credentials with it makes an orchestrator compromise a credential breach for every customer system. Principle V permits the split only by explicit ADR, which exists. | Keeping integrations inside RagCore was rejected: it leaves the most damaging half of OQ-02 unaddressed. Splitting RagCore into user-facing and execution runtimes was rejected as insufficient — it separates the *platform* credential classes but leaves connector credentials wherever the adapters live. Three separate services, one per integration context, was rejected as the premature decomposition Principle V names as a defect. |
+| **Two Python projects duplicating correlation, problem-details, settings and telemetry setup** | Principle VI: DRY applies *within* a boundary, and duplication across boundaries is cheaper than a false shared contract. | A shared library was rejected because it would be a build-level dependency between two deployables required to have none — the coupling would not appear as a cross-tree path and `check-boundaries` could not catch it. |
 
 ## Phase Status
 
@@ -1060,6 +1391,25 @@ the endpoint-execution open items in ADR-0004 — script signing and the destruc
 - [x] Scaffold scope correction applied 2026-09-16 — Summary, Platform Environment and Access (new),
   Stage 10 sequencing, Stage 12 gates, Stage 13 replaced. Architecture unchanged; no infrastructure
   added; no bounded context or deployable boundary moved
-- [ ] Phase 2 — task breakdown (`/speckit-tasks`), to be re-run against the fourteen stages. **Stale
-  as of the correction**: Phase 13 tasks still describe the approval and consent golden path, and no
-  tasks exist yet for the three Stage 13 sample flows or for the OpenAPI emission requirements
+- [x] Integrations Service boundary applied 2026-09-18 — Summary, Technical Context, Platform
+  Environment, OpenAPI emission, Project Structure, Dependency direction, Context placement,
+  Composition roots, Structure Decision, Divergences, Stage 9 (superseded in placement), Stage 14
+  gate, Stages 15–17 (new), Complexity Tracking. Architecture unchanged from
+  `Synthia-Platform-Specification.md` §21.6 and ADR-0007; **this plan follows them and decides
+  nothing architectural of its own**
+- [ ] Phase 2 — task breakdown (`/speckit-tasks`), to be re-run against the **seventeen** stages.
+  **Stale on two counts**: Phase 13 tasks still describe the approval and consent golden path and no
+  tasks exist for the three Stage 13 sample flows or the OpenAPI emission requirements; and
+  T128–T138 place every adapter under `ragcore/src/ragcore/integrations/`, which Stage 16 moves.
+  Those tasks are marked `[X]` and need an explicit disposition — completed-then-relocated, not
+  reopened — rather than silent rewriting
+
+## Open items this plan does not close
+
+Carried from ADR-0007 §Unresolved. Neither blocks Stage 15; both block parts of Stages 16–17.
+
+| Item | Blocks | Met at |
+|---|---|---|
+| **Which system-of-record operations are synchronous.** §22.3 lists six write classes and classifies all of them `AUTO`; §22.5 makes only case creation clearly blocking | The Integrations contract surface, and therefore contract freeze | Stage 15, before the contract is frozen |
+| **The job row's result columns and the `GRANT` expressing their column scope** | `FR-INTEG-020`, `FR-DEMO-025` — the protection is enforced at the database permission boundary, so it is provable only once the DDL exists | Stage 16, first migration |
+| **OQ-06 — the latency re-baseline.** Stages 15–17 restore gateway hops to the tool path that ADR-0001 removed | Nothing. No performance figure is an acceptance criterion | After Stage 17, measured |

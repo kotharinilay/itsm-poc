@@ -16,15 +16,19 @@ the refusal is audited.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from langgraph.runtime import Runtime
 
 from ragcore.domain.proposal import ProposalSource
 from ragcore.graph.context import RunContext
 from ragcore.graph.dependencies import GraphDependencies
 from ragcore.graph.nodes.base import GraphNode
-from ragcore.graph.state import AgentState, RetrievedContext
+from ragcore.graph.state import AgentState, GroundingAssessment, RetrievedContext
+from ragcore.retrieval.confidence import assess
 
 RETRIEVE = "retrieve"
+GROUND = "ground"
 PROPOSE = "propose"
 
 RETRIEVAL_LIMIT = 8
@@ -63,6 +67,61 @@ def make_retrieve(deps: GraphDependencies) -> GraphNode:
         return {"retrieved": evidence}
 
     return retrieve
+
+
+def make_ground(deps: GraphDependencies) -> GraphNode:
+    """Build the ``ground`` node — **the node that may withhold and may never authorize**.
+
+    Sits between retrieval and proposal so the run can report how well grounded it is before it
+    suggests anything. The figures come from :mod:`ragcore.retrieval.confidence`, which owns both
+    thresholds and their comparison direction; nothing is restated here.
+
+    **What this node cannot do.** It writes a report. It does not gate, does not route and does not
+    set a treatment — :func:`ragcore.governance.gate.evaluate` assesses the knowledge condition
+    itself from the retrieved channel, and does so **before** the treatment branches so an
+    ungrounded proposal cannot be put in front of a human to approve. Removing this node would
+    change what a user is told and nothing about what is permitted, which is the property that
+    makes it safe to compute early.
+    """
+
+    async def ground(state: AgentState, *, runtime: Runtime[RunContext]) -> AgentState:
+        """Assess how well grounded this run is.
+
+        Returns:
+            The grounding channel. Empty evidence is reported as **not confident** rather than as
+            absent: an absence of evidence is not a weak positive, and a surface reading a missing
+            channel would have to invent a default — which is the permissive one.
+        """
+        del runtime
+
+        evidence = state.get("retrieved", [])
+        confidence = assess([_Scored(chunk["score"]) for chunk in evidence])
+
+        assessment: GroundingAssessment = {
+            "top_score": confidence.top_score,
+            "margin": confidence.margin,
+            "is_confident": confidence.is_confident,
+            # Grounding was sought, so it was required. An operation acting on platform state
+            # rather than on retrieved knowledge reports `not_required` at the gate through
+            # `KnowledgeCondition.not_required`, which is a different statement from a met
+            # condition — evidence not sought is not evidence found.
+            "required": True,
+        }
+        return {"grounding": assessment}
+
+    return ground
+
+
+@dataclass(frozen=True, slots=True)
+class _Scored:
+    """A score, shaped for :func:`ragcore.retrieval.confidence.assess`.
+
+    The retrieved channel holds JSON-native ``TypedDict``s, and the confidence module works over
+    anything carrying a ``score`` property. This is the two-line adapter between them, kept private
+    so no caller starts passing it around as a chunk.
+    """
+
+    score: float
 
 
 def make_propose(deps: GraphDependencies) -> GraphNode:

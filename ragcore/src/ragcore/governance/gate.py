@@ -27,7 +27,7 @@ declared in terms of a governance type would invert the dependency direction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
@@ -40,6 +40,7 @@ from ragcore.domain.roles import AuthorizationDecision
 from ragcore.domain.roles import evaluate as evaluate_roles
 from ragcore.domain.tenancy import TenantContext
 from ragcore.domain.work import ApprovalVerdict, ConsentVerdict, InterruptKind
+from ragcore.governance.conditions import KnowledgeCondition
 from ragcore.governance.policy import TreatmentDecision, TreatmentReason, assign_treatment
 
 
@@ -107,6 +108,15 @@ class GateReason(Enum):
     AUTHORIZATION_WINDOW_MISSING = "authorization_window_missing"
     """A granted decision with no window on the work item. Fails closed rather than assuming one."""
 
+    KNOWLEDGE_WITHHELD = "knowledge_withheld"
+    """There is not enough evidence to act on (spec FR-AGENT-005, FR-AGENT-006).
+
+    **A withholding, not a refusal of authority.** The operation may be perfectly permitted; what is
+    missing is grounding. Confidence in ability never substitutes for evidence, so this outcome is
+    reachable on every path — including one where the treatment is ``AUTO`` and nobody was going to
+    be asked anything.
+    """
+
 
 @dataclass(frozen=True, slots=True)
 class GateRequest:
@@ -126,6 +136,11 @@ class GateRequest:
         decision: The recorded human decision, or ``None`` when none exists yet.
         authorization_expires_at: The work item's execution window. ``None`` until a decision
             sets one.
+        knowledge: The knowledge condition, assessed by the caller from what retrieval returned.
+            Defaults to :meth:`~ragcore.governance.conditions.KnowledgeCondition.not_required` —
+            the honest default for an operation acting on platform state rather than on retrieved
+            evidence, and a **safe** one because knowledge can only ever withhold. A default that
+            could authorize would be a permissive default; this one cannot be, whatever it holds.
     """
 
     tenant: TenantContext
@@ -136,6 +151,7 @@ class GateRequest:
     now: datetime
     decision: RecordedDecision | None = None
     authorization_expires_at: datetime | None = None
+    knowledge: KnowledgeCondition = field(default_factory=KnowledgeCondition.not_required)
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,8 +306,34 @@ def _evaluate_approval(
     )
 
 
+def _withhold(treatment: TreatmentDecision) -> GateOutcome:
+    """Knowledge withheld. Refuses, and cannot have done anything else.
+
+    Modelled as a refusal rather than a suspension because there is nobody to ask: a suspension
+    means a decision is pending, and no human decision supplies missing evidence. The operation is
+    routed to manual fallback by the caller, which is the honest outcome for "the platform does not
+    know enough to act".
+    """
+    return _refuse(treatment, GateReason.KNOWLEDGE_WITHHELD)
+
+
 def evaluate(request: GateRequest) -> GateOutcome:
     """Decide whether a proposed operation may proceed, must be asked about, or is refused.
+
+    The three conditions of `FR-AGENT-005` meet here, and they meet as a **sequence of refusals**
+    rather than as a combination:
+
+    * **Security** — tenant admission and the deterministic treatment from the catalogue. The only
+      condition that can authorize anything.
+    * **Knowledge** — checked below, and able only to remove an outcome. A met knowledge condition
+      changes nothing; an unmet one withholds whatever the other two concluded.
+    * **Ability** — registration and entitlement, already folded into the treatment by
+      :func:`~ragcore.governance.policy.assign_treatment`: an unregistered or unentitled operation
+      is ``NOT_ALLOWED`` before this function sees it.
+
+    **Nothing here averages.** There is no score, no weight and no tally — each check either returns
+    a refusal or falls through, so a strong result on one condition has no representation in which
+    it could compensate for a weak one.
 
     Args:
         request: Everything the gate may consider.
@@ -308,6 +350,13 @@ def evaluate(request: GateRequest) -> GateOutcome:
 
     if treatment.treatment is ExecutionTreatment.NOT_ALLOWED:
         return _refuse(treatment, GateReason.TREATMENT_REFUSES)
+
+    # BEFORE the treatment branches, so it applies to all three of them. Placing it inside the AUTO
+    # branch would mean an operation requiring approval could be approved on evidence the platform
+    # does not have, and a human asked to approve an ungrounded proposal is being asked to supply
+    # the grounding.
+    if request.knowledge.withholds:
+        return _withhold(treatment)
 
     if treatment.treatment is ExecutionTreatment.AUTO:
         return GateOutcome(

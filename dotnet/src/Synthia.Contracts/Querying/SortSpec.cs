@@ -28,6 +28,86 @@ public readonly record struct SortSpec(string Field, SortDirection Direction);
 public readonly record struct FilterSpec(string Field, object Value);
 
 /// <summary>
+/// What a filter value is, so the published contract and the binder agree on it.
+/// </summary>
+/// <remarks>
+/// A closed set rather than a <see cref="Type"/>: these are the only shapes a filter value takes on
+/// this platform, and an open type would invite one that has no wire representation.
+/// </remarks>
+public enum FilterKind
+{
+    /// <summary>A free-text match, published as a plain string.</summary>
+    Text = 0,
+
+    /// <summary>A GUID, published as <c>string</c> with <c>format: uuid</c>.</summary>
+    Identifier = 1,
+
+    /// <summary>An instant, published as <c>string</c> with <c>format: date-time</c>.</summary>
+    Timestamp = 2,
+
+    /// <summary>A member of a closed set, published with its <c>enum</c> values.</summary>
+    Enumeration = 3,
+}
+
+/// <summary>
+/// One filterable field, with the type a client may send.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>The field is declared once and read twice</b> — by the binder that validates a request and by
+/// the OpenAPI operation transformer that publishes the parameter. A document built from a separate
+/// list would be a second description of the filter set with nothing keeping it true, which is the
+/// failure the generated-contract rule exists to prevent.
+/// </para>
+/// <para>
+/// <see cref="Values"/> is populated for <see cref="FilterKind.Enumeration"/> and empty otherwise.
+/// It is read off the enum type, never restated.
+/// </para>
+/// </remarks>
+public sealed class FilterField
+{
+    /// <summary>Declares a filter of a non-enumerated kind.</summary>
+    /// <param name="name">The query-string field name, in camelCase.</param>
+    /// <param name="kind">What the value is.</param>
+    public FilterField(string name, FilterKind kind)
+    {
+        Name = name;
+        Kind = kind;
+        Values = [];
+    }
+
+    private FilterField(string name, IReadOnlyList<string> values)
+    {
+        Name = name;
+        Kind = FilterKind.Enumeration;
+        Values = values;
+    }
+
+    /// <summary>The query-string field name.</summary>
+    public string Name { get; }
+
+    /// <summary>What the value is.</summary>
+    public FilterKind Kind { get; }
+
+    /// <summary>The accepted values, for an enumerated filter. Empty otherwise.</summary>
+    public IReadOnlyList<string> Values { get; }
+
+    /// <summary>
+    /// Declares a filter over a closed set, taking its values from the enum itself.
+    /// </summary>
+    /// <remarks>
+    /// Names are lower-cased to match the camelCase JSON convention both deployables serialize
+    /// with, so the published values are the ones a client actually sends.
+    /// </remarks>
+    /// <typeparam name="TEnum">The enum the binder parses into.</typeparam>
+    /// <param name="name">The query-string field name.</param>
+    /// <returns>The declaration.</returns>
+    public static FilterField Over<TEnum>(string name)
+        where TEnum : struct, Enum =>
+        new(name, [.. Enum.GetNames<TEnum>().Select(value => value.ToLowerInvariant()).Order(StringComparer.Ordinal)]);
+}
+
+/// <summary>
 /// The whitelist of sortable and filterable fields for one resource.
 /// </summary>
 /// <remarks>
@@ -48,21 +128,26 @@ public sealed class QueryWhitelist
 
     /// <summary>Creates a whitelist for one resource.</summary>
     /// <param name="sortable">Fields this resource may be sorted by.</param>
-    /// <param name="filterable">Fields this resource may be filtered by.</param>
+    /// <param name="filterable">
+    /// Fields this resource may be filtered by, each with the type a client may send. The type is
+    /// here rather than at the endpoint so the binder and the published contract read one
+    /// declaration.
+    /// </param>
     /// <param name="defaultSort">
     /// The sort applied when a client supplies none, so keyset pagination always has a
     /// deterministic order.
     /// </param>
     public QueryWhitelist(
         IEnumerable<string> sortable,
-        IEnumerable<string> filterable,
+        IEnumerable<FilterField> filterable,
         SortSpec defaultSort)
     {
         ArgumentNullException.ThrowIfNull(sortable);
         ArgumentNullException.ThrowIfNull(filterable);
 
         _sortable = sortable.ToFrozenSet(StringComparer.Ordinal);
-        _filterable = filterable.ToFrozenSet(StringComparer.Ordinal);
+        Filters = [.. filterable];
+        _filterable = Filters.Select(filter => filter.Name).ToFrozenSet(StringComparer.Ordinal);
         DefaultSort = defaultSort;
     }
 
@@ -74,6 +159,9 @@ public sealed class QueryWhitelist
 
     /// <summary>Fields this resource may be filtered by.</summary>
     public IReadOnlyCollection<string> FilterableFields => _filterable;
+
+    /// <summary>The same fields, with the type a client may send. The publishing view.</summary>
+    public IReadOnlyList<FilterField> Filters { get; }
 
     /// <summary>
     /// Parses a <c>?sort=</c> value against this whitelist.

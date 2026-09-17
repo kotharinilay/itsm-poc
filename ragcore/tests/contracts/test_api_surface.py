@@ -92,7 +92,15 @@ PRINCIPAL_HEADER = "X-Idp-Principal-Id"
 
 @pytest.fixture(name="app")
 def app_fixture() -> Any:
-    """An application with a container holding only the clock, as the scaffold binds."""
+    """An application with a container holding the clock and an admitting tenant registry.
+
+    The registry is bound because the conversation surface needs one: a turn is retrieved,
+    grounded and gated within an organisation, so ``POST .../messages`` depends on
+    :func:`~ragcore.api.deps.get_tenant` and an unbound registry correctly fails closed with a 503.
+    Binding one here keeps these tests about the surface — casing, correlation, the streaming
+    envelope — rather than about admission, which
+    :class:`TestTenantAdmissionFailsClosed` asserts directly.
+    """
     # A syntactically valid DSN pointing nowhere. Nothing in the scaffold opens a connection:
     # the container binds no repository, so a reachable database would prove nothing.
     dsn = TypeAdapter(PostgresDsn).validate_python("postgresql://user:pw@localhost/synthia")
@@ -103,7 +111,13 @@ def app_fixture() -> Any:
         # mandatory" is something the suite demonstrates rather than something a comment asserts.
         edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=CERTIFICATE_HASH),
     )
-    return create_app(container=Container(settings=settings, clock=SystemClock()))
+    return create_app(
+        container=Container(
+            settings=settings,
+            clock=SystemClock(),
+            tenant_registry=_registry(admitted_tenant()),
+        )
+    )
 
 
 @pytest.fixture(name="client")

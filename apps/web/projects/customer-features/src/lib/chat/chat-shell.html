@@ -10,7 +10,55 @@
     <ol class="cf-chat__messages"></ol>
   </ds-async-state-container>
 
-  <p class="cf-chat__scaffold-note">
-    This surface is scaffolded. Conversation behaviour is not implemented.
-  </p>
+  <!--
+    The response as it arrives. `aria-busy` says a turn is in flight; the announcing is done by
+    LiveAnnouncer rather than by a live region here, because this element holds the ACCUMULATED
+    text and announcing it wholesale would make a screen reader re-read the answer on every token
+    (spec FR-SURF-011).
+  -->
+  @if (streamed().length > 0) {
+    <p class="cf-chat__response" [attr.aria-busy]="sending()">{{ streamed() }}</p>
+  }
+
+  <!--
+    The step trail. Labels only — never command content, never a treatment, never an outcome.
+    `aria-hidden` because each step was already announced as it arrived; announcing the list again
+    would repeat everything a screen-reader user has just heard.
+  -->
+  @if (steps().length > 0) {
+    <ol class="cf-chat__steps" aria-hidden="true">
+      @for (step of steps(); track step.stepId) {
+        <li>{{ step.label }}</li>
+      }
+    </ol>
+  }
+
+  <!--
+    A suspension. `data-interrupt` carries the machine-readable kind so state is conveyed by more
+    than colour, and the text says what is waiting without offering to resolve it: the decision is
+    made on an authenticated endpoint, not here.
+  -->
+  @if (pendingInterrupt(); as interrupt) {
+    <p class="cf-chat__interrupt" role="status" [attr.data-interrupt]="interrupt">
+      @switch (interrupt) {
+        @case ('clarification') {
+          A question is waiting for your answer.
+        }
+        @case ('staff_approval') {
+          This is waiting for a member of the support team to decide.
+        }
+        @default {
+          Your permission is needed before anything happens.
+        }
+      }
+    </p>
+  }
+
+  <!--
+    A failure, shown as a failure. It is NOT rendered as an empty conversation (spec FR-SURF-016),
+    and it does not say the request failed — the turn did, and the work is wherever it was.
+  -->
+  @if (failure(); as detail) {
+    <p class="cf-chat__failure" role="alert">{{ detail }}</p>
+  }
 </section>

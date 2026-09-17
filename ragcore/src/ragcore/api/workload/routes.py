@@ -22,21 +22,47 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Request, status
 from pydantic import Field
 
 from ragcore.api.deps import PrincipalDep
-from ragcore.api.schemas import ApiModel
+from ragcore.api.middleware.problems import (
+    UNIVERSAL_PROBLEM_STATUSES,
+    ProblemJSONResponse,
+    not_implemented,
+    problem_responses,
+)
+from ragcore.api.schemas import ApiModel, ProblemDetails
 from ragcore.domain.governance import VerificationOutcome
 
-router = APIRouter(prefix="/api/workload/v1", tags=["workload"])
+# EVERY OPERATION DECLARES THE ERROR CONTRACT IT CAN RETURN. Without this the generator publishes
+# FastAPI's own `HTTPValidationError` for 422 and nothing at all for the rest, so the document
+# describes an error body this service never sends — and a client written against it parses the
+# wrong shape on the one path it cannot test against a happy case.
+#
+# 409 and 410 are declared HERE and on no other audience: the claim is a conditional write
+# that a second caller loses, and the execution validity window elapses. Declaring them
+# everywhere would describe refusals the other surfaces cannot produce.
+router = APIRouter(
+    prefix="/api/workload/v1",
+    tags=["workload"],
+    responses=problem_responses(*UNIVERSAL_PROBLEM_STATUSES, 409, 410),
+)
+
+# The signature every wired-but-inert route carries: the response IS a problem, so it is declared
+# as one, at the media type RFC 9457 requires rather than plain `application/json`.
+NOT_IMPLEMENTED_ROUTE = {
+    "status_code": status.HTTP_501_NOT_IMPLEMENTED,
+    "response_model": ProblemDetails,
+    "response_class": ProblemJSONResponse,
+    "responses": problem_responses(501),
+}
+
 
 # Path parameters are declared with camelCase aliases so the generated OpenAPI document matches
 # contracts/ exactly. The wire contract is frozen and shared with the .NET side; a Python-side
 # snake_case placeholder would make the two documents disagree over a purely cosmetic difference.
 WorkItemIdPath = Annotated[UUID, Path(alias="workItemId", description="The durable work record.")]
-
-NOT_IMPLEMENTED = "No product behaviour exists at this stage. The boundary is wired; nothing runs."
 
 
 class OutcomeRequest(ApiModel):
@@ -55,8 +81,10 @@ class OutcomeRequest(ApiModel):
     detail: dict[str, object] = Field(default_factory=dict)
 
 
-@router.post("/work/{workItemId}/claim", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def claim_work(work_item_id: WorkItemIdPath, principal: PrincipalDep) -> dict[str, str]:
+@router.post("/work/{workItemId}/claim", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
+async def claim_work(
+    request: Request, work_item_id: WorkItemIdPath, principal: PrincipalDep
+) -> ProblemDetails:
     """Atomically claim a work item. 409 if already claimed, expired, or not authorized.
 
     **Idempotency boundary 1**, and the one that absorbs at-least-once delivery: a conditional
@@ -65,13 +93,13 @@ async def claim_work(work_item_id: WorkItemIdPath, principal: PrincipalDep) -> d
     does not substitute for this.
     """
     del work_item_id, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.post("/work/{workItemId}/outcome", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post("/work/{workItemId}/outcome", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def record_outcome(
-    work_item_id: WorkItemIdPath, body: OutcomeRequest, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request, work_item_id: WorkItemIdPath, body: OutcomeRequest, principal: PrincipalDep
+) -> ProblemDetails:
     """Record the outcome with its verification result."""
     del work_item_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)

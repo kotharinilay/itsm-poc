@@ -17,6 +17,32 @@ namespace Synthia.Api.Querying;
 internal static class QueryBinding
 {
     /// <summary>
+    /// The query whitelist this endpoint declared.
+    /// </summary>
+    /// <remarks>
+    /// Resolved from endpoint metadata rather than named again in the handler, so the set the
+    /// request is validated against and the set the OpenAPI document publishes are one object. A
+    /// route that declared none throws here — loudly, on its first request — rather than silently
+    /// accepting a field it never advertised.
+    /// </remarks>
+    /// <param name="context">The request.</param>
+    /// <returns>The whitelist.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// When the route declared no whitelist. See <see cref="QueryDeclaration"/>.
+    /// </exception>
+    public static QueryWhitelist WhitelistOf(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        QueryWhitelist? whitelist = context.GetEndpoint()?.Metadata.GetMetadata<QueryWhitelist>();
+
+        return whitelist ?? throw new InvalidOperationException(
+            $"The route '{context.Request.Path}' reads query parameters but declared no " +
+            "QueryWhitelist. Add .PagedOver(...) or .QueriedOver(...) so the binder and the " +
+            "published contract read one declaration.");
+    }
+
+    /// <summary>
     /// Binds the paging and sorting parameters of a request.
     /// </summary>
     /// <param name="query">The query string.</param>

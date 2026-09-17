@@ -1,0 +1,36 @@
+.cf-feedback {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * The pressed state is a border weight and a background as well as a colour. State conveyed by
+ * colour alone fails for a user with low vision or a monochrome display, and `aria-pressed` alone
+ * would leave a sighted user with no indication at all.
+ */
+.cf-feedback__button {
+  border: 1px solid currentcolor;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cf-feedback__button[data-state='on'] {
+  border-width: 2px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Never removed. A control nobody can see the focus of is a control nobody can operate by keyboard. */
+.cf-feedback__button:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
+}
+
+.cf-feedback__failure {
+  margin: 0;
+  font-size: 0.875rem;
+}

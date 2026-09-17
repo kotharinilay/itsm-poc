@@ -6,6 +6,7 @@
  */
 
 export * from './lib/chat/chat-shell';
+export * from './lib/chat/feedback/feedback-control';
 export * from './lib/consent/consent-shell';
 export * from './lib/customer-features.routes';
 export * from './lib/handoff/handoff-shell';

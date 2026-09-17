@@ -9,3 +9,43 @@
   margin: 0;
   padding: 0;
 }
+
+/*
+ * The response as it accumulates. `pre-wrap` so the platform's own line breaks survive without the
+ * text being parsed as markup — content reaching this surface is data, and rendering it as anything
+ * richer would be the one place an injected payload could become an element.
+ */
+.cf-chat__response {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.cf-chat__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+/*
+ * A suspension, and a failure. Both carry a border on the inline start as well as a colour, because
+ * state must be conveyed by more than colour alone — the `data-interrupt` attribute carries the
+ * machine-readable kind for the same reason.
+ */
+.cf-chat__interrupt,
+.cf-chat__failure {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 4px solid currentcolor;
+}
+
+.cf-chat__interrupt::before {
+  content: 'Waiting: ';
+  font-weight: 600;
+}
+
+.cf-chat__failure::before {
+  content: 'Could not finish: ';
+  font-weight: 600;
+}

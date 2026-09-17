@@ -44,11 +44,10 @@
       "schema called 'AcceptedRolesSummary' is a legitimate read model and a substring rule would",
       "reject it.",
       "",
-      "Two different things are in this list. The first group is implementation detail — a client",
-      "that can see it starts depending on it, and then the detail is a contract nobody agreed to.",
-      "The second group is authority the platform DERIVES and never accepts: publishing a parameter",
-      "named for one advertises exactly what the platform refuses, and a client that sent it would",
-      "get a silent no-op rather than an error, which is the worst of both."
+      "Two different things are in this list, and they are enforced differently. implementationDetail",
+      "is forbidden ANYWHERE in a document — a client that can see it starts depending on it, and then",
+      "the detail is a contract nobody agreed to. derivedAuthority is forbidden only where a CLIENT",
+      "CAN SUPPLY IT; see below."
     ],
     "implementationDetail": [
       "sqlalchemy",
@@ -67,7 +66,48 @@
     "derivedAuthority": [
       "tenantid",
       "roles",
-      "audience"
+      "audience",
+      "actas",
+      "onbehalfof",
+      "credentialclass",
+      "clientsurface"
+    ]
+  },
+
+  "authorityPositions": {
+    "$comment": [
+      "WHERE derivedAuthority NAMES ARE FORBIDDEN, AND WHY IT IS A POSITION RULE RATHER THAN A NAME",
+      "RULE. The platform derives tenant, roles and audience and never accepts them (constitution P-I,",
+      "contracts §README rule 1). What must not exist is a way for a client to ASSERT one — a request",
+      "parameter or a request-body field. Publishing one advertises exactly what the platform refuses,",
+      "and a client that sent it would get a silent no-op rather than an error, which is the worst of",
+      "both.",
+      "",
+      "A RESPONSE IS THE OPPOSITE CASE. 'vw_session_summary_v1' carries tenant_id and the read model",
+      "that maps it carries tenantId; that is the organisation a row BELONGS to, reported back to a",
+      "caller already entitled to the row. Forbidding the name there would force a read model to hide",
+      "which organisation an audit record concerns, which is the field a staff reviewer is reading it",
+      "for. The earlier flat name rule did exactly that, and would have been satisfied by renaming the",
+      "field rather than by removing an authority channel — the shape of a rule that looks enforced",
+      "and is not.",
+      "",
+      "SO: forbidden in a parameter or a request body, permitted in a response.",
+      "",
+      "THE ONE EXCEPTION IS NAMED, SCOPED AND JUSTIFIED. contracts §README declares tenantId a",
+      "staff-only NARROWING: it selects within the set the caller may already see, reaching the query",
+      "as one more WHERE clause underneath the global scope filter, so a caller naming an organisation",
+      "outside their scope receives no rows rather than that organisation's rows. It narrows; it",
+      "cannot widen. It is permitted as a QUERY parameter on the STAFF documents and nowhere else —",
+      "not on customer, not on workload, and never in a body, a header or a path."
+    ],
+    "forbiddenIn": ["parameter", "requestBody"],
+    "exceptions": [
+      {
+        "name": "tenantId",
+        "in": "query",
+        "audiences": ["staff"],
+        "reason": "Staff-only narrowing within the caller's existing scope; contracts/README.md."
+      }
     ]
   },
 

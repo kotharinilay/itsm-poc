@@ -1,0 +1,41 @@
+{
+  "$comment": [
+    "EXPLICITLY APPROVED BREAKING CONTRACT CHANGES. Read by build/scripts/openapi_diff.py.",
+    "",
+    "A breaking change is a change that stops a client already built against the published contract",
+    "from working: an operation or response field removed, a request field made required, an enum",
+    "value a client may send taken away. CI fails on one. This file is how somebody says 'yes, and",
+    "here is why' — the decision is recorded where the next person can read it, rather than",
+    "suppressed by a flag, an environment variable or a commit-message keyword.",
+    "",
+    "AN APPROVAL QUOTES THE FINDING VERBATIM, not a pattern. A pattern approves the change nobody",
+    "has looked at yet: the second removal under the same path, the one that was not in the pull",
+    "request the reviewer read. Run the comparator, copy the finding text from its output, paste it",
+    "here.",
+    "",
+    "AND IT EXPIRES. An approval outliving the change it covered is a waiver sitting in the",
+    "repository waiting to cover an identical future change silently. Past expiresOn it stops",
+    "applying. Once the baseline is re-emitted and committed the approval matches nothing, the",
+    "comparator reports it as stale, and it should be deleted in that same change.",
+    "",
+    "PREFER NOT NEEDING ONE. Versioning is in the URI segment (/v1/, /v2/), so the honest answer to",
+    "a breaking change is usually a new version rather than a mutation of the published one. Reach",
+    "for this file when a contract has no clients yet, or when every client is known and has already",
+    "migrated — and say which in the reason.",
+    "",
+    "FIELDS, all required:",
+    "  document        — the artifact path as the comparator prints it, forward slashes",
+    "                    (e.g. 'ragcore/customer.v1.openapi.json')",
+    "  finding         — the finding text, verbatim, without the 'BREAKING ' prefix",
+    "  approvedBy      — a person, not a team or a pipeline",
+    "  approvedOn      — ISO date",
+    "  expiresOn       — ISO date; after this the approval does not apply",
+    "  reason          — why the change is acceptable rather than what it is",
+    "  clientMigration — what somebody already calling the old contract has to do. 'none' only when",
+    "                    the contract genuinely has no clients, and say so."
+  ],
+
+  "registerVersion": "1.0.0",
+
+  "approvals": []
+}

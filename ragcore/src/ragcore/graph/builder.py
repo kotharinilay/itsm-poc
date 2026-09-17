@@ -32,7 +32,17 @@ from langgraph.graph import END, START, StateGraph
 
 from ragcore.graph.context import RunContext
 from ragcore.graph.dependencies import GraphDependencies
-from ragcore.graph.nodes import closure, conversation, execution, governance, grounding, interrupts
+from ragcore.graph.nodes import (
+    classify,
+    closure,
+    conversation,
+    execution,
+    governance,
+    grounding,
+    guardrail,
+    intake,
+    interrupts,
+)
 from ragcore.graph.state import AgentState
 
 __all__ = ["build_graph"]
@@ -55,10 +65,14 @@ def build_graph(
         AgentState, context_schema=RunContext
     )
 
+    graph.add_node(intake.INTAKE, intake.make_intake(deps))
     graph.add_node(conversation.CONVERSE, conversation.make_converse(deps))
     graph.add_node(conversation.CLARIFY, conversation.make_clarify(deps))
     graph.add_node(grounding.RETRIEVE, grounding.make_retrieve(deps))
+    graph.add_node(grounding.GROUND, grounding.make_ground(deps))
+    graph.add_node(guardrail.GUARDRAIL, guardrail.make_guardrail(deps))
     graph.add_node(grounding.PROPOSE, grounding.make_propose(deps))
+    graph.add_node(classify.CLASSIFY, classify.make_classify(deps))
     graph.add_node(governance.GOVERN, governance.make_govern(deps))
     graph.add_node(interrupts.AWAIT_CONSENT, interrupts.make_await_consent(deps))
     graph.add_node(interrupts.AWAIT_APPROVAL, interrupts.make_await_approval(deps))
@@ -66,16 +80,34 @@ def build_graph(
     graph.add_node(execution.VERIFY, execution.make_verify(deps))
     graph.add_node(closure.CLOSE, closure.make_close(deps))
 
-    graph.add_edge(START, conversation.CONVERSE)
+    # Intake first, because the triage gate decides whether this turn is a conversation or a
+    # request — and a work record that does not exist yet is not something the rest of the graph
+    # should be reasoning about.
+    graph.add_edge(START, intake.INTAKE)
+    graph.add_edge(intake.INTAKE, conversation.CONVERSE)
     graph.add_edge(conversation.CONVERSE, grounding.RETRIEVE)
 
     # Interrupt 1. An answered clarification rejoins the loop rather than skipping ahead: the
     # answer may change what is retrieved, and it must not change what is authorized.
     graph.add_edge(conversation.CLARIFY, grounding.RETRIEVE)
 
-    graph.add_edge(grounding.RETRIEVE, grounding.PROPOSE)
+    # Retrieve, then assess how well grounded the run is, then decide whether the request is one
+    # the platform serves at all. The guardrail reads the grounding assessment, so it runs after it
+    # — an in-scope request the platform cannot ground is FR-SCOPE-010's case and needs both facts.
+    graph.add_edge(grounding.RETRIEVE, grounding.GROUND)
+    graph.add_edge(grounding.GROUND, guardrail.GUARDRAIL)
     graph.add_conditional_edges(
-        grounding.PROPOSE,
+        guardrail.GUARDRAIL,
+        _route_after_guardrail,
+        {grounding.PROPOSE: grounding.PROPOSE, closure.CLOSE: closure.CLOSE},
+    )
+
+    # Classification sits between the proposal and the gate, and it is a READING rather than a
+    # decision: the gate re-reads the catalogue itself, so removing this node would change what a
+    # user is told and nothing about what is permitted (see nodes/classify.py).
+    graph.add_edge(grounding.PROPOSE, classify.CLASSIFY)
+    graph.add_conditional_edges(
+        classify.CLASSIFY,
         _route_after_propose,
         {governance.GOVERN: governance.GOVERN, END: END},
     )
@@ -102,6 +134,23 @@ def build_graph(
     graph.add_edge(closure.CLOSE, END)
 
     return graph
+
+
+def _route_after_guardrail(state: AgentState) -> str:
+    """Close the session where the guardrail ended it, and otherwise carry on to the proposal.
+
+    Routes on the **session state the guardrail wrote**, not on the request text: the classification
+    happens once, in one place, and this reads its result. A second reading of the text here would
+    be a second scope decision, and the two would eventually disagree.
+
+    Note what this cannot route to. There is no branch from here to ``execute`` and none to
+    ``govern`` — a request that clears the guardrail still meets the gate, because clearing the
+    guardrail is not permission.
+    """
+    session_state = state.get("session_state")
+    if session_state in ("closed_declined", "escalated"):
+        return "close"
+    return "propose"
 
 
 def _route_after_propose(state: AgentState) -> str:

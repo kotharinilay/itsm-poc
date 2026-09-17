@@ -1,9 +1,43 @@
 <section class="cf-handoff" aria-labelledby="cf-handoff-heading">
   <h2 id="cf-handoff-heading">Support</h2>
 
+  <!--
+    Handed over. Says plainly that a PERSON will take the request (spec FR-FALL-007), and says WHY
+    (spec FR-FALL-010). The reason comes from the platform; nothing is composed here.
+  -->
+  @if (handedOver()) {
+    <p class="cf-handoff__notice" role="status" data-outcome="handed-over">
+      A member of the support team will take this from here. You do not need to do anything else.
+    </p>
+    @if (reason(); as why) {
+      <p class="cf-handoff__reason">{{ why }}</p>
+    }
+  }
+
+  <!--
+    Declined. Says explicitly that nothing was passed on — the softer wording would be untrue, and
+    its untruth is discovered by waiting for a reply that never arrives.
+  -->
+  @if (declined()) {
+    <p class="cf-handoff__notice" role="status" data-outcome="declined">
+      This has not been passed on. You will need to raise it with the right team directly.
+    </p>
+    @if (reason(); as why) {
+      <p class="cf-handoff__reason">{{ why }}</p>
+    }
+  }
+
+  <!--
+    Somebody has joined. Presence only: take-over transfers no requester authority (spec
+    FR-SURF-009), and there is nothing here that grants, implies or offers a decision.
+  -->
   @if (staffPresent()) {
-    <p role="status">A member of the support team has joined this conversation.</p>
-  } @else {
-    <p>This surface is scaffolded. Hand-off behaviour is not implemented.</p>
+    <p class="cf-handoff__presence" role="status">
+      A member of the support team has joined this conversation.
+    </p>
+  }
+
+  @if (!handedOver() && !declined() && !staffPresent()) {
+    <p>Nobody has been asked to take this yet.</p>
   }
 </section>

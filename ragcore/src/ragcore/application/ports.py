@@ -32,6 +32,7 @@ from ragcore.domain.identifiers import (
     CorrelationId,
     EntraTenantId,
     IdempotencyKey,
+    MessageId,
     OperationId,
     OperationIdentity,
     PrincipalId,
@@ -41,7 +42,7 @@ from ragcore.domain.identifiers import (
 )
 from ragcore.domain.roles import RoleSet
 from ragcore.domain.tenancy import TenantContext
-from ragcore.domain.work import ApprovalVerdict, ConsentVerdict, WorkItemState
+from ragcore.domain.work import ApprovalVerdict, ConsentVerdict, FeedbackSignal, WorkItemState
 
 # ---------------------------------------------------------------------------
 # Time
@@ -159,6 +160,54 @@ class SessionRepositoryPort(Protocol):
 
     async def get(self, tenant: TenantContext, session_id: SessionId) -> object | None:
         """Load one session within the tenant."""
+        ...
+
+
+@runtime_checkable
+class FeedbackRepositoryPort(Protocol):
+    """Per-message quality signals (spec FR-SESS-009).
+
+    **Nothing that reads this port may decide anything.** Feedback never influences authorization,
+    governance treatment, retrieval scope or execution (spec FR-SESS-013), and the shape here is
+    what keeps that cheap to verify: the port has no reader that returns a signal to the platform's
+    own code paths, only a write and a withdrawal. The read side is the published
+    ``vw_message_feedback_v1`` view, consumed by reporting.
+
+    **Ownership is checked against the durable record, not against the request.** A message
+    identifier carries no ownership, and a route parameter is client input — so
+    :meth:`record` resolves the session and compares its requester itself.
+    """
+
+    async def record(
+        self,
+        tenant: TenantContext,
+        message_id: MessageId,
+        given_by: PrincipalId,
+        signal: FeedbackSignal,
+    ) -> bool:
+        """Record or replace the signal on one agent-authored message.
+
+        **Idempotent replace, not append** (spec FR-SESS-010). The unique constraint on
+        ``(message_id, given_by_oid)`` is what makes "only the current signal counts" a property of
+        the database rather than a rule each caller honours.
+
+        Returns:
+            ``True`` when the signal was recorded. ``False`` when the message is not an
+            agent-authored message in a session belonging to ``given_by`` — reported as absence so
+            the caller answers 404, because existence is itself tenant-scoped information.
+        """
+        ...
+
+    async def withdraw(
+        self, tenant: TenantContext, message_id: MessageId, given_by: PrincipalId
+    ) -> bool:
+        """Remove a previously recorded signal.
+
+        Returns:
+            ``True`` when a signal was removed **or** when the caller owns the message and had
+            recorded none — a withdrawal is idempotent, and withdrawing nothing is a success.
+            ``False`` when the message is not theirs.
+        """
         ...
 
 

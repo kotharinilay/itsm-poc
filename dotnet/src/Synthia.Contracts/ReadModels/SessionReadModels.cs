@@ -111,3 +111,26 @@ public sealed record StaffSessionFilter(SessionState? State, TenantId? TenantId)
     /// <summary>No narrowing.</summary>
     public static StaffSessionFilter None { get; } = new(null, null);
 }
+
+/// <summary>Pre-aggregated feedback figures for one window. Projected from <c>vw_dashboard_rollup_v1</c>.</summary>
+/// <remarks>
+/// <para>
+/// <b>Retained independently of the signals it was computed from</b> (spec FR-SESS-012,
+/// FR-SESS-014). Feedback is content and expires with its session; this figure does not, so a
+/// report covering last year does not silently go to zero once retention has run.
+/// </para>
+/// <para>
+/// There is no count of positives and negatives here, and that absence is deliberate: a pair of
+/// counts over a small window identifies the people who left them, and the figure this record
+/// exists to carry is a rate rather than a tally.
+/// </para>
+/// </remarks>
+/// <param name="TenantId">The owning organisation. Every window is scoped to one, so no aggregate reveals a single organisation's contribution to a total (spec FR-IDENT-010).</param>
+/// <param name="WindowStart">Inclusive start of the aggregation window.</param>
+/// <param name="WindowEnd">Exclusive end of the aggregation window.</param>
+/// <param name="FeedbackRate">The share of agent-authored messages in the window carrying a signal.</param>
+public sealed record FeedbackSummary(
+    Guid TenantId,
+    DateTimeOffset WindowStart,
+    DateTimeOffset WindowEnd,
+    double FeedbackRate);

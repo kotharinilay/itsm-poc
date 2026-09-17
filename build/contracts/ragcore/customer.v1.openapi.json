@@ -3,16 +3,14 @@
     "schemas": {
       "AnswerRequest": {
         "additionalProperties": false,
-        "description": "An answer to a pending clarifying question.\n\nAnswerable only by the end user of the session (spec FR-INTR-004). Who that is comes from\ntrusted identity, so it is not a field here.",
+        "description": "An answer to a pending clarifying question.\n\nOne field. Note the three that are absent and will not be added: no ``sessionOwner``, because\nthe answerer comes from trusted identity; no ``confirm``, because an affirmative answer is not\nconsent; and no ``workItemId``, because an answer does not target a decision.\n\n``content`` is bounded at :data:`~ragcore.graph.nodes.clarification_interrupt.\nMAX_ANSWER_CHARACTERS`. The answer becomes part of the next prompt, and an unbounded answer is\nan unbounded model call metered against the organisation.",
         "properties": {
           "content": {
+            "default": "",
             "title": "Content",
             "type": "string"
           }
         },
-        "required": [
-          "content"
-        ],
         "title": "AnswerRequest",
         "type": "object"
       },
@@ -61,7 +59,7 @@
       },
       "FeedbackRequest": {
         "additionalProperties": false,
-        "description": "A quality signal against one agent-authored message.\n\n**Feedback never influences authorization, governance treatment, retrieval scope or\nexecution** (spec FR-SESS-013). It is read by reporting and by nothing else.",
+        "description": "A quality signal against one agent-authored message.\n\nOne field, an enum of two. Deliberately not a boolean — ``feedback(True)`` says nothing at a\ncall site — and deliberately without a comment field; see the module docstring.\n\n**Feedback never influences authorization, governance treatment, retrieval scope or\nexecution** (spec FR-SESS-013). It is read by reporting and by nothing else.",
         "properties": {
           "signal": {
             "$ref": "#/components/schemas/FeedbackSignal"
@@ -74,26 +72,13 @@
         "type": "object"
       },
       "FeedbackSignal": {
-        "description": "A thumbs signal.",
+        "description": "A per-message thumbs signal (spec FR-SESS-009).\n\n**Never an input to a decision.** Governance, retrieval and execution MUST NOT read it\n(spec FR-SESS-011a, ``data-model.md`` §Feedback). It is a quality signal, and the reason it\nlives here rather than beside the treatment enums is to keep that separation legible.",
         "enum": [
           "positive",
           "negative"
         ],
         "title": "FeedbackSignal",
         "type": "string"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
       },
       "NegotiateResponse": {
         "additionalProperties": false,
@@ -115,6 +100,73 @@
         "title": "NegotiateResponse",
         "type": "object"
       },
+      "ProblemDetails": {
+        "additionalProperties": false,
+        "description": "The RFC 9457 error body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\n:mod:`ragcore.api.middleware.problems` already returns this shape at runtime; without a model\nthe generator falls back to FastAPI's ``HTTPValidationError``, and the published contract then\ndescribes an error body the service never sends.\n\nMirrors ``Synthia.Contracts.Errors.ProblemContract`` on the .NET side field for field, because a\nclient calls both deployables and must parse one error contract, not two.\n\n``correlationId`` is the one addition to RFC 9457, and it is what lets a user quoting an error\nbe followed across an asynchronous, suspendable flow (spec FR-OPS-001).",
+        "properties": {
+          "correlationId": {
+            "title": "Correlationid",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "correlationId"
+        ],
+        "title": "ProblemDetails",
+        "type": "object"
+      },
+      "SendMessageRequest": {
+        "additionalProperties": false,
+        "description": "One turn of conversation.\n\n**Chat text cannot grant authority** (spec FR-IDENT-004). An affirmative message is never\nconsent — only ``POST /work/{id}/consent`` records that — so there is no ``confirm`` field here\nfor a client to set, and nothing downstream reads ``content`` to decide anything.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "SendMessageRequest",
+        "type": "object"
+      },
       "StartSessionResponse": {
         "additionalProperties": false,
         "description": "The identifier of a newly started session.",
@@ -130,46 +182,6 @@
         ],
         "title": "StartSessionResponse",
         "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
       }
     }
   },
@@ -182,7 +194,7 @@
   "paths": {
     "/api/customer/v1/messages/{messageId}/feedback": {
       "delete": {
-        "description": "Withdraw a previously recorded signal.",
+        "description": "Withdraw a previously recorded signal.\n\nIdempotent: withdrawing when nothing is recorded succeeds, because the caller's intent holds\neither way and a 404 would send a client into a retry loop over a state it has reached.\n\nReturns:\n    204 when no signal from this caller remains on the message. 404 when the message is not\n    theirs.",
         "operationId": "withdraw_feedback_api_customer_v1_messages__messageId__feedback_delete",
         "parameters": [
           {
@@ -199,29 +211,58 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "No signal from this caller remains."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
-          "501": {
+          "500": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Withdraw Feedback Api Customer V1 Messages  Messageid  Feedback Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Internal error"
           }
         },
         "summary": "Withdraw Feedback",
@@ -230,7 +271,7 @@
         ]
       },
       "put": {
-        "description": "Record or revise a thumbs signal.\n\n``PUT`` because feedback is **revisable**: repeating it replaces the previous signal rather\nthan creating a second, which is what the unique constraint on ``(message_id, given_by_oid)``\nenforces underneath.",
+        "description": "Record or revise a thumbs signal.\n\n``PUT`` because feedback is revisable: repeating it replaces the previous signal rather than\ncreating a second.\n\nReturns:\n    204 on success — there is no body, because there is nothing to return that the client did\n    not just send, and an echoed signal is a second source of truth for a value the client\n    already holds.\n\nRaises:\n    HTTPException: Never raised here. A message that is not an agent-authored message in the\n        caller's own session is reported as **404** through the problem contract, because\n        existence is tenant-scoped information.",
         "operationId": "record_feedback_api_customer_v1_messages__messageId__feedback_put",
         "parameters": [
           {
@@ -257,29 +298,58 @@
           "required": true
         },
         "responses": {
+          "204": {
+            "description": "The signal was recorded or replaced."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
-          "501": {
+          "500": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Record Feedback Api Customer V1 Messages  Messageid  Feedback Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Internal error"
           }
         },
         "summary": "Record Feedback",
@@ -302,6 +372,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           }
         },
         "summary": "Negotiate",
@@ -312,22 +432,68 @@
     },
     "/api/customer/v1/sample-flows/round-trip": {
       "post": {
-        "description": "Open the durable record and enqueue its trigger **in one transaction**.\n\nThe two writes share a unit of work, which is the property this endpoint exists to prove: a\ncrash between them cannot leave a state change nobody was told about, nor a message for a state\nchange that rolled back.\n\n**Returns 501 until the work-item write lands.** The messaging machinery beneath it —\n:func:`~ragcore.messaging.outbox.enqueue_trigger`, the dispatcher, the consumer — is implemented\nand tested at Stage 8; the durable record this trigger points at is opened by the session and\nwork-item write that belongs with the customer surface. Wiring this to create work items now\nwould be inventing product behaviour the scaffold is specifically not allowed to have.",
+        "description": "Open the durable record and enqueue its trigger **in one transaction**.\n\nThe two writes share a unit of work, which is the property this endpoint exists to prove: a\ncrash between them cannot leave a state change nobody was told about, nor a message for a state\nchange that rolled back.\n\n**Returns 501 until the work-item write lands.** The messaging machinery beneath it —\n:func:`~ragcore.messaging.outbox.enqueue_trigger`, the dispatcher, the consumer — is implemented\nand tested at Stage 8; the durable record this trigger points at is opened by the session and\nwork-item write that belongs with the customer surface. Wiring this to create work items now\nwould be inventing product behaviour the scaffold is specifically not allowed to have. Wired\nby T241 in ``specs/001-platform-scaffold/tasks.md``, which also declares the eventual response\nas :class:`SampleFlowAccepted`.",
         "operationId": "begin_round_trip_api_customer_v1_sample_flows_round_trip_post",
         "responses": {
-          "501": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Begin Round Trip Api Customer V1 Sample Flows Round Trip Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "501": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not implemented"
           }
         },
         "summary": "Begin Round Trip",
@@ -338,7 +504,7 @@
     },
     "/api/customer/v1/sample-flows/round-trip/{workItemId}": {
       "get": {
-        "description": "Read the outcome back — **the recovery path for a missed notification**.\n\nA client that never connected to the realtime channel, or that missed the push, reaches the\nsame answer here. That is what keeps the notification a leaf rather than a link.",
+        "description": "Read the outcome back — **the recovery path for a missed notification**.\n\nA client that never connected to the realtime channel, or that missed the push, reaches the\nsame answer here. That is what keeps the notification a leaf rather than a link.\n\nWired by T242, which also declares the eventual response as :class:`SampleFlowState`.",
         "operationId": "read_round_trip_api_customer_v1_sample_flows_round_trip__workItemId__get",
         "parameters": [
           {
@@ -355,29 +521,65 @@
           }
         ],
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Read Round Trip Api Customer V1 Sample Flows Round Trip  Workitemid  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Read Round Trip",
@@ -388,22 +590,68 @@
     },
     "/api/customer/v1/sample-flows/service-hop": {
       "post": {
-        "description": "Reach the workload audience **through the gateway**, and report what it saw.\n\n**There is no private peer route, and this endpoint must never acquire one.** The call leaves\nthrough the approved egress path, re-enters at Front Door, is re-authenticated at APIM as an\napp-only principal, and arrives at the workload audience with a fresh identity contract (spec\n§13.4). A direct in-cluster call would be faster and would prove nothing — the identity would be\nwhatever this process chose to send.\n\nRequires the deployed edge, which is why it reports rather than executes here: driving it\nagainst a locally hosted process would demonstrate the opposite of the property.",
+        "description": "Reach the workload audience **through the gateway**, and report what it saw.\n\n**There is no private peer route, and this endpoint must never acquire one.** The call leaves\nthrough the approved egress path, re-enters at Front Door, is re-authenticated at APIM as an\napp-only principal, and arrives at the workload audience with a fresh identity contract (spec\n§13.4). A direct in-cluster call would be faster and would prove nothing — the identity would be\nwhatever this process chose to send.\n\nRequires the deployed edge, which is why it reports rather than executes here: driving it\nagainst a locally hosted process would demonstrate the opposite of the property.\n\nWired by T246 and T247, which also declare the eventual response as :class:`ServiceHopResult`.",
         "operationId": "service_hop_api_customer_v1_sample_flows_service_hop_post",
         "responses": {
-          "501": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Service Hop Api Customer V1 Sample Flows Service Hop Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "501": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not implemented"
           }
         },
         "summary": "Service Hop",
@@ -414,7 +662,7 @@
     },
     "/api/customer/v1/sessions": {
       "post": {
-        "description": "Start a chat session.\n\nA session is started here; a **work record is not**. One is committed only once the user has\narticulated a genuine request (spec FR-SESS-003), which is a later transition — creating one\nper session would put an authority record behind every \"hello\".",
+        "description": "Start a chat session.\n\nA session is started here; a **work record is not**. One is committed only once the user has\narticulated a genuine request (spec FR-SESS-003), which the triage gate decides on the first\nturn — creating one per session would put an authority record behind every \"hello\".",
         "operationId": "start_session_api_customer_v1_sessions_post",
         "responses": {
           "201": {
@@ -426,6 +674,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           }
         },
         "summary": "Start Session",
@@ -436,7 +734,7 @@
     },
     "/api/customer/v1/sessions/{sessionId}/answers": {
       "post": {
-        "description": "Answer a pending clarifying question.",
+        "description": "Answer a pending clarifying question.\n\n**Returns 501 until the run loop is hosted.** The interrupt node, its payload contract and the\nbounded answer are implemented and unit-tested; what is missing is the process that holds a\ncompiled graph and resumes it, which is the run host — not this endpoint. Wiring a resume here\nagainst a graph nobody compiled would be a route that appears to work and silently drops the\nanswer, which is worse than one that says it is not there.\n\nWhat this signature already fixes, and what a later wiring cannot therefore get wrong: the\nanswerer comes from ``principal`` and the organisation from ``tenant``, both derived from\ntrusted identity; neither is a parameter a client can supply.",
         "operationId": "answer_clarification_api_customer_v1_sessions__sessionId__answers_post",
         "parameters": [
           {
@@ -463,29 +761,65 @@
           "required": true
         },
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Answer Clarification Api Customer V1 Sessions  Sessionid  Answers Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Answer Clarification",
@@ -496,7 +830,7 @@
     },
     "/api/customer/v1/sessions/{sessionId}/messages": {
       "post": {
-        "description": "Send a message. **Streams the response** as ``text/event-stream``.\n\nThe stream carries no authority. See :mod:`ragcore.api.customer.streaming`.",
+        "description": "Send a message. **Streams the response** as ``text/event-stream``.\n\nThe turn runs through the compiled graph when this process hosts one. A process built without\npersistence — a contract emission, a schema test — has no run host, and the stream then reports\nonly that the turn completed rather than inventing progress it did not make.\n\nArgs:\n    request: For the run host held on application state.\n    session_id: The session. The checkpointer thread is derived from it, which is what stops\n        one session resuming another's suspended run.\n    body: The turn. **Text**, bounded, and never read to decide anything.\n    principal: The caller, from trusted identity. Becomes the requester on the run context.\n    tenant: The admitted organisation, from trusted identity plus registry state.\n    correlation_id: Carried onto every log, span, trigger, notification and audit record this\n        turn produces (spec FR-OPS-001).\n\nReturns:\n    The stream.",
         "operationId": "send_message_api_customer_v1_sessions__sessionId__messages_post",
         "parameters": [
           {
@@ -512,24 +846,76 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
+              "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "type": "string"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Server-sent events. Event kinds: token, step, interrupt, done, error. The stream carries no authority: an interrupt event reports that a decision is needed and cannot receive one."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           }
         },
         "summary": "Send Message",
@@ -567,29 +953,65 @@
           "required": true
         },
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Record Consent Api Customer V1 Work  Workitemid  Consent Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Record Consent",
@@ -617,29 +1039,65 @@
           }
         ],
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Fetch Instruction Api Customer V1 Work  Workitemid  Instruction Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Fetch Instruction",
@@ -677,29 +1135,65 @@
           "required": true
         },
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Record Result Api Customer V1 Work  Workitemid  Result Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Record Result",

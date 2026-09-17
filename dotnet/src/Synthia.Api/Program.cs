@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Synthia.Api.Authorization;
 using Synthia.Api.Configuration;
+using Synthia.Api.Contracts;
 using Synthia.Api.Endpoints;
 using Synthia.Api.Errors;
 using Synthia.Api.Health;
@@ -57,22 +58,9 @@ builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => JsonConventions.Apply(options.SerializerOptions));
 
 // Built-in OpenAPI, generated from the application contracts rather than hand-maintained.
-//
-// ONE DOCUMENT PER AUDIENCE, and a merged document is prohibited: publishing them together would
-// let a customer-facing client discover the staff surface. The split is by path prefix because the
-// prefix IS the audience — the same fact APIM routes on and IdentityContextMiddleware resolves.
-//
-// This deployable serves customer and staff only. The workload audience belongs to RagCore, which
-// emits its own document; there is deliberately no empty workload document here, because an empty
-// contract reads as "this surface has no operations" rather than "this surface is somewhere else".
-foreach (string audience in new[] { "customer", "staff" })
-{
-    string prefix = $"api/{audience}/v1";
-
-    builder.Services.AddOpenApi(audience, options =>
-        options.ShouldInclude = description =>
-            description.RelativePath?.StartsWith(prefix, StringComparison.Ordinal) ?? false);
-}
+// See Synthia.Api.Contracts.ContractOpenApi for the audience split, what is published and what is
+// stripped before publication.
+builder.Services.AddSynthiaOpenApi();
 
 // The section name rather than IOptions<ReadDatabaseOptions>. That options type belongs to
 // Synthia.Persistence, and the composition root deliberately cannot reference it (plan §Dependency

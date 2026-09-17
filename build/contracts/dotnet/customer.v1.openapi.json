@@ -1,102 +1,851 @@
 {
-  "openapi": "3.1.1",
-  "info": {
-    "title": "Synthia.Api | customer",
-    "version": "1.0.0"
-  },
-  "servers": [
-    {
-      "url": "http://localhost/"
+  "components": {
+    "schemas": {
+      "CursorEnvelopeOfSessionMessage": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/SessionMessage"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfSessionSummary": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/SessionSummary"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "FeedbackSignal": {
+        "description": "A revisable per-message quality signal.",
+        "enum": [
+          "unknown",
+          "positive",
+          "negative"
+        ]
+      },
+      "MessageFeedback": {
+        "description": "The current thumbs signal on a message. Projected from \u0060vw_message_feedback_v1\u0060.",
+        "properties": {
+          "messageId": {
+            "description": "The rated message.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "The owning session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "signal": {
+            "$ref": "#/components/schemas/FeedbackSignal",
+            "description": "The current signal."
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "When it was last revised.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "sessionId",
+          "tenantId",
+          "signal",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "ProblemContract": {
+        "description": "The problem-details shape both deployables emit, so a client parses one error contract.",
+        "properties": {
+          "correlationId": {
+            "description": "The correlation identifier for this request.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "A client-safe explanation. Never an exception message.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "description": "The request path this problem occurred on.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "description": "The HTTP status code.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "title": {
+            "description": "A short, client-safe summary.",
+            "type": "string"
+          },
+          "type": {
+            "description": "A ProblemTypes URI.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "correlationId"
+        ],
+        "type": "object"
+      },
+      "SenderKind": {
+        "description": "Who authored a message.",
+        "enum": [
+          "unknown",
+          "endUser",
+          "agent",
+          "staff"
+        ]
+      },
+      "SessionMessage": {
+        "description": "One turn of a conversation. Projected from \u0060vw_session_message_v1\u0060.",
+        "properties": {
+          "body": {
+            "description": "The message text.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "messageId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "senderKind": {
+            "$ref": "#/components/schemas/SenderKind",
+            "description": "Who authored it."
+          },
+          "senderOid": {
+            "description": "The author\u0027s Entra object id, or \u0060null\u0060 for the agent.",
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sessionId": {
+            "description": "The owning session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "sessionId",
+          "tenantId",
+          "senderKind",
+          "senderOid",
+          "body",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "SessionState": {
+        "description": "The nine states a conversation can hold (spec FR-SESS-015).",
+        "enum": [
+          "unknown",
+          "conversational",
+          "resolving",
+          "awaitingUser",
+          "awaitingConsent",
+          "awaitingApproval",
+          "staffControlled",
+          "resolved",
+          "escalated",
+          "closedDeclined"
+        ]
+      },
+      "SessionStep": {
+        "description": "A progress entry in the step trail. Projected from \u0060vw_session_step_v1\u0060.",
+        "properties": {
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "kind": {
+            "description": "A machine-readable step kind, so a client can convey state by more than colour.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "The owning session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "stepId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "summary": {
+            "description": "A short, client-safe description.",
+            "type": "string"
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "sessionId",
+          "tenantId",
+          "kind",
+          "summary",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "SessionSummary": {
+        "description": "A session as the listings show it. Projected from \u0060vw_session_summary_v1\u0060.",
+        "properties": {
+          "caseReference": {
+            "description": "The system-of-record reference, once the triage gate has fired.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "closedAt": {
+            "description": "Set on a terminal transition.",
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Opaque to clients.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionState",
+            "description": "One of the nine session states."
+          },
+          "tenantId": {
+            "description": "The owning organisation. Present on every view, filtered on every query.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "tenantId",
+          "state",
+          "caseReference",
+          "createdAt",
+          "updatedAt",
+          "closedAt"
+        ],
+        "type": "object"
+      }
     }
-  ],
+  },
+  "info": {
+    "description": "The customer audience. Generated from the running service; not hand-maintained. Identity is derived at the gateway and no operation accepts a tenant, role or audience parameter.",
+    "title": "Synthia Customer API",
+    "version": "v1"
+  },
+  "openapi": "3.1.1",
   "paths": {
     "/api/customer/v1/views/sessions": {
       "get": {
-        "tags": [
-          "customer-views"
-        ],
-        "summary": "Lists the caller\u0027s own sessions. Cursor paged.",
         "operationId": "CustomerListSessions",
+        "parameters": [
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -createdAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-createdAt",
+                "-state",
+                "-updatedAt",
+                "createdAt",
+                "state",
+                "updatedAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on state. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "enum": [
+                "awaitingapproval",
+                "awaitingconsent",
+                "awaitinguser",
+                "closeddeclined",
+                "conversational",
+                "escalated",
+                "resolved",
+                "resolving",
+                "staffcontrolled",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfSessionSummary"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Lists the caller\u0027s own sessions. Cursor paged.",
+        "tags": [
+          "customer-views"
+        ]
       }
     },
     "/api/customer/v1/views/sessions/{sessionId}": {
       "get": {
-        "tags": [
-          "customer-views"
-        ],
-        "summary": "Reads one of the caller\u0027s own sessions.",
         "operationId": "CustomerGetSession",
         "parameters": [
           {
-            "name": "sessionId",
             "in": "path",
+            "name": "sessionId",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSummary"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Reads one of the caller\u0027s own sessions.",
+        "tags": [
+          "customer-views"
+        ]
+      }
+    },
+    "/api/customer/v1/views/sessions/{sessionId}/feedback": {
+      "get": {
+        "operationId": "CustomerListSessionFeedback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: updatedAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-updatedAt",
+                "updatedAt"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MessageFeedback"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Reads the current thumbs signals on a session\u0027s agent messages.",
+        "tags": [
+          "customer-views"
+        ]
       }
     },
     "/api/customer/v1/views/sessions/{sessionId}/messages": {
       "get": {
-        "tags": [
-          "customer-views"
-        ],
-        "summary": "Lists a session\u0027s conversation history. Cursor paged.",
         "operationId": "CustomerListSessionMessages",
         "parameters": [
           {
-            "name": "sessionId",
             "in": "path",
+            "name": "sessionId",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -createdAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-createdAt",
+                "createdAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on senderKind. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "senderKind",
+            "schema": {
+              "enum": [
+                "agent",
+                "enduser",
+                "staff",
+                "unknown"
+              ],
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfSessionMessage"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Lists a session\u0027s conversation history. Cursor paged.",
+        "tags": [
+          "customer-views"
+        ]
       }
     },
     "/api/customer/v1/views/sessions/{sessionId}/steps": {
       "get": {
-        "tags": [
-          "customer-views"
-        ],
-        "summary": "Reads a session\u0027s step trail, oldest first.",
         "operationId": "CustomerListSessionSteps",
         "parameters": [
           {
-            "name": "sessionId",
             "in": "path",
+            "name": "sessionId",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: createdAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-createdAt",
+                "createdAt"
+              ],
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionStep"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Reads a session\u0027s step trail, oldest first.",
+        "tags": [
+          "customer-views"
+        ]
       }
     }
   },

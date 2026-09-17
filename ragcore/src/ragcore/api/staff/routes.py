@@ -20,13 +20,37 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Request, status
 
 from ragcore.api.deps import PrincipalDep
-from ragcore.api.schemas import ApiModel
+from ragcore.api.middleware.problems import (
+    UNIVERSAL_PROBLEM_STATUSES,
+    ProblemJSONResponse,
+    not_implemented,
+    problem_responses,
+)
+from ragcore.api.schemas import ApiModel, ProblemDetails
 from ragcore.domain.work import ApprovalVerdict
 
-router = APIRouter(prefix="/api/staff/v1", tags=["staff"])
+# EVERY OPERATION DECLARES THE ERROR CONTRACT IT CAN RETURN. Without this the generator publishes
+# FastAPI's own `HTTPValidationError` for 422 and nothing at all for the rest, so the document
+# describes an error body this service never sends — and a client written against it parses the
+# wrong shape on the one path it cannot test against a happy case.
+router = APIRouter(
+    prefix="/api/staff/v1",
+    tags=["staff"],
+    responses=problem_responses(*UNIVERSAL_PROBLEM_STATUSES),
+)
+
+# The signature every wired-but-inert route carries: the response IS a problem, so it is declared
+# as one, at the media type RFC 9457 requires rather than plain `application/json`.
+NOT_IMPLEMENTED_ROUTE = {
+    "status_code": status.HTTP_501_NOT_IMPLEMENTED,
+    "response_model": ProblemDetails,
+    "response_class": ProblemJSONResponse,
+    "responses": problem_responses(501),
+}
+
 
 # Path parameters are declared with camelCase aliases so the generated OpenAPI document matches
 # contracts/ exactly. The wire contract is frozen and shared with the .NET side; a Python-side
@@ -38,8 +62,6 @@ SessionIdPath = Annotated[
     UUID, Path(alias="sessionId", description="The session being operated on.")
 ]
 WorkItemIdPath = Annotated[UUID, Path(alias="workItemId", description="The durable work record.")]
-
-NOT_IMPLEMENTED = "No product behaviour exists at this stage. The boundary is wired; nothing runs."
 
 
 class VerdictRequest(ApiModel):
@@ -66,10 +88,10 @@ class StaffMessageRequest(ApiModel):
     content: str
 
 
-@router.post("/approvals/{approvalId}/verdict", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post("/approvals/{approvalId}/verdict", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def record_verdict(
-    approval_id: ApprovalIdPath, body: VerdictRequest, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request, approval_id: ApprovalIdPath, body: VerdictRequest, principal: PrincipalDep
+) -> ProblemDetails:
     """Approve or reject. Accepts ``technician``.
 
     Three properties this route commits to, all enforced below it rather than here:
@@ -83,11 +105,13 @@ async def record_verdict(
     * **No approval by timeout.** Nothing anywhere produces a verdict except this route.
     """
     del approval_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.post("/sessions/{sessionId}/takeover", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def take_over_session(session_id: SessionIdPath, principal: PrincipalDep) -> dict[str, str]:
+@router.post("/sessions/{sessionId}/takeover", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
+async def take_over_session(
+    request: Request, session_id: SessionIdPath, principal: PrincipalDep
+) -> ProblemDetails:
     """Transition a session to staff-controlled. Accepts ``technician``.
 
     An authenticated state transition, not a socket message, and a **single** transition: where
@@ -98,20 +122,22 @@ async def take_over_session(session_id: SessionIdPath, principal: PrincipalDep) 
     which staff consent on somebody's behalf.
     """
     del session_id, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.post("/sessions/{sessionId}/messages", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post("/sessions/{sessionId}/messages", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def send_staff_message(
-    session_id: SessionIdPath, body: StaffMessageRequest, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request, session_id: SessionIdPath, body: StaffMessageRequest, principal: PrincipalDep
+) -> ProblemDetails:
     """Send a message into a taken-over session. Accepts ``technician``."""
     del session_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.post("/work/{workItemId}/cancel", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def cancel_work(work_item_id: WorkItemIdPath, principal: PrincipalDep) -> dict[str, str]:
+@router.post("/work/{workItemId}/cancel", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
+async def cancel_work(
+    request: Request, work_item_id: WorkItemIdPath, principal: PrincipalDep
+) -> ProblemDetails:
     """Cancel before execution is claimed. Accepts ``technician``.
 
     Permitted before the claim. After the claim, execution completes and the outcome is recorded
@@ -119,4 +145,4 @@ async def cancel_work(work_item_id: WorkItemIdPath, principal: PrincipalDep) -> 
     is honestly reported.
     """
     del work_item_id, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)

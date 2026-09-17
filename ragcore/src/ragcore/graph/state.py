@@ -32,9 +32,11 @@ from ragcore.domain.governance import ExecutionTreatment, is_narrowing
 
 __all__ = [
     "AgentState",
+    "ClassificationView",
     "ConversationTurn",
     "ExecutionRecord",
     "GovernanceResult",
+    "GroundingAssessment",
     "HumanDecisionRecord",
     "ProposedOperationView",
     "RetrievedContext",
@@ -117,6 +119,51 @@ class RetrievedContext(TypedDict):
     content: str
     score: float
     source_reference: str
+
+
+class GroundingAssessment(TypedDict):
+    """What the ``ground`` node concluded about the evidence it has.
+
+    Mirrors :class:`~ragcore.retrieval.confidence.Confidence` plus whether grounding was required
+    at all. Written so the step trail and the audit record can say *why* the run continued or
+    withheld, rather than only that it did.
+
+    **This channel cannot authorize anything.** There is no ``sufficient_to_execute`` key and no
+    treatment: grounding may withhold and may never authorize (spec FR-AGENT-005), and the gate
+    re-assesses the condition itself from the retrieved evidence rather than reading this. What
+    lives here is a *report*, and a report nothing consults for permission is a report nothing can
+    be tricked into consulting.
+
+    ``top_score`` and ``margin`` are raw figures and **are not probabilities** — nothing may
+    present either to a user as a confidence.
+    """
+
+    top_score: float
+    margin: float
+    is_confident: bool
+    required: bool
+
+
+class ClassificationView(TypedDict):
+    """What the ``classify`` node read out of the catalogue. **A reading, never a decision.**
+
+    Deliberately absent, and never to be added: ``approved``, ``authorized``, ``accepted_roles``
+    and anything a downstream node could read as permission. Classification looks an operation up
+    and reports what the catalogue says about it; :mod:`ragcore.governance.gate` is what decides,
+    and it re-reads the catalogue itself rather than trusting this channel (spec FR-AGENT-002).
+
+    ``treatment`` is here because a user is owed an honest early answer — a request that will need
+    somebody's approval should not be described as being in progress — and because the two
+    human-decided treatments are **classified** in this scaffold while their workflows are not
+    built (plan §Stage 12). It is the catalogue's value, copied; it is never the model's, and
+    nothing executes on the strength of it.
+    """
+
+    catalogue_id: str
+    catalogue_version: int
+    treatment: TreatmentValue
+    is_registered: bool
+    is_entitled: bool
 
 
 class ProposedOperationView(TypedDict):
@@ -352,6 +399,10 @@ class AgentState(TypedDict, total=False):
             The three ``awaiting_*`` states persist indefinitely; nothing here expires.
         conversation: The turns so far. Accumulates.
         retrieved: Grounding evidence for this run. Accumulates. Data, never instruction.
+        grounding: What the ``ground`` node concluded about that evidence. A report; it authorizes
+            nothing, and the gate assesses the knowledge condition itself rather than reading it.
+        classification: What the catalogue says about the proposed operation. A reading of stored
+            data, never a decision — see :class:`ClassificationView`.
         proposal: What the agent suggested. Last write wins — the agent may revise its own
             proposal freely, right up until the gate reads it.
         governance: What deterministic governance decided. **Write-once.**
@@ -370,6 +421,8 @@ class AgentState(TypedDict, total=False):
 
     conversation: Annotated[list[ConversationTurn], _append]
     retrieved: Annotated[list[RetrievedContext], _append]
+    grounding: GroundingAssessment | None
+    classification: ClassificationView | None
 
     proposal: ProposedOperationView | None
     governance: Annotated[GovernanceResult | None, seal_governance]

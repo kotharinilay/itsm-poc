@@ -26,10 +26,21 @@ from typing import Final
 from fastapi import APIRouter
 
 from ragcore.api.deps import PrincipalDep
+from ragcore.api.middleware.problems import (
+    UNIVERSAL_PROBLEM_STATUSES,
+    problem_responses,
+)
 from ragcore.api.schemas import ApiModel
 from ragcore.domain.identifiers import PrincipalId
 
-router = APIRouter(prefix="/api/customer/v1", tags=["customer"])
+# EVERY OPERATION DECLARES THE ERROR CONTRACT IT CAN RETURN. Without this the generator publishes
+# FastAPI's own `HTTPValidationError` for 422 and nothing at all for the rest, so the document
+# describes an error body this service never sends.
+router = APIRouter(
+    prefix="/api/customer/v1",
+    tags=["customer"],
+    responses=problem_responses(*UNIVERSAL_PROBLEM_STATUSES),
+)
 
 GROUP_PREFIX: Final = "user"
 """Namespacing, so a group name cannot be confused with a hub, a tenant or a work identifier."""
@@ -65,7 +76,11 @@ class NegotiateResponse(ApiModel):
     """The group this connection will receive on. Derived, and echoed so a client can log it."""
 
 
-@router.post("/realtime/negotiate", status_code=200)
+@router.post(
+    "/realtime/negotiate",
+    status_code=200,
+    response_model=NegotiateResponse,
+)
 async def negotiate(principal: PrincipalDep) -> NegotiateResponse:
     """Tell an authenticated client where to connect.
 

@@ -1,122 +1,1470 @@
 {
-  "openapi": "3.1.1",
-  "info": {
-    "title": "Synthia.Api | staff",
-    "version": "1.0.0"
-  },
-  "servers": [
-    {
-      "url": "http://localhost/"
-    }
-  ],
-  "paths": {
-    "/api/staff/v1/views/sessions/live": {
-      "get": {
-        "tags": [
-          "staff-views"
-        ],
-        "summary": "Lists live sessions. Cursor paged.",
-        "operationId": "StaffListLiveSessions",
-        "responses": {
-          "200": {
-            "description": "OK"
+  "components": {
+    "schemas": {
+      "ApprovalQueueEntry": {
+        "description": "A pending approval. Projected from \u0060vw_approval_queue_v1\u0060.",
+        "properties": {
+          "approvalId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "catalogueId": {
+            "description": "The operation being approved.",
+            "type": "string"
+          },
+          "catalogueVersion": {
+            "description": "The version bound at proposal time.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "disclosedCommands": {
+            "description": "The full command set, as disclosed to the approver.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "description": "When the pending request stops being decidable, where one applies.",
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "description": "When approval was sought.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "description": "Optimistic-concurrency token.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "workItemId": {
+            "description": "The case awaiting a verdict. At most one approval per case.",
+            "format": "uuid",
+            "type": "string"
           }
-        }
-      }
-    },
-    "/api/staff/v1/views/sessions/{sessionId}": {
-      "get": {
-        "tags": [
-          "staff-views"
+        },
+        "required": [
+          "approvalId",
+          "workItemId",
+          "tenantId",
+          "catalogueId",
+          "catalogueVersion",
+          "disclosedCommands",
+          "requestedAt",
+          "expiresAt",
+          "createdAt",
+          "updatedAt",
+          "version"
         ],
-        "summary": "Reads one session and its step trail.",
-        "operationId": "StaffGetSession",
+        "type": "object"
+      },
+      "AuditEventView": {
+        "description": "An audit record. Projected from \u0060vw_audit_event_v1\u0060.",
+        "properties": {
+          "action": {
+            "description": "What was done.",
+            "type": "string"
+          },
+          "approvedByOid": {
+            "description": "Who approved.",
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "auditId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "correlationId": {
+            "description": "The identifier tying this to its request and traces.",
+            "type": "string"
+          },
+          "executedBy": {
+            "description": "Which principal executed it.",
+            "type": "string"
+          },
+          "executionMethod": {
+            "$ref": "#/components/schemas/ExecutionMethod",
+            "description": "By what means."
+          },
+          "occurredAt": {
+            "description": "When it happened. The default sort key for this resource.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "With what result.",
+            "type": "string"
+          },
+          "requestedByOid": {
+            "description": "Who asked.",
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "retainUntil": {
+            "description": "Seven years from occurrence by default.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "tenantId": {
+            "description": "The organisation acted against.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "verification": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VerificationOutcome",
+                "description": "Server-confirmed, client-attested or contradicted."
+              }
+            ]
+          },
+          "workItemId": {
+            "description": "The case this record concerns, where it concerns one.",
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "auditId",
+          "tenantId",
+          "occurredAt",
+          "workItemId",
+          "action",
+          "requestedByOid",
+          "approvedByOid",
+          "executedBy",
+          "executionMethod",
+          "outcome",
+          "verification",
+          "correlationId",
+          "retainUntil"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfApprovalQueueEntry": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalQueueEntry"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfAuditEventView": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventView"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfSessionSummary": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/SessionSummary"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfTenantView": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/TenantView"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "CursorEnvelopeOfUnexecutedApproval": {
+        "description": "The wire shape of a cursor-paged collection.",
+        "properties": {
+          "items": {
+            "description": "The items in this page.",
+            "items": {
+              "$ref": "#/components/schemas/UnexecutedApproval"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "An opaque cursor to resume from, or \u0060null\u0060 when the collection is exhausted.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "DashboardRollup": {
+        "description": "Pre-aggregated platform counts. Projected from \u0060vw_dashboard_rollup_v1\u0060.",
+        "properties": {
+          "approvalCount": {
+            "description": "Approvals decided in the window.",
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "feedbackRate": {
+            "description": "Share of agent messages carrying a signal.",
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "sessionCount": {
+            "description": "Sessions in the window.",
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unexecutedApprovalCount": {
+            "description": "Approved-but-unexecuted cases in the window.",
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "windowEnd": {
+            "description": "End of the aggregation window.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "windowStart": {
+            "description": "Start of the aggregation window.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "windowStart",
+          "windowEnd",
+          "sessionCount",
+          "approvalCount",
+          "unexecutedApprovalCount",
+          "feedbackRate"
+        ],
+        "type": "object"
+      },
+      "ExecutionMethod": {
+        "description": "The mechanism by which a consequential action was performed.",
+        "enum": [
+          "unknown",
+          "workload",
+          "desktopScript",
+          "none"
+        ]
+      },
+      "ProblemContract": {
+        "description": "The problem-details shape both deployables emit, so a client parses one error contract.",
+        "properties": {
+          "correlationId": {
+            "description": "The correlation identifier for this request.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "A client-safe explanation. Never an exception message.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "description": "The request path this problem occurred on.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "description": "The HTTP status code.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "title": {
+            "description": "A short, client-safe summary.",
+            "type": "string"
+          },
+          "type": {
+            "description": "A ProblemTypes URI.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "correlationId"
+        ],
+        "type": "object"
+      },
+      "SessionState": {
+        "description": "The nine states a conversation can hold (spec FR-SESS-015).",
+        "enum": [
+          "unknown",
+          "conversational",
+          "resolving",
+          "awaitingUser",
+          "awaitingConsent",
+          "awaitingApproval",
+          "staffControlled",
+          "resolved",
+          "escalated",
+          "closedDeclined"
+        ]
+      },
+      "SessionStep": {
+        "description": "A progress entry in the step trail. Projected from \u0060vw_session_step_v1\u0060.",
+        "properties": {
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "kind": {
+            "description": "A machine-readable step kind, so a client can convey state by more than colour.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "The owning session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "stepId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "summary": {
+            "description": "A short, client-safe description.",
+            "type": "string"
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "sessionId",
+          "tenantId",
+          "kind",
+          "summary",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "SessionSummary": {
+        "description": "A session as the listings show it. Projected from \u0060vw_session_summary_v1\u0060.",
+        "properties": {
+          "caseReference": {
+            "description": "The system-of-record reference, once the triage gate has fired.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "closedAt": {
+            "description": "Set on a terminal transition.",
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Opaque to clients.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionState",
+            "description": "One of the nine session states."
+          },
+          "tenantId": {
+            "description": "The owning organisation. Present on every view, filtered on every query.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "tenantId",
+          "state",
+          "caseReference",
+          "createdAt",
+          "updatedAt",
+          "closedAt"
+        ],
+        "type": "object"
+      },
+      "StaffSessionDetail": {
+        "description": "A session and its step trail, as the staff detail view returns them together.",
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionSummary",
+            "description": "The session summary."
+          },
+          "steps": {
+            "description": "The step trail, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/SessionStep"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "session",
+          "steps"
+        ],
+        "type": "object"
+      },
+      "TenantStatus": {
+        "description": "Platform admission state for a customer organisation.",
+        "enum": [
+          "unknown",
+          "active",
+          "suspended",
+          "offboarded"
+        ]
+      },
+      "TenantView": {
+        "description": "An organisation in the registry. Projected from \u0060vw_tenant_v1\u0060.",
+        "properties": {
+          "createdAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "Display name.",
+            "type": "string"
+          },
+          "entraTenantId": {
+            "description": "The validated \u0060tid\u0060 this maps to.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TenantStatus",
+            "description": "Admission state. Work does not execute unless active."
+          },
+          "tenantId": {
+            "description": "Platform identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "Audit column.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "description": "Optimistic-concurrency token.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "tenantId",
+          "entraTenantId",
+          "displayName",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object"
+      },
+      "UnexecutedApproval": {
+        "description": "Work that was approved and never executed. Projected from \u0060vw_approval_unexecuted_v1\u0060.",
+        "properties": {
+          "approvalId": {
+            "description": "Identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "catalogueId": {
+            "description": "The operation that was authorized.",
+            "type": "string"
+          },
+          "decidedAt": {
+            "description": "When the verdict was recorded.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "decidedByOid": {
+            "description": "Who decided.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the fifteen-minute execution window closed.",
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tenantId": {
+            "description": "The owning organisation.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "description": "Optimistic-concurrency token.",
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "workItemId": {
+            "description": "The case.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approvalId",
+          "workItemId",
+          "tenantId",
+          "catalogueId",
+          "decidedAt",
+          "decidedByOid",
+          "expiresAt",
+          "version"
+        ],
+        "type": "object"
+      },
+      "VerificationOutcome": {
+        "enum": [
+          "unknown",
+          "serverConfirmed",
+          "clientAttested",
+          "contradicted",
+          null
+        ]
+      }
+    }
+  },
+  "info": {
+    "description": "The staff audience. Generated from the running service; not hand-maintained. Identity is derived at the gateway and no operation accepts a tenant, role or audience parameter.",
+    "title": "Synthia Staff API",
+    "version": "v1"
+  },
+  "openapi": "3.1.1",
+  "paths": {
+    "/api/staff/v1/views/approvals/queue": {
+      "get": {
+        "operationId": "StaffListApprovalQueue",
         "parameters": [
           {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -createdAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-createdAt",
+                "-expiresAt",
+                "createdAt",
+                "expiresAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrows the result to one organisation WITHIN the set the caller may already see. It does not establish authority and cannot widen the result: naming an organisation outside the caller\u0027s scope returns no rows.",
+            "in": "query",
+            "name": "tenantId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfApprovalQueueEntry"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
-      }
-    },
-    "/api/staff/v1/views/approvals/queue": {
-      "get": {
+        },
+        "summary": "Lists pending approvals with their fully disclosed commands. Cursor paged.",
         "tags": [
           "staff-views"
-        ],
-        "summary": "Lists pending approvals with their fully disclosed commands. Cursor paged.",
-        "operationId": "StaffListApprovalQueue",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
+        ]
       }
     },
     "/api/staff/v1/views/approvals/unexecuted": {
       "get": {
-        "tags": [
-          "staff-views"
-        ],
-        "summary": "Lists work approved but never executed. Cursor paged.",
         "operationId": "StaffListUnexecutedApprovals",
+        "parameters": [
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -decidedAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-decidedAt",
+                "-expiresAt",
+                "decidedAt",
+                "expiresAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrows the result to one organisation WITHIN the set the caller may already see. It does not establish authority and cannot widen the result: naming an organisation outside the caller\u0027s scope returns no rows.",
+            "in": "query",
+            "name": "tenantId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfUnexecutedApproval"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Lists work approved but never executed. Cursor paged.",
+        "tags": [
+          "staff-views"
+        ]
       }
     },
     "/api/staff/v1/views/audit": {
       "get": {
-        "tags": [
-          "staff-views"
-        ],
-        "summary": "Searches audit records. Cursor paged.",
         "operationId": "StaffSearchAudit",
+        "parameters": [
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -occurredAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-occurredAt",
+                "occurredAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on eventKind. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "eventKind",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on occurredFrom. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "occurredFrom",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on occurredTo. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "occurredTo",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrows the result to one organisation WITHIN the set the caller may already see. It does not establish authority and cannot widen the result: naming an organisation outside the caller\u0027s scope returns no rows.",
+            "in": "query",
+            "name": "tenantId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on workItemId. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "workItemId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfAuditEventView"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Searches audit records. Cursor paged.",
+        "tags": [
+          "staff-views"
+        ]
       }
     },
     "/api/staff/v1/views/dashboard/platform": {
       "get": {
-        "tags": [
-          "staff-views"
-        ],
-        "summary": "Reads the platform rollup. Aggregate only; no per-organisation breakdown.",
         "operationId": "StaffGetPlatformDashboard",
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardRollup"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Reads the platform rollup. Aggregate only; no per-organisation breakdown.",
+        "tags": [
+          "staff-views"
+        ]
+      }
+    },
+    "/api/staff/v1/views/sessions/live": {
+      "get": {
+        "operationId": "StaffListLiveSessions",
+        "parameters": [
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: -createdAt.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-createdAt",
+                "-state",
+                "-updatedAt",
+                "createdAt",
+                "state",
+                "updatedAt"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on state. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "enum": [
+                "awaitingapproval",
+                "awaitingconsent",
+                "awaitinguser",
+                "closeddeclined",
+                "conversational",
+                "escalated",
+                "resolved",
+                "resolving",
+                "staffcontrolled",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrows the result to one organisation WITHIN the set the caller may already see. It does not establish authority and cannot widen the result: naming an organisation outside the caller\u0027s scope returns no rows.",
+            "in": "query",
+            "name": "tenantId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfSessionSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Lists live sessions. Cursor paged.",
+        "tags": [
+          "staff-views"
+        ]
+      }
+    },
+    "/api/staff/v1/views/sessions/{sessionId}": {
+      "get": {
+        "operationId": "StaffGetSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSessionDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Reads one session and its step trail.",
+        "tags": [
+          "staff-views"
+        ]
       }
     },
     "/api/staff/v1/views/tenants": {
       "get": {
-        "tags": [
-          "staff-views"
-        ],
-        "summary": "Lists organisations. Cursor paged.",
         "operationId": "StaffListTenants",
+        "parameters": [
+          {
+            "description": "Page size. Clamped to the server maximum rather than refused.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "An opaque resume position from a previous page\u0027s nextCursor. Clients MUST NOT construct or decode one.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field, prefixed with \u0027-\u0027 for descending. An unlisted field is a 400. Default: displayName.",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "-displayName",
+                "-status",
+                "displayName",
+                "status"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filters on status. An unlisted filter field is a 400.",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "active",
+                "offboarded",
+                "suspended",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorEnvelopeOfTenantView"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemContract"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
-        }
+        },
+        "summary": "Lists organisations. Cursor paged.",
+        "tags": [
+          "staff-views"
+        ]
       }
     }
   },

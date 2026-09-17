@@ -5,6 +5,9 @@ Three concerns, and they fail for different reasons so they are tested separatel
 * **Emission** — each audience document is generated from the running app and carries only that
   audience's paths and only the schemas those paths reach.
 * **Disclosure** — no secret, no credential, no internal-only detail reaches a published document.
+* **Authority** — no document offers a client a way to assert tenant, role or audience. Separate
+  from disclosure because it is a rule about a *position* rather than a name: the same word is a
+  defect in a request and correct in a response.
 * **Breakage** — the comparator in ``build/scripts/openapi_diff.py`` must actually detect a breaking
   change. A diff tool that never fails is worse than no diff tool, because it is believed.
 
@@ -26,6 +29,7 @@ from ragcore.api.openapi import (
     CONTRACT_VERSION,
     audience_document,
     audience_prefix,
+    authority_findings,
     disclosure_findings,
 )
 
@@ -149,18 +153,6 @@ class TestAPublishedDocumentDisclosesNothingItMustNot:
         assert findings, f"{name} was not caught"
         assert "secret-bearing" in findings[0]
 
-    @pytest.mark.parametrize("name", ["tenantId", "roles", "audience"])
-    def test_client_suppliable_authority_is_caught(self, name: str) -> None:
-        """**No endpoint accepts a tenant, role or audience parameter** (contracts §README rule 1).
-
-        Publishing a parameter for one advertises exactly what the platform refuses, and a client
-        that sent it would get a silent no-op rather than an error — the worst of both.
-        """
-        document = {"paths": {"/api/customer/v1/x": {"get": {"parameters": [{name: "x"}]}}}}
-        findings = disclosure_findings(document)
-        assert findings, f"{name} was not caught"
-        assert "internal-only" in findings[0]
-
     @pytest.mark.parametrize("name", ["outbox", "checkpoint", "langgraph", "stacktrace"])
     def test_internal_implementation_detail_is_caught(self, name: str) -> None:
         """A client that can see these starts depending on them."""
@@ -183,6 +175,152 @@ class TestAPublishedDocumentDisclosesNothingItMustNot:
             }
         }
         assert disclosure_findings(document) == []
+
+
+class TestNoDocumentOffersAClientAWayToAssertAuthority:
+    """Tenant, roles and audience are derived and never accepted (constitution P-I).
+
+    **This is a position rule, not a name rule**, and the distinction is the whole point. What must
+    not exist is a *channel* — somewhere a client can put a value the platform would read. A rule
+    that forbade the name everywhere would be satisfied by renaming the field rather than by
+    removing the channel, and would meanwhile forbid an audit read model from reporting which
+    organisation a record concerns, which is the field a staff reviewer opens it for.
+    """
+
+    @pytest.mark.parametrize("name", ["tenantId", "roles", "audience", "actAs"])
+    def test_a_parameter_a_client_could_supply_is_caught(self, name: str) -> None:
+        """Publishing one advertises exactly what the platform refuses."""
+        document = {
+            "paths": {
+                "/api/customer/v1/x": {"get": {"parameters": [{"name": name, "in": "query"}]}}
+            }
+        }
+        findings = authority_findings(document, "customer")
+        assert findings, f"{name} was not caught"
+        assert "client-suppliable authority" in findings[0]
+
+    @pytest.mark.parametrize("where", ["query", "header", "path"])
+    def test_it_is_caught_wherever_the_parameter_sits(self, where: str) -> None:
+        """A header is as much a channel as a query string, and easier to forget."""
+        document = {
+            "paths": {
+                "/api/customer/v1/x": {"get": {"parameters": [{"name": "tenantId", "in": where}]}}
+            }
+        }
+        assert authority_findings(document, "customer"), f"{where} was not caught"
+
+    def test_a_request_body_field_is_caught(self) -> None:
+        """A body is the channel a parameter check on its own would miss."""
+        document = {
+            "paths": {
+                "/api/customer/v1/x": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Body"}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "components": {"schemas": {"Body": {"properties": {"tenantId": {"type": "string"}}}}},
+        }
+        assert authority_findings(document, "customer")
+
+    def test_it_is_caught_through_a_nested_reference(self) -> None:
+        """The same channel one level down — exactly where a shallow check stops looking."""
+        document = {
+            "paths": {
+                "/api/customer/v1/x": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Outer"}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "Outer": {"properties": {"inner": {"$ref": "#/components/schemas/Inner"}}},
+                    "Inner": {"properties": {"roles": {"type": "array"}}},
+                }
+            },
+        }
+        assert authority_findings(document, "customer")
+
+    def test_a_response_field_is_not_a_finding(self) -> None:
+        """The organisation a row belongs to, reported to a caller already entitled to the row.
+
+        Forbidding this would force a read model to hide the fact a staff reviewer is reading it
+        for, and would be satisfied by renaming the field rather than by closing a channel.
+        """
+        document = {
+            "paths": {
+                "/api/staff/v1/x": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "content": {
+                                    "application/json": {
+                                        "schema": {"$ref": "#/components/schemas/Row"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "components": {"schemas": {"Row": {"properties": {"tenantId": {"type": "string"}}}}},
+        }
+        assert authority_findings(document, "staff") == []
+
+    def test_the_staff_narrowing_is_permitted(self) -> None:
+        """``tenantId`` as a staff query filter selects *within* the caller's existing scope.
+
+        It reaches the query as one more ``WHERE`` clause underneath the global scope filter, so a
+        caller naming an organisation outside their scope receives no rows rather than that
+        organisation's rows (contracts §README).
+        """
+        document = {
+            "paths": {
+                "/api/staff/v1/views/audit": {
+                    "get": {"parameters": [{"name": "tenantId", "in": "query"}]}
+                }
+            }
+        }
+        assert authority_findings(document, "staff") == []
+
+    @pytest.mark.parametrize("audience", ["customer", "workload"])
+    def test_the_narrowing_is_permitted_on_staff_and_nowhere_else(self, audience: str) -> None:
+        """The exception is scoped, or it is not an exception."""
+        document = {
+            "paths": {
+                f"/api/{audience}/v1/x": {
+                    "get": {"parameters": [{"name": "tenantId", "in": "query"}]}
+                }
+            }
+        }
+        assert authority_findings(document, audience), f"{audience} was not caught"
+
+    def test_the_narrowing_is_permitted_only_as_a_query_parameter(self) -> None:
+        """Even on staff. A header or a body is a different channel with a familiar name."""
+        document = {
+            "paths": {
+                "/api/staff/v1/x": {"get": {"parameters": [{"name": "tenantId", "in": "header"}]}}
+            }
+        }
+        assert authority_findings(document, "staff")
+
+    @pytest.mark.parametrize("audience", AUDIENCES)
+    def test_the_generated_document_offers_no_such_channel(self, app: Any, audience: str) -> None:
+        """The real document, not a constructed one."""
+        assert authority_findings(audience_document(app, audience), audience) == []
 
 
 # ---------------------------------------------------------------------------

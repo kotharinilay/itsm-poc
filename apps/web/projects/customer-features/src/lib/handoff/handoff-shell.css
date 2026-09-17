@@ -1,3 +1,31 @@
 .cf-handoff {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/*
+ * The two outcomes are visually distinct by border weight as well as colour, and each carries a
+ * `data-outcome` attribute. A user who cannot distinguish the colours still sees which of "somebody
+ * has this" and "nobody has this" applies — which is the difference that decides whether they wait.
+ */
+.cf-handoff__notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 4px solid currentcolor;
+}
+
+.cf-handoff__notice[data-outcome='declined'] {
+  border-inline-start-style: dashed;
+}
+
+.cf-handoff__reason {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.cf-handoff__presence {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-style: italic;
 }

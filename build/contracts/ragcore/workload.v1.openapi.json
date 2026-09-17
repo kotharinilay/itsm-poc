@@ -1,19 +1,6 @@
 {
   "components": {
     "schemas": {
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
       "OutcomeRequest": {
         "additionalProperties": false,
         "description": "The outcome of one execution attempt.\n\n``verification`` is **mandatory and has no default**. That is the whole design of this schema:\na caller must state what the platform actually knows, and the absence of a default means \"we\ndid not check\" cannot be silently recorded as success.\n\nA ``client_attested`` outcome MUST NOT be reported to a user or written to the system of\nrecord as confirmed resolution (ADR-0004). It is a claim; the field name says so.",
@@ -38,44 +25,56 @@
         "title": "OutcomeRequest",
         "type": "object"
       },
-      "ValidationError": {
+      "ProblemDetails": {
+        "additionalProperties": false,
+        "description": "The RFC 9457 error body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\n:mod:`ragcore.api.middleware.problems` already returns this shape at runtime; without a model\nthe generator falls back to FastAPI's ``HTTPValidationError``, and the published contract then\ndescribes an error body the service never sends.\n\nMirrors ``Synthia.Contracts.Errors.ProblemContract`` on the .NET side field for field, because a\nclient calls both deployables and must parse one error contract, not two.\n\n``correlationId`` is the one addition to RFC 9457, and it is what lets a user quoting an error\nbe followed across an asynchronous, suspendable flow (spec FR-OPS-001).",
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
+          "correlationId": {
+            "title": "Correlationid",
+            "type": "string"
           },
-          "input": {
-            "title": "Input"
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
           },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
           },
-          "msg": {
-            "title": "Message",
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
             "type": "string"
           },
           "type": {
-            "title": "Error Type",
+            "title": "Type",
             "type": "string"
           }
         },
         "required": [
-          "loc",
-          "msg",
-          "type"
+          "type",
+          "title",
+          "status",
+          "correlationId"
         ],
-        "title": "ValidationError",
+        "title": "ProblemDetails",
         "type": "object"
       },
       "VerificationOutcome": {
@@ -116,29 +115,85 @@
           }
         ],
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Already claimed"
+          },
+          "410": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authorization expired"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Claim Work Api Workload V1 Work  Workitemid  Claim Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Claim Work",
@@ -176,29 +231,85 @@
           "required": true
         },
         "responses": {
-          "422": {
+          "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Already claimed"
+          },
+          "410": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authorization expired"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal error"
           },
           "501": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Record Outcome Api Workload V1 Work  Workitemid  Outcome Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Not implemented"
           }
         },
         "summary": "Record Outcome",

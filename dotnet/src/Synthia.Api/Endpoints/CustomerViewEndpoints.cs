@@ -1,7 +1,9 @@
 using Synthia.Api.Authorization;
+using Synthia.Api.Contracts;
 using Synthia.Api.Errors;
 using Synthia.Api.Middleware;
 using Synthia.Api.Querying;
+using Synthia.Contracts.Errors;
 using Synthia.Contracts.Paging;
 using Synthia.Contracts.ReadModels;
 using Synthia.Modules.Sessions;
@@ -45,21 +47,35 @@ internal static class CustomerViewEndpoints
         views.MapGet("/sessions", ListSessionsAsync)
             .WithName("CustomerListSessions")
             .WithSummary("Lists the caller's own sessions. Cursor paged.")
+            .PagedOver(ResourceQueries.CustomerSessions)
+            .Returns<CursorEnvelope<SessionSummary>>()
             .AcceptsRolesOfCustomer();
 
         views.MapGet("/sessions/{sessionId:guid}", GetSessionAsync)
             .WithName("CustomerGetSession")
             .WithSummary("Reads one of the caller's own sessions.")
+            .Returns<SessionSummary>()
             .AcceptsRolesOfCustomer();
 
         views.MapGet("/sessions/{sessionId:guid}/messages", ListMessagesAsync)
             .WithName("CustomerListSessionMessages")
             .WithSummary("Lists a session's conversation history. Cursor paged.")
+            .PagedOver(ResourceQueries.CustomerSessionMessages)
+            .Returns<CursorEnvelope<SessionMessage>>()
             .AcceptsRolesOfCustomer();
 
         views.MapGet("/sessions/{sessionId:guid}/steps", ListStepsAsync)
             .WithName("CustomerListSessionSteps")
             .WithSummary("Reads a session's step trail, oldest first.")
+            .QueriedOver(ResourceQueries.CustomerSessionSteps)
+            .Returns<IReadOnlyList<SessionStep>>()
+            .AcceptsRolesOfCustomer();
+
+        views.MapGet("/sessions/{sessionId:guid}/feedback", ListFeedbackAsync)
+            .WithName("CustomerListSessionFeedback")
+            .WithSummary("Reads the current thumbs signals on a session's agent messages.")
+            .QueriedOver(ResourceQueries.CustomerSessionFeedback)
+            .Returns<IReadOnlyList<MessageFeedback>>()
             .AcceptsRolesOfCustomer();
 
         return app;
@@ -85,7 +101,7 @@ internal static class CustomerViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.CustomerSessions,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);
@@ -93,7 +109,7 @@ internal static class CustomerViewEndpoints
 
         if (!QueryBinding.TryBindPage(
                 context.Request.Query,
-                ResourceQueries.CustomerSessions,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out detail))
         {
@@ -139,7 +155,7 @@ internal static class CustomerViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.CustomerSessionMessages,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);
@@ -147,7 +163,7 @@ internal static class CustomerViewEndpoints
 
         if (!QueryBinding.TryBindPage(
                 context.Request.Query,
-                ResourceQueries.CustomerSessionMessages,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out detail))
         {
@@ -171,6 +187,49 @@ internal static class CustomerViewEndpoints
         return Results.Ok(CursorEnvelope.From(result));
     }
 
+    /// <summary>
+    /// Reads the current signals on one of the caller's own sessions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Current signals, not a history.</b> A revision replaces rather than accumulates
+    /// (spec FR-SESS-010), so there is one row per rated message and no ordering question about
+    /// which of several is in force.
+    /// </para>
+    /// <para>
+    /// Signals are content and expire with the session. The aggregate figures derived from them are
+    /// retained independently (spec FR-SESS-012) and are read through
+    /// <see cref="IFeedbackReadModel.SummariseAsync"/>, not from here — counting these rows would
+    /// tie a reporting figure to a retention window and make engagement look like it fell whenever
+    /// retention ran.
+    /// </para>
+    /// <para>
+    /// A session that is not the caller's returns an empty list rather than a 403, for the reason
+    /// every read on this surface does: existence is itself tenant-scoped information.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult> ListFeedbackAsync(
+        HttpContext context,
+        Guid sessionId,
+        IFeedbackReadModel feedback,
+        IPrincipalScope principal,
+        CancellationToken cancellationToken)
+    {
+        if (!QueryBinding.TryRejectUnknownFilters(
+                context.Request.Query,
+                QueryBinding.WhitelistOf(context),
+                out string? detail))
+        {
+            return Problems.ValidationFailed(context, detail!);
+        }
+
+        IReadOnlyList<MessageFeedback> signals = await feedback
+            .ListForSessionAsync(principal.Current!.Identity.PrincipalId, new SessionId(sessionId), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(signals);
+    }
+
     private static async Task<IResult> ListStepsAsync(
         HttpContext context,
         Guid sessionId,
@@ -180,7 +239,7 @@ internal static class CustomerViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.CustomerSessionSteps,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);

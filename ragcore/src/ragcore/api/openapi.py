@@ -85,13 +85,24 @@ def secret_terms() -> frozenset[str]:
 
 
 def internal_terms() -> frozenset[str]:
-    """Internal-only vocabulary and client-suppliable authority. Exact match.
+    """Internal-only vocabulary, forbidden anywhere in a document. Exact match.
 
-    Exact rather than substring: ``roles`` must not be a parameter, but a schema called
-    ``AcceptedRolesSummary`` is a legitimate read model and a substring rule would reject it.
+    Exact rather than substring: ``checkpoint`` must not be a field, but a schema called
+    ``CheckpointPolicySummary`` would be a legitimate read model and a substring rule would reject
+    it.
+
+    **Derived authority is not in this set**, and that is a correction rather than an omission.
+    ``tenantId`` in a *response* is the organisation a row belongs to, reported to a caller already
+    entitled to the row; forbidding the name outright would force an audit read model to hide the
+    organisation a record concerns, which is the field a staff reviewer opens it for. What must not
+    exist is a channel by which a client *asserts* one — see :func:`authority_findings`.
     """
-    internal = _policy()["internalTerms"]
-    return frozenset(internal["implementationDetail"]) | frozenset(internal["derivedAuthority"])
+    return frozenset(_policy()["internalTerms"]["implementationDetail"])
+
+
+def derived_authority() -> frozenset[str]:
+    """Authority the platform derives and never accepts from a client. Exact match."""
+    return frozenset(_policy()["internalTerms"]["derivedAuthority"])
 
 
 def structural_keys() -> frozenset[str]:
@@ -152,6 +163,101 @@ def disclosure_findings(document: Mapping[str, Any]) -> list[str]:
                     break
 
     return sorted(set(findings))
+
+
+def authority_findings(document: Mapping[str, Any], audience: str) -> list[str]:
+    """Every place in ``document`` a client could assert tenant, role or audience.
+
+    **A position rule, not a name rule.** The platform derives tenant, roles and audience and never
+    accepts them (constitution P-I, contracts §README rule 1), so what must not exist is a *channel*
+    — a parameter or a request-body field. A name rule would be satisfied by renaming the field
+    rather than by removing the channel, which is a rule that looks enforced and is not.
+
+    The narrowing exception is read from the policy file rather than written here: ``tenantId`` is a
+    staff-only query filter selecting *within* the set the caller may already see.
+
+    Args:
+        document: A generated OpenAPI document.
+        audience: The audience it describes, which decides whether the exception applies.
+
+    Returns:
+        Human-readable findings, empty when the document offers no such channel.
+    """
+    names = derived_authority()
+    positions = _policy()["authorityPositions"]
+    forbidden = frozenset(positions["forbiddenIn"])
+
+    def permitted(name: str, location: str) -> bool:
+        return any(
+            _normalise(exception["name"]) == _normalise(name)
+            and exception["in"] == location
+            and audience in exception["audiences"]
+            for exception in positions["exceptions"]
+        )
+
+    findings: list[str] = []
+    methods = frozenset({"get", "put", "post", "delete", "patch", "head", "options", "trace"})
+
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+
+        for method, operation in item.items():
+            if method.lower() not in methods or not isinstance(operation, dict):
+                continue
+
+            if "parameter" in forbidden:
+                for parameter in operation.get("parameters", []) or []:
+                    if not isinstance(parameter, dict):
+                        continue
+                    name = str(parameter.get("name", ""))
+                    where = str(parameter.get("in", ""))
+                    if _normalise(name) in names and not permitted(name, where):
+                        findings.append(
+                            f"client-suppliable authority: {where} parameter {name!r} on "
+                            f"{method.upper()} {path}"
+                        )
+
+            if "requestBody" in forbidden:
+                body = operation.get("requestBody")
+                if isinstance(body, dict):
+                    findings.extend(_authority_in_request(document, body, names))
+
+    return sorted(set(findings))
+
+
+def _authority_in_request(
+    document: Mapping[str, Any], body: Any, names: frozenset[str]
+) -> list[str]:
+    """Findings among the schemas one request body reaches, transitively.
+
+    Transitive because a body referencing a wrapper that references the offending schema is the same
+    channel one level down — exactly where a check looking only at the top level would stop.
+    """
+    schemas: Mapping[str, Any] = document.get("components", {}).get("schemas", {})
+    frontier = set(_references(body))
+    reached: set[str] = set()
+    findings: list[str] = []
+
+    while frontier:
+        schema_name = frontier.pop()
+        if schema_name in reached or schema_name not in schemas:
+            continue
+        reached.add(schema_name)
+        schema = schemas[schema_name]
+        frontier |= set(_references(schema)) - reached
+
+        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        if not isinstance(properties, dict):
+            continue
+
+        findings.extend(
+            f"client-suppliable authority: request field {field!r} on schema {schema_name!r}"
+            for field in properties
+            if _normalise(field) in names
+        )
+
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -245,3 +351,91 @@ def _references(node: Any) -> Iterable[str]:  # noqa: ANN401
     elif isinstance(node, list):
         for value in node:
             yield from _references(value)
+
+
+# ---------------------------------------------------------------------------
+# RFC 9457: the media type the error contract is published at
+# ---------------------------------------------------------------------------
+
+PROBLEM_SCHEMA_REF: Final = "#/components/schemas/ProblemDetails"
+PROBLEM_MEDIA_TYPE: Final = "application/problem+json"
+_DEFAULT_MEDIA_TYPE: Final = "application/json"
+
+
+def _is_problem(content_entry: Any) -> bool:  # noqa: ANN401
+    """Whether one ``content`` entry carries the problem-details schema."""
+    schema = content_entry.get("schema") if isinstance(content_entry, dict) else None
+    return isinstance(schema, dict) and schema.get("$ref") == PROBLEM_SCHEMA_REF
+
+
+def relabel_problem_media_type(document: dict[str, Any]) -> dict[str, Any]:
+    """Publish every problem response at ``application/problem+json``.
+
+    **Why a pass rather than a declaration.** FastAPI writes an operation's additional responses at
+    the media type of the *route's* response class, so the error responses of a route that succeeds
+    with JSON are documented as ``application/json``. RFC 9457 requires ``application/problem+json``
+    and that is what :mod:`ragcore.api.middleware.problems` actually sends, so a document saying
+    otherwise describes a response the service does not produce.
+
+    The alternative — giving every route a problem response class — would change the media type of
+    its *success* body too, which is wrong in a louder way.
+
+    This is a relabelling of a generated document, not a second description of it: the schema, the
+    statuses and the titles all come from the route declarations. It is applied by
+    :func:`install_contract_openapi` so the served document and the emitted artifact are the same
+    bytes.
+
+    Args:
+        document: The generated document. Mutated in place and returned.
+
+    Returns:
+        The same document.
+    """
+    for item in document.get("paths", {}).values():
+        if not isinstance(item, dict):
+            continue
+        for operation in item.values():
+            if not isinstance(operation, dict):
+                continue
+            for response in operation.get("responses", {}).values():
+                content = response.get("content") if isinstance(response, dict) else None
+                if not isinstance(content, dict):
+                    continue
+                entry = content.get(_DEFAULT_MEDIA_TYPE)
+                if _is_problem(entry) and PROBLEM_MEDIA_TYPE not in content:
+                    content[PROBLEM_MEDIA_TYPE] = content.pop(_DEFAULT_MEDIA_TYPE)
+
+    return document
+
+
+def install_contract_openapi(app: FastAPI) -> None:
+    """Make ``/openapi.json`` and the published artifact the same document.
+
+    The served document is what a developer reads and what APIM imports; the artifact is what CI
+    compares. Generating them by two paths is how they come to disagree, so there is one path and
+    this installs it.
+
+    Args:
+        app: The application to install onto.
+    """
+    generated: dict[str, Any] = {}
+
+    def contract_openapi() -> dict[str, Any]:
+        # FastAPI caches in `app.openapi_schema`; this cache exists for the same reason and is
+        # separate only because the attribute is FastAPI's to manage.
+        if not generated:
+            from fastapi.openapi.utils import get_openapi  # noqa: PLC0415 — deferred, heavy import
+
+            generated.update(
+                relabel_problem_media_type(
+                    get_openapi(
+                        title=app.title,
+                        version=app.version,
+                        description=app.description,
+                        routes=app.routes,
+                    )
+                )
+            )
+        return generated
+
+    app.openapi = contract_openapi  # type: ignore[method-assign]

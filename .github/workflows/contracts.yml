@@ -4,30 +4,59 @@ name: contracts
 # not a document maintained beside them. A route whose emitted shape stops matching its declared
 # contract fails the build rather than surfacing at a client.
 #
-# Both stacks emit, then ONE comparator checks everything. A second comparator would drift, and the
-# drift would be invisible until the weaker of the two was the one that mattered.
+# Both stacks emit, then ONE validator and ONE comparator check everything. A second implementation
+# of either would drift, and the drift would be invisible until the weaker of the two was the one
+# that mattered.
+#
+# WHAT THIS PIPELINE ASSERTS, in the order the steps run:
+#   1. The documents can be generated at all — from the running services, not from a template.
+#   2. Emission is DETERMINISTIC: the same source produces byte-identical artifacts.
+#   3. Each document is publishable: no secret or configuration material, no client-suppliable
+#      tenant/role/audience, and RFC 9457 error contracts throughout.
+#   4. No BREAKING difference against the committed contract, unless explicitly approved.
+#   5. The committed contracts are not stale.
+# Then, and only then, the versioned artifacts are published.
 on:
   push:
     branches: [main]
   pull_request:
     paths:
       - 'ragcore/src/ragcore/api/**'
+      - 'ragcore/scripts/emit_contracts.py'
       - 'dotnet/src/Synthia.Api/**'
       - 'dotnet/src/Synthia.Contracts/**'
+      - 'dotnet/tests/Synthia.ContractTests/**'
       - 'build/contracts/**'
+      - 'build/policy/openapi-disclosure.json'
       - 'build/scripts/openapi_diff.py'
+      - 'build/scripts/openapi_validate.py'
+      - 'build/scripts/verify-contract-guards.sh'
       - '.github/workflows/contracts.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  # Versioned by API version and commit. The API version is the one in the path, because that is
+  # the version a client is pinned to; the commit is what makes an artifact traceable to the source
+  # that produced it.
+  CONTRACT_VERSION: v1
+
 jobs:
   openapi:
-    name: emit, compare, publish
+    name: emit, validate, compare, publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # THE COMMITTED CONTRACTS, COPIED ASIDE BEFORE ANYTHING RUNS. The .NET emitter is a test, and
+      # it writes into build/contracts/dotnet — so by the time the comparison happens the "committed"
+      # tree in the working directory has already been overwritten by what was just generated.
+      # Comparing against it would compare a file with itself and pass unconditionally, which is the
+      # exact failure this whole pipeline exists to prevent, one level up.
+      - name: Copy the committed contracts aside
+        run: cp -r build/contracts "${{ runner.temp }}/committed"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -61,20 +90,61 @@ jobs:
           mkdir -p "${{ runner.temp }}/contracts/dotnet"
           cp build/contracts/dotnet/*.openapi.json "${{ runner.temp }}/contracts/dotnet/"
 
-      # THE GATE. Exit 1 on a breaking change, 2 when a document has no committed baseline —
-      # a new API must be published deliberately, not by whatever CI happened to generate.
+      # DETERMINISM IS A GATE, not a convention. Everything downstream compares bytes: a generator
+      # that reorders a map, stamps a timestamp or embeds the host it ran on makes every build show
+      # a diff, and a comparator whose output is mostly noise is one whose real findings nobody
+      # reads. Emitting twice and comparing is the only way to catch it — a single emission always
+      # looks deterministic.
+      - name: Emit again, and require byte-identical output
+        run: |
+          set -euo pipefail
+          cd ragcore
+          uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/again/ragcore"
+          cd ../dotnet
+          dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj \
+            --filter "FullyQualifiedName~OpenApiEmissionTests" --nologo
+          cd ..
+          mkdir -p "${{ runner.temp }}/again/dotnet"
+          cp build/contracts/dotnet/*.openapi.json "${{ runner.temp }}/again/dotnet/"
+          if ! diff -r "${{ runner.temp }}/contracts" "${{ runner.temp }}/again"; then
+            echo "::error::Emission is not deterministic: two runs over the same source produced"
+            echo "::error::different bytes. Every gate below compares bytes, so this makes them"
+            echo "::error::report changes nobody made and hide the ones somebody did."
+            exit 1
+          fi
+
+      # WHAT A PUBLISHED DOCUMENT MUST SATISFY, applied to the artifact rather than to the source.
+      # A rule applied to the code can be satisfied by code the generator does not publish.
+      - name: Validate the emitted documents
+        run: |
+          python3 build/scripts/openapi_validate.py \
+            --contracts "${{ runner.temp }}/contracts" \
+            --policy build/policy/openapi-disclosure.json \
+            --version "${CONTRACT_VERSION}"
+
+      # Proves the validator FAILS when it should. A check that has never been observed to fail is
+      # a check nobody knows the state of, and the failure mode of a contract gate is silence.
+      - name: Prove the contract guards catch a planted violation
+        run: bash build/scripts/verify-contract-guards.sh
+
+      # THE COMPATIBILITY GATE. Exit 1 on an unapproved breaking change, 2 when a document has no
+      # committed baseline — a new API must be published deliberately, not by whatever CI happened
+      # to generate. An approved breaking change is recorded in the register, verbatim and with an
+      # expiry; there is no flag and no environment variable that bypasses this.
       - name: Compare against the committed contracts
         run: |
-          python build/scripts/openapi_diff.py \
+          python3 build/scripts/openapi_diff.py \
             --baseline build/contracts \
-            --current "${{ runner.temp }}/contracts"
+            --current "${{ runner.temp }}/contracts" \
+            --approved build/contracts/approved-breaking-changes.json
 
       # A stale baseline is worse than none: the comparator would pass a breaking change because
       # the thing it compares against already contains it. This catches the case where somebody
       # changed a route and did not re-emit.
       - name: Fail if the committed contracts are stale
         run: |
-          if ! diff -r build/contracts "${{ runner.temp }}/contracts" > /tmp/contract.diff; then
+          if ! diff -r build/contracts "${{ runner.temp }}/contracts" \
+              --exclude 'approved-breaking-changes.json' > /tmp/contract.diff; then
             echo "::error::The committed contracts are stale. Re-emit and commit them."
             cat /tmp/contract.diff
             exit 1
@@ -85,6 +155,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: openapi-v1-${{ github.sha }}
+          name: openapi-${{ env.CONTRACT_VERSION }}-${{ github.sha }}
           path: ${{ runner.temp }}/contracts
           if-no-files-found: error

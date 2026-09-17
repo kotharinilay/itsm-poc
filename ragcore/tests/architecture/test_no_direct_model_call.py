@@ -221,7 +221,13 @@ class TestTheEgressSeamIsTheOnlyShape:
             }
         }
 
-        assert implementations == {GatewayModelAdapter.__name__, "ModelPort"}, (
+        # `SafeModel` is a DECORATOR, not a second egress. It satisfies `ModelPort`, holds another
+        # `ModelPort`, and reaches no provider: what it adds is the inbound and outbound content
+        # safety screening that `FR-AGENT-010` requires on both crossings. Screening implemented as
+        # "every caller remembers to call the checker" is screening that lasts until the next
+        # caller, so it is a wrapper — and the composition root binds the wrapper, never the inner
+        # adapter. `tests/unit/test_content_safety.py` asserts it delegates rather than calls out.
+        assert implementations == {GatewayModelAdapter.__name__, "ModelPort", "SafeModel"}, (
             f"something other than the gateway adapter implements model access: {implementations}"
         )
 

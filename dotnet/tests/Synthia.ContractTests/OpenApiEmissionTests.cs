@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Synthia.Api.Contracts;
 
 namespace Synthia.ContractTests;
 
@@ -40,7 +41,20 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
     }
 
     /// <summary>The audiences this deployable serves. Workload belongs to RagCore.</summary>
-    public static TheoryData<string> Audiences => new() { "customer", "staff" };
+    public static TheoryData<string> Audiences
+    {
+        get
+        {
+            TheoryData<string> data = [];
+
+            foreach (string audience in ContractOpenApi.Audiences)
+            {
+                data.Add(audience);
+            }
+
+            return data;
+        }
+    }
 
     /// <summary>The shared disclosure registry, applied by both stacks.</summary>
     private static JsonDocument DisclosurePolicy()
@@ -111,13 +125,76 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
     {
         JsonNode document = await DocumentAsync(audience);
 
-        string rendered = document.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-
         await File.WriteAllTextAsync(
-            Path.Combine(ContractDirectory().FullName, $"{audience}.v1.openapi.json"),
-            rendered + Environment.NewLine);
+            Path.Combine(
+                ContractDirectory().FullName,
+                $"{audience}.{ContractOpenApi.ContractVersion}.openapi.json"),
+            Canonical(document));
 
         Assert.NotNull(document["paths"]);
+    }
+
+    /// <summary>
+    /// Renders a document so that an unchanged API produces byte-identical output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Two properties, and both are load-bearing.</b> Object keys are sorted, because the
+    /// generator's enumeration order is not part of the contract and a document that reorders on
+    /// every build buries every real change in noise nobody reads. And the line ending is a bare
+    /// line feed rather than <see cref="Environment.NewLine"/>: emitting on Windows and verifying
+    /// on Linux otherwise produces a byte difference on every line of a document that did not
+    /// change, which fails the stale-contract gate for a reason that has nothing to do with the API.
+    /// </para>
+    /// <para>
+    /// Matches <c>ragcore/scripts/emit_contracts.py</c>, which sorts keys and ends with a newline
+    /// for the same reasons. One comparator reads both stacks' output, so both must be canonical
+    /// the same way.
+    /// </para>
+    /// </remarks>
+    /// <param name="document">The generated document.</param>
+    /// <returns>The canonical rendering, newline-terminated.</returns>
+    private static string Canonical(JsonNode document)
+    {
+        const string LineFeed = "\n";
+
+        string rendered = Sorted(document)
+            .ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+            .ReplaceLineEndings(LineFeed);
+
+        return rendered + LineFeed;
+    }
+
+    private static JsonNode Sorted(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject map:
+                JsonObject ordered = [];
+
+                foreach (KeyValuePair<string, JsonNode?> entry in
+                    map.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+                {
+                    ordered[entry.Key] = Sorted(entry.Value);
+                }
+
+                return ordered;
+
+            case JsonArray array:
+                // Arrays are NOT sorted: order is meaningful in `required`, `enum` and `parameters`,
+                // and reordering them would change the document rather than normalise it.
+                JsonArray copied = [];
+
+                foreach (JsonNode? item in array)
+                {
+                    copied.Add(Sorted(item));
+                }
+
+                return copied;
+
+            default:
+                return node?.DeepClone() ?? JsonValue.Create((string?)null)!;
+        }
     }
 
     /// <summary>
@@ -137,7 +214,10 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
 
         foreach (KeyValuePair<string, JsonNode?> entry in paths)
         {
-            Assert.StartsWith($"/api/{audience}/v1", entry.Key, StringComparison.Ordinal);
+            Assert.StartsWith(
+                $"/api/{audience}/{ContractOpenApi.ContractVersion}",
+                entry.Key,
+                StringComparison.Ordinal);
         }
     }
 
@@ -152,10 +232,12 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
     /// defect whatever it happens to hold today.
     /// </para>
     /// <para>
-    /// <c>tenantId</c>, <c>roles</c> and <c>audience</c> are in the internal list for a specific
-    /// reason: <b>no endpoint accepts a tenant, role or audience parameter</b> (contracts §README
-    /// rule 1). Publishing one would advertise exactly the thing the platform refuses, and a client
-    /// that sent it would get a silent no-op rather than an error.
+    /// <b>Derived authority is checked separately and positionally</b>, by
+    /// <see cref="No_operation_offers_a_client_a_way_to_assert_authority"/>. It is deliberately not
+    /// matched here: <c>tenantId</c> in a response is the organisation a row belongs to, reported to
+    /// a caller already entitled to the row, and forbidding the name outright would force an audit
+    /// read model to hide the organisation a record concerns — the field a staff reviewer opens it
+    /// for.
     /// </para>
     /// </remarks>
     [Theory]
@@ -170,15 +252,9 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
         string[] secretTerms = [.. policy.RootElement.GetProperty("secretTerms")
             .GetProperty("terms").EnumerateArray().Select(term => term.GetString()!)];
 
-        JsonElement internals = policy.RootElement.GetProperty("internalTerms");
-
-        string[] internalTerms =
-        [
-            .. internals.GetProperty("implementationDetail").EnumerateArray()
-                .Select(term => term.GetString()!),
-            .. internals.GetProperty("derivedAuthority").EnumerateArray()
-                .Select(term => term.GetString()!),
-        ];
+        string[] internalTerms = [.. policy.RootElement.GetProperty("internalTerms")
+            .GetProperty("implementationDetail").EnumerateArray()
+                .Select(term => term.GetString()!)];
 
         string[] structural = [.. policy.RootElement.GetProperty("structuralKeys")
             .GetProperty("keys").EnumerateArray().Select(key => key.GetString()!)];
@@ -192,6 +268,120 @@ public sealed class OpenApiEmissionTests : IClassFixture<WebApplicationFixture>
             findings.Count == 0,
             $"The {audience} document publishes what it must not:" + Environment.NewLine +
             string.Join(Environment.NewLine, findings));
+    }
+
+    /// <summary>
+    /// No operation publishes a way for a client to assert tenant, role or audience.
+    /// </summary>
+    /// <param name="audience">The audience being checked.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>A position rule, not a name rule.</b> The platform derives tenant, roles and audience and
+    /// never accepts them (constitution P-I, contracts §README rule 1), so what must not exist is a
+    /// <i>channel</i> — a parameter or a request-body field. A name rule would be satisfied by
+    /// renaming the field rather than by removing the channel.
+    /// </para>
+    /// <para>
+    /// The one exception is read from the policy file rather than written here: <c>tenantId</c> is a
+    /// staff-only <b>query</b> narrowing that selects within the set the caller may already see. It
+    /// reaches the query as one more <c>WHERE</c> clause underneath the global scope filter, so a
+    /// caller naming an organisation outside their scope receives no rows rather than that
+    /// organisation's rows.
+    /// </para>
+    /// <para>
+    /// This deployable is read-only (ADR-0001) so no route has a request body, and the request-body
+    /// half of the rule is enforced by <c>build/scripts/openapi_validate.py</c> across both stacks'
+    /// emitted artifacts. It is asserted here anyway: the day a body appears, this is what refuses
+    /// it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Audiences))]
+    public async Task No_operation_offers_a_client_a_way_to_assert_authority(string audience)
+    {
+        using JsonDocument policy = DisclosurePolicy();
+
+        string[] authority = [.. policy.RootElement.GetProperty("internalTerms")
+            .GetProperty("derivedAuthority").EnumerateArray().Select(term => term.GetString()!)];
+
+        JsonElement exceptions = policy.RootElement
+            .GetProperty("authorityPositions").GetProperty("exceptions");
+
+        JsonNode document = await DocumentAsync(audience);
+        List<string> findings = [];
+
+        foreach (KeyValuePair<string, JsonNode?> path in document["paths"]!.AsObject())
+        {
+            foreach (KeyValuePair<string, JsonNode?> operation in path.Value!.AsObject())
+            {
+                if (operation.Value?["parameters"] is not JsonArray parameters)
+                {
+                    continue;
+                }
+
+                foreach (JsonNode? parameter in parameters)
+                {
+                    string name = parameter?["name"]?.GetValue<string>() ?? string.Empty;
+                    string location = parameter?["in"]?.GetValue<string>() ?? string.Empty;
+
+                    if (!Array.Exists(authority, term =>
+                            string.Equals(term, Normalise(name), StringComparison.Ordinal)))
+                    {
+                        continue;
+                    }
+
+                    if (Permitted(exceptions, name, location, audience))
+                    {
+                        continue;
+                    }
+
+                    findings.Add(
+                        $"client-suppliable authority: {location} parameter '{name}' on " +
+                        $"{operation.Key.ToUpperInvariant()} {path.Key}");
+                }
+
+                if (operation.Value?["requestBody"] is not null)
+                {
+                    findings.Add(
+                        $"{operation.Key.ToUpperInvariant()} {path.Key} declares a request body. " +
+                        "This deployable is read-only (ADR-0001); a body here is a write endpoint " +
+                        "that has not been recognised as one.");
+                }
+            }
+        }
+
+        Assert.True(
+            findings.Count == 0,
+            $"The {audience} document publishes an authority channel:" + Environment.NewLine +
+            string.Join(Environment.NewLine, findings));
+    }
+
+    private static bool Permitted(
+        JsonElement exceptions,
+        string name,
+        string location,
+        string audience)
+    {
+        foreach (JsonElement exception in exceptions.EnumerateArray())
+        {
+            bool matches =
+                string.Equals(
+                    Normalise(exception.GetProperty("name").GetString()!),
+                    Normalise(name),
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    exception.GetProperty("in").GetString(), location, StringComparison.Ordinal) &&
+                exception.GetProperty("audiences").EnumerateArray()
+                    .Any(allowed => string.Equals(
+                        allowed.GetString(), audience, StringComparison.Ordinal));
+
+            if (matches)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void Walk(

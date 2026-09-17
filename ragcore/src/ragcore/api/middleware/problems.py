@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Final
+from typing import Any, Final
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.types import Message
 
+from ragcore.api.schemas import ProblemDetails
 from ragcore.domain.errors import (
     AuthorizationError,
     AuthorizationExpiredError,
@@ -210,3 +211,80 @@ def install_problem_handlers(app: FastAPI) -> None:
             "The request could not be completed. Quote the correlation identifier when reporting.",
             "internal-error",
         )
+
+
+# ---------------------------------------------------------------------------
+# The same contract, declared rather than only returned
+# ---------------------------------------------------------------------------
+
+
+class ProblemJSONResponse(JSONResponse):
+    """A response whose media type is the one RFC 9457 requires.
+
+    Used as a route's ``response_class`` where the route's *success* status is itself a problem —
+    the 501 placeholders. Without it the generator would document those bodies as
+    ``application/json``, and a client branching on the media type would never see them.
+    """
+
+    media_type = PROBLEM_MEDIA_TYPE
+
+
+_TITLES: Final[dict[int, str]] = {
+    400: "Invalid request",
+    401: "Unauthenticated",
+    403: "Not authorized",
+    404: "Not found",
+    409: "Already claimed",
+    410: "Authorization expired",
+    422: "Invalid request",
+    500: "Internal error",
+    501: "Not implemented",
+}
+"""The stable ``title`` for each status this platform publishes. One title per type URI."""
+
+UNIVERSAL_PROBLEM_STATUSES: Final[tuple[int, ...]] = (401, 403, 404, 422, 500)
+"""Declared on every operation, because every operation can produce each of them.
+
+401 and 403 come from the identity middleware before routing; 404 is how a resource belonging to
+another organisation is reported; 422 is a body that did not match; 500 is the catch-all handler.
+"""
+
+
+def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI ``responses`` entries declaring the error contract for each status.
+
+    Args:
+        statuses: The statuses to declare. Unrecognised ones are rejected rather than published
+            with an invented title — a title is part of the contract a client branches on.
+
+    Returns:
+        A mapping ready to pass as ``responses=`` to an ``APIRouter`` or a route decorator.
+
+    Raises:
+        ValueError: When a status has no declared title.
+    """
+    unknown = sorted(status for status in statuses if status not in _TITLES)
+    if unknown:
+        raise ValueError(f"no declared problem title for {unknown}")
+
+    return {
+        status: {"model": ProblemDetails, "description": _TITLES[status]} for status in statuses
+    }
+
+
+def not_implemented(request: Request) -> ProblemDetails:
+    """The 501 body a wired-but-inert route returns.
+
+    A scaffold route returns a problem document rather than ``{"detail": ...}`` for the same reason
+    it returns 501 rather than 200: the client parses one error contract, and an endpoint that
+    invents a second shape for "nothing runs here yet" is a client branch that survives the
+    scaffold.
+    """
+    return ProblemDetails(
+        type=f"{PROBLEM_BASE}/not-implemented",
+        title=_TITLES[501],
+        status=501,
+        detail=("No product behaviour exists at this stage. The boundary is wired; nothing runs."),
+        instance=request.url.path,
+        correlation_id=_correlation_id(request),
+    )

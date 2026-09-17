@@ -3,6 +3,8 @@ using Synthia.Modules.Approvals;
 using Synthia.Modules.Audit;
 using Synthia.Modules.Sessions;
 using Synthia.Modules.Tenancy;
+using Synthia.SharedKernel.Identity;
+using Synthia.SharedKernel.Sessions;
 
 namespace Synthia.Api.Querying;
 
@@ -29,16 +31,35 @@ namespace Synthia.Api.Querying;
 /// </remarks>
 internal static class ResourceQueries
 {
+    /// <summary>
+    /// <c>tenantId</c> as a <b>staff-only narrowing</b>, and the single place it is declared.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It selects within the set the caller may already see; it is not a tenant parameter and does
+    /// not establish authority (contracts §README rule 1). The value reaches the query as one more
+    /// <c>WHERE</c> clause underneath the global scope filter, so a caller naming an organisation
+    /// outside their scope receives no rows rather than that organisation's rows.
+    /// </para>
+    /// <para>
+    /// One shared declaration rather than four, because this is the one query field that looks like
+    /// authority. <c>build/scripts/openapi_validate.py</c> permits it on the staff documents and on
+    /// no other, and fails the build if it appears as anything but a query parameter.
+    /// </para>
+    /// </remarks>
+    private static FilterField TenantNarrowing { get; } =
+        new("tenantId", FilterKind.Identifier);
+
     /// <summary><c>GET /api/customer/v1/views/sessions</c>.</summary>
     public static QueryWhitelist CustomerSessions { get; } = new(
         sortable: ["createdAt", "updatedAt", "state"],
-        filterable: ["state"],
+        filterable: [FilterField.Over<SessionState>("state")],
         defaultSort: new SortSpec(SessionSortKeys.Default, SortDirection.Descending));
 
     /// <summary><c>GET /api/customer/v1/views/sessions/{id}/messages</c>.</summary>
     public static QueryWhitelist CustomerSessionMessages { get; } = new(
         sortable: ["createdAt"],
-        filterable: ["senderKind"],
+        filterable: [FilterField.Over<SenderKind>("senderKind")],
         defaultSort: new SortSpec("createdAt", SortDirection.Descending));
 
     /// <summary>
@@ -54,33 +75,51 @@ internal static class ResourceQueries
         filterable: [],
         defaultSort: new SortSpec("createdAt", SortDirection.Ascending));
 
+    /// <summary><c>GET /api/customer/v1/views/sessions/{sessionId}/feedback</c>.</summary>
+    /// <remarks>
+    /// Nothing filterable. A filter on <c>signal</c> would let a caller ask which of their messages
+    /// they rated down, which is a question the read path has no reason to answer — and the set is
+    /// one session's worth of rows, so there is nothing to page through either.
+    /// </remarks>
+    public static QueryWhitelist CustomerSessionFeedback { get; } = new(
+        sortable: ["updatedAt"],
+        filterable: [],
+        defaultSort: new SortSpec("updatedAt", SortDirection.Ascending));
+
     /// <summary><c>GET /api/staff/v1/views/sessions/live</c>.</summary>
     public static QueryWhitelist StaffLiveSessions { get; } = new(
         sortable: ["createdAt", "updatedAt", "state"],
-        filterable: ["state", "tenantId"],
+        filterable: [FilterField.Over<SessionState>("state"), TenantNarrowing],
         defaultSort: new SortSpec(SessionSortKeys.Default, SortDirection.Descending));
 
     /// <summary><c>GET /api/staff/v1/views/approvals/queue</c>.</summary>
     public static QueryWhitelist StaffApprovalQueue { get; } = new(
         sortable: ["createdAt", "expiresAt"],
-        filterable: ["tenantId"],
+        filterable: [TenantNarrowing],
         defaultSort: new SortSpec(ApprovalSortKeys.QueueDefault, SortDirection.Descending));
 
     /// <summary><c>GET /api/staff/v1/views/approvals/unexecuted</c>.</summary>
     public static QueryWhitelist StaffUnexecutedApprovals { get; } = new(
         sortable: ["decidedAt", "expiresAt"],
-        filterable: ["tenantId"],
+        filterable: [TenantNarrowing],
         defaultSort: new SortSpec(ApprovalSortKeys.UnexecutedDefault, SortDirection.Descending));
 
     /// <summary><c>GET /api/staff/v1/views/audit</c>.</summary>
     public static QueryWhitelist StaffAudit { get; } = new(
         sortable: ["occurredAt"],
-        filterable: ["tenantId", "workItemId", "eventKind", "occurredFrom", "occurredTo"],
+        filterable:
+        [
+            TenantNarrowing,
+            new FilterField("workItemId", FilterKind.Identifier),
+            new FilterField("eventKind", FilterKind.Text),
+            new FilterField("occurredFrom", FilterKind.Timestamp),
+            new FilterField("occurredTo", FilterKind.Timestamp),
+        ],
         defaultSort: new SortSpec(AuditSortKeys.Default, SortDirection.Descending));
 
     /// <summary><c>GET /api/staff/v1/views/tenants</c>.</summary>
     public static QueryWhitelist StaffTenants { get; } = new(
         sortable: ["displayName", "status"],
-        filterable: ["status"],
+        filterable: [FilterField.Over<TenantStatus>("status")],
         defaultSort: new SortSpec(TenantSortKeys.Default, SortDirection.Ascending));
 }

@@ -25,6 +25,12 @@ public static class SessionsModuleRegistration
         services.AddScoped<ICustomerSessionReadModel>(provider => provider.GetRequiredService<SessionReadModel>());
         services.AddScoped<IStaffSessionReadModel>(provider => provider.GetRequiredService<SessionReadModel>());
 
+        // Feedback reads separately, because the two halves have different retention. Current
+        // signals follow the session's content retention; the aggregate figures are retained
+        // independently of them (spec FR-SESS-012), and a single read model over both would make
+        // that distinction easy to lose in a refactor.
+        services.AddScoped<IFeedbackReadModel, FeedbackReadModel>();
+
         return services;
     }
 }

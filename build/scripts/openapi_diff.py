@@ -23,7 +23,12 @@ still work against the new one?" So:
 it; adding one it may *receive* can break a strict client but is the accepted cost of evolution, and
 is reported as a warning rather than a failure.
 
-Exit codes: ``0`` clean or additive only, ``1`` breaking change, ``2`` a baseline is missing.
+**A breaking change can be approved, and approval is a record rather than a flag.** See
+:class:`Approvals` and ``build/contracts/approved-breaking-changes.json``. Nothing here can be
+bypassed by an environment variable or a commit message: the decision lives in a reviewed file.
+
+Exit codes: ``0`` clean, additive only, or breaking-and-approved; ``1`` an unapproved breaking
+change; ``2`` a baseline is missing.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -264,11 +270,85 @@ def _enum_of(schema: Any) -> set[str]:  # noqa: ANN401
     return {str(value) for value in values} if isinstance(values, list) else set()
 
 
+class Approvals:
+    """The register of breaking changes somebody has explicitly accepted.
+
+    **A breaking change is a decision, not a build failure to be silenced.** The gate exists so the
+    decision is made by a person and recorded where the next person can read it, so an approval is
+    only honoured when it names the document, quotes the finding verbatim, says who accepted it, why,
+    and what a client already built against the old contract is expected to do.
+
+    **Verbatim rather than a pattern**, because a pattern approves the change nobody has looked at
+    yet — the second removal under the same path, the one that was not in the pull request the
+    reviewer read.
+
+    **And it expires.** An approval that outlived the change it covered is a waiver sitting in the
+    repository waiting to cover an identical future change silently. Past its date it stops applying
+    and is reported as something to delete.
+    """
+
+    def __init__(self, entries: list[dict[str, Any]], today: str) -> None:
+        self._entries = entries
+        self._today = today
+        self._used: set[int] = set()
+
+    @classmethod
+    def load(cls, path: Path | None, today: str) -> Approvals:
+        """Read the register, or an empty one when no path is given."""
+        if path is None or not path.is_file():
+            return cls([], today)
+
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        entries = loaded.get("approvals", [])
+
+        return cls(entries if isinstance(entries, list) else [], today)
+
+    def covers(self, document: str, finding: str) -> dict[str, Any] | None:
+        """The approval covering this finding, if one is current.
+
+        Args:
+            document: The artifact path, as the comparator prints it.
+            finding: The finding text, verbatim.
+
+        Returns:
+            The approval, or ``None``.
+        """
+        for index, entry in enumerate(self._entries):
+            if (
+                entry.get("document") == document
+                and entry.get("finding") == finding
+                and str(entry.get("expiresOn", "")) >= self._today
+            ):
+                self._used.add(index)
+                return entry
+
+        return None
+
+    def unused(self) -> list[str]:
+        """Approvals that covered nothing in this run, and should be deleted."""
+        return [
+            f"{entry.get('document', '?')}: {entry.get('finding', '?')}"
+            for index, entry in enumerate(self._entries)
+            if index not in self._used
+        ]
+
+
 def main(argv: list[str] | None = None) -> int:
     """Compare every generated document against its baseline."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", required=True, type=Path, help="committed contracts")
     parser.add_argument("--current", required=True, type=Path, help="freshly generated contracts")
+    parser.add_argument(
+        "--approved",
+        type=Path,
+        default=None,
+        help="register of explicitly approved breaking changes",
+    )
+    parser.add_argument(
+        "--today",
+        default=date.today().isoformat(),
+        help="the date approvals are checked against; for tests",
+    )
     arguments = parser.parse_args(argv)
 
     generated = sorted(arguments.current.rglob("*.openapi.json"))
@@ -276,6 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no generated documents under {arguments.current}", file=sys.stderr)
         return MISSING_BASELINE
 
+    approvals = Approvals.load(arguments.approved, arguments.today)
     status = 0
 
     for document_path in generated:
@@ -297,13 +378,42 @@ def main(argv: list[str] | None = None) -> int:
         for finding in additive:
             print(f"::notice::{relative}: {finding}")
 
-        for finding in breaking:
-            print(f"::error::{relative}: BREAKING {finding}")
+        # Forward slashes whatever the platform, so an approval written on one machine matches on
+        # another. A waiver that silently stops applying because CI runs on Linux is a waiver that
+        # turns an approved change back into a red build nobody can explain.
+        document_key = relative.as_posix()
+        unapproved: list[str] = []
 
-        if breaking:
+        for finding in breaking:
+            approval = approvals.covers(document_key, finding)
+
+            if approval is None:
+                unapproved.append(finding)
+                print(f"::error::{relative}: BREAKING {finding}")
+            else:
+                print(
+                    f"::notice::{relative}: BREAKING (approved by "
+                    f"{approval.get('approvedBy', 'unknown')}, expires "
+                    f"{approval.get('expiresOn', 'unknown')}) {finding}"
+                )
+
+        if unapproved:
+            print(
+                f"::error::{relative}: {len(unapproved)} breaking change(s) are not approved. "
+                f"A client built against the published contract stops working. Either avoid the "
+                f"change, publish a new API version, or record the decision in the approvals "
+                f"register quoting each finding verbatim."
+            )
             status = BREAKING
-        elif not additive:
+        elif not breaking and not additive:
             print(f"{relative}: unchanged")
+
+    for stale in approvals.unused():
+        # A notice rather than a failure: the approval stops applying the moment the baseline is
+        # updated, so failing here would turn every merge of an approved change into a red build.
+        # It is still reported, because a waiver nobody deletes is one waiting to cover the next
+        # identical change without anybody looking.
+        print(f"::notice::stale approval, delete it — {stale}")
 
     return status
 

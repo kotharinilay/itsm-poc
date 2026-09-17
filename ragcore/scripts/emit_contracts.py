@@ -78,10 +78,12 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         target = arguments.out / f"{audience}.{CONTRACT_VERSION}.openapi.json"
-        target.write_text(
-            json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        # `newline=""` writes the bare line feeds this string already contains. Python's default
+        # translates them to the platform's ending, which on Windows produces an artifact that
+        # differs from the Linux one on every line while describing the identical API — and every
+        # gate downstream compares bytes. The .NET emitter normalises for the same reason.
+        with target.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
         operations = sum(len(item) for item in document.get("paths", {}).values())
         print(f"{target}: {len(document.get('paths', {}))} paths, {operations} operations")
 

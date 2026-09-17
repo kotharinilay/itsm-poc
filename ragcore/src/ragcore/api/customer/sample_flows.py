@@ -27,12 +27,34 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Request, status
 
 from ragcore.api.deps import ContainerDep, CorrelationDep, PrincipalDep, TenantDep
-from ragcore.api.schemas import ApiModel
+from ragcore.api.middleware.problems import (
+    UNIVERSAL_PROBLEM_STATUSES,
+    ProblemJSONResponse,
+    not_implemented,
+    problem_responses,
+)
+from ragcore.api.schemas import ApiModel, ProblemDetails
 
-router = APIRouter(prefix="/api/customer/v1", tags=["customer"])
+# EVERY OPERATION DECLARES THE ERROR CONTRACT IT CAN RETURN. Without this the generator publishes
+# FastAPI's own `HTTPValidationError` for 422 and nothing at all for the rest, so the document
+# describes an error body this service never sends.
+router = APIRouter(
+    prefix="/api/customer/v1",
+    tags=["customer"],
+    responses=problem_responses(*UNIVERSAL_PROBLEM_STATUSES),
+)
+
+# The signature every wired-but-inert route carries: the response IS a problem, so it is
+# declared as one, at the media type RFC 9457 requires rather than plain `application/json`.
+NOT_IMPLEMENTED_ROUTE = {
+    "status_code": status.HTTP_501_NOT_IMPLEMENTED,
+    "response_model": ProblemDetails,
+    "response_class": ProblemJSONResponse,
+    "responses": problem_responses(501),
+}
 
 WorkItemIdPath = Annotated[UUID, Path(alias="workItemId", description="The durable work record.")]
 
@@ -75,16 +97,14 @@ class ServiceHopResult(ApiModel):
     correlation_id: str
 
 
-@router.post(
-    "/sample-flows/round-trip",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+@router.post("/sample-flows/round-trip", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def begin_round_trip(
+    request: Request,
     container: ContainerDep,
     tenant: TenantDep,
     principal: PrincipalDep,
     correlation_id: CorrelationDep,
-) -> dict[str, str]:
+) -> ProblemDetails:
     """Open the durable record and enqueue its trigger **in one transaction**.
 
     The two writes share a unit of work, which is the property this endpoint exists to prove: a
@@ -95,47 +115,37 @@ async def begin_round_trip(
     :func:`~ragcore.messaging.outbox.enqueue_trigger`, the dispatcher, the consumer — is implemented
     and tested at Stage 8; the durable record this trigger points at is opened by the session and
     work-item write that belongs with the customer surface. Wiring this to create work items now
-    would be inventing product behaviour the scaffold is specifically not allowed to have.
+    would be inventing product behaviour the scaffold is specifically not allowed to have. Wired
+    by T241 in ``specs/001-platform-scaffold/tasks.md``, which also declares the eventual response
+    as :class:`SampleFlowAccepted`.
     """
     del container, tenant, principal, correlation_id
-    return {
-        "detail": (
-            "The Stage 8 messaging seam is implemented and tested; this endpoint is wired when the "
-            "customer surface opens durable work. See specs/001-platform-scaffold/tasks.md T241."
-        )
-    }
+    return not_implemented(request)
 
 
-@router.get(
-    "/sample-flows/round-trip/{workItemId}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+@router.get("/sample-flows/round-trip/{workItemId}", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def read_round_trip(
+    request: Request,
     work_item_id: WorkItemIdPath,
     tenant: TenantDep,
-) -> dict[str, str]:
+) -> ProblemDetails:
     """Read the outcome back — **the recovery path for a missed notification**.
 
     A client that never connected to the realtime channel, or that missed the push, reaches the
     same answer here. That is what keeps the notification a leaf rather than a link.
+
+    Wired by T242, which also declares the eventual response as :class:`SampleFlowState`.
     """
     del work_item_id, tenant
-    return {
-        "detail": (
-            "Returns the outcome the workload leg persisted, once the durable record is opened. "
-            "See specs/001-platform-scaffold/tasks.md T242."
-        )
-    }
+    return not_implemented(request)
 
 
-@router.post(
-    "/sample-flows/service-hop",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+@router.post("/sample-flows/service-hop", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def service_hop(
+    request: Request,
     tenant: TenantDep,
     correlation_id: CorrelationDep,
-) -> dict[str, str]:
+) -> ProblemDetails:
     """Reach the workload audience **through the gateway**, and report what it saw.
 
     **There is no private peer route, and this endpoint must never acquire one.** The call leaves
@@ -146,12 +156,8 @@ async def service_hop(
 
     Requires the deployed edge, which is why it reports rather than executes here: driving it
     against a locally hosted process would demonstrate the opposite of the property.
+
+    Wired by T246 and T247, which also declare the eventual response as :class:`ServiceHopResult`.
     """
     del tenant, correlation_id
-    return {
-        "detail": (
-            "Routes Customer -> Workload through Front Door and APIM; the callee reports the "
-            "audience and credential class it observed. Requires the deployed edge. See "
-            "specs/001-platform-scaffold/tasks.md T246 and T247."
-        )
-    }
+    return not_implemented(request)

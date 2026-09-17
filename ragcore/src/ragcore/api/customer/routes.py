@@ -1,4 +1,4 @@
-"""Customer audience — conversation, streaming, consent, instruction, result, feedback.
+"""Customer audience — consent, instruction and result. **The routes that stay inert.**
 
 **Every caller here is an ``end_user``, including a Synoptek staff member** (spec FR-SURF-008).
 Staff roles are not consulted on this audience and confer nothing, and that is enforced by
@@ -9,62 +9,59 @@ Staff roles are not consulted on this audience and confer nothing, and that is e
 context through ``Depends``, hands off, and shapes a response. The decisions live in
 :mod:`ragcore.governance.gate` and the application layer.
 
-Stage 6 wires the surface; the handlers have no product behaviour. Every route that would record
-something returns 501 rather than a plausible success, because a scaffold that appears to record
-a consent is worse than one that says it cannot.
+**What moved out of this module, and why.** Conversation and streaming now live in
+:mod:`ragcore.api.customer.sessions`, clarification answers in
+:mod:`ragcore.api.customer.answers`, and feedback in :mod:`ragcore.api.customer.feedback` — each
+because it acquired real behaviour in Stage 12 and a module of live routes beside inert ones makes
+it impossible to tell at a glance which is which.
+
+**What remains here is inert, and deliberately so.** Consent, instruction fetch and result posting
+each return 501 rather than a plausible success. Approval and consent workflows are **withdrawn
+from the scaffold** (plan §Stage 12 non-goals, `FR-DEMO-016`), and desktop execution is deferred
+pending ADR-0004's open items — script signing and the destructive taxonomy. A scaffold that
+appears to record a consent is worse than one that says it cannot.
 """
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, Path, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Path, Request, status
 
-from ragcore.api.customer import streaming
-from ragcore.api.deps import CorrelationDep, PrincipalDep
-from ragcore.api.schemas import ApiModel
+from ragcore.api.deps import PrincipalDep
+from ragcore.api.middleware.problems import (
+    UNIVERSAL_PROBLEM_STATUSES,
+    ProblemJSONResponse,
+    not_implemented,
+    problem_responses,
+)
+from ragcore.api.schemas import ApiModel, ProblemDetails
 from ragcore.domain.work import ConsentVerdict
 
-router = APIRouter(prefix="/api/customer/v1", tags=["customer"])
+# EVERY OPERATION DECLARES THE ERROR CONTRACT IT CAN RETURN. Without this the generator publishes
+# FastAPI's own `HTTPValidationError` for 422 and nothing at all for the rest, so the document
+# describes an error body this service never sends — and a client written against it parses the
+# wrong shape on the one path it cannot test against a happy case.
+router = APIRouter(
+    prefix="/api/customer/v1",
+    tags=["customer"],
+    responses=problem_responses(*UNIVERSAL_PROBLEM_STATUSES),
+)
+
+# The signature every wired-but-inert route carries: the response IS a problem, so it is declared
+# as one, at the media type RFC 9457 requires rather than plain `application/json`.
+NOT_IMPLEMENTED_ROUTE = {
+    "status_code": status.HTTP_501_NOT_IMPLEMENTED,
+    "response_model": ProblemDetails,
+    "response_class": ProblemJSONResponse,
+    "responses": problem_responses(501),
+}
 
 # Path parameters are declared with camelCase aliases so the generated OpenAPI document matches
 # contracts/ exactly. The wire contract is frozen and shared with the .NET side; a Python-side
 # snake_case placeholder would make the two documents disagree over a purely cosmetic difference.
-SessionIdPath = Annotated[UUID, Path(alias="sessionId", description="The chat session.")]
 WorkItemIdPath = Annotated[UUID, Path(alias="workItemId", description="The durable work record.")]
-MessageIdPath = Annotated[UUID, Path(alias="messageId", description="An agent-authored message.")]
-
-NOT_IMPLEMENTED = "No product behaviour exists at this stage. The boundary is wired; nothing runs."
-
-
-class StartSessionResponse(ApiModel):
-    """The identifier of a newly started session."""
-
-    session_id: UUID
-
-
-class SendMessageRequest(ApiModel):
-    """One turn of conversation.
-
-    **Chat text cannot grant authority.** An affirmative message is never consent — only
-    ``POST /work/{id}/consent`` records that — so there is no ``confirm`` field here for a client
-    to set, and nothing downstream reads ``content`` to decide anything.
-    """
-
-    content: str
-
-
-class AnswerRequest(ApiModel):
-    """An answer to a pending clarifying question.
-
-    Answerable only by the end user of the session (spec FR-INTR-004). Who that is comes from
-    trusted identity, so it is not a field here.
-    """
-
-    content: str
 
 
 class ConsentRequest(ApiModel):
@@ -75,23 +72,6 @@ class ConsentRequest(ApiModel):
     """
 
     verdict: ConsentVerdict
-
-
-class FeedbackSignal(Enum):
-    """A thumbs signal."""
-
-    POSITIVE = "positive"
-    NEGATIVE = "negative"
-
-
-class FeedbackRequest(ApiModel):
-    """A quality signal against one agent-authored message.
-
-    **Feedback never influences authorization, governance treatment, retrieval scope or
-    execution** (spec FR-SESS-013). It is read by reporting and by nothing else.
-    """
-
-    signal: FeedbackSignal
 
 
 class ExecutionResultRequest(ApiModel):
@@ -106,47 +86,10 @@ class ExecutionResultRequest(ApiModel):
     detail: str = ""
 
 
-@router.post("/sessions", status_code=status.HTTP_201_CREATED)
-async def start_session(principal: PrincipalDep) -> StartSessionResponse:
-    """Start a chat session.
-
-    A session is started here; a **work record is not**. One is committed only once the user has
-    articulated a genuine request (spec FR-SESS-003), which is a later transition — creating one
-    per session would put an authority record behind every "hello".
-    """
-    del principal
-    return StartSessionResponse(session_id=uuid4())
-
-
-@router.post("/sessions/{sessionId}/messages")
-async def send_message(
-    session_id: SessionIdPath, principal: PrincipalDep, correlation_id: CorrelationDep
-) -> StreamingResponse:
-    """Send a message. **Streams the response** as ``text/event-stream``.
-
-    The stream carries no authority. See :mod:`ragcore.api.customer.streaming`.
-    """
-    del principal
-    return StreamingResponse(
-        streaming.empty_stream(str(session_id)),
-        media_type=streaming.SSE_MEDIA_TYPE,
-        headers={**streaming.SSE_HEADERS, "X-Correlation-Id": str(correlation_id)},
-    )
-
-
-@router.post("/sessions/{sessionId}/answers", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def answer_clarification(
-    session_id: SessionIdPath, body: AnswerRequest, principal: PrincipalDep
-) -> dict[str, str]:
-    """Answer a pending clarifying question."""
-    del session_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
-
-
-@router.post("/work/{workItemId}/consent", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post("/work/{workItemId}/consent", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def record_consent(
-    work_item_id: WorkItemIdPath, body: ConsentRequest, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request, work_item_id: WorkItemIdPath, body: ConsentRequest, principal: PrincipalDep
+) -> ProblemDetails:
     """Grant or refuse consent.
 
     Only the work item's own ``requested_by_oid`` may consent; anyone else receives 403
@@ -158,13 +101,13 @@ async def record_consent(
     :class:`~ragcore.domain.decisions.StaffVerdict` on that branch and nothing else.
     """
     del work_item_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.get("/work/{workItemId}/instruction", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.get("/work/{workItemId}/instruction", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def fetch_instruction(
-    work_item_id: WorkItemIdPath, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request, work_item_id: WorkItemIdPath, principal: PrincipalDep
+) -> ProblemDetails:
     """Fetch the authorized execution instruction. Desktop only.
 
     Returns the work identifier, catalogue id, catalogue version, content hash and parameters;
@@ -175,46 +118,16 @@ async def fetch_instruction(
     ever returned** — and no autonomous ITSM operation is implemented behind this route.
     """
     del work_item_id, principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)
 
 
-@router.post("/work/{workItemId}/result", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post("/work/{workItemId}/result", **NOT_IMPLEMENTED_ROUTE)  # type: ignore[arg-type]
 async def record_result(
-    work_item_id: WorkItemIdPath, body: ExecutionResultRequest, principal: PrincipalDep
-) -> dict[str, str]:
+    request: Request,
+    work_item_id: WorkItemIdPath,
+    body: ExecutionResultRequest,
+    principal: PrincipalDep,
+) -> ProblemDetails:
     """Post an execution result and exit status. Desktop only."""
     del work_item_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
-
-
-@router.put("/messages/{messageId}/feedback", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def record_feedback(
-    message_id: MessageIdPath, body: FeedbackRequest, principal: PrincipalDep
-) -> dict[str, str]:
-    """Record or revise a thumbs signal.
-
-    ``PUT`` because feedback is **revisable**: repeating it replaces the previous signal rather
-    than creating a second, which is what the unique constraint on ``(message_id, given_by_oid)``
-    enforces underneath.
-    """
-    del message_id, body, principal
-    return {"detail": NOT_IMPLEMENTED}
-
-
-@router.delete("/messages/{messageId}/feedback", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def withdraw_feedback(message_id: MessageIdPath, principal: PrincipalDep) -> dict[str, str]:
-    """Withdraw a previously recorded signal."""
-    del message_id, principal
-    return {"detail": NOT_IMPLEMENTED}
-
-
-@router.post("/realtime/negotiate", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def negotiate_realtime(principal: PrincipalDep) -> dict[str, str]:
-    """Obtain a realtime connection token.
-
-    **Group membership is derived from trusted identity, never requested by the client**
-    (contracts/notifications.md). There is no request body here, and that absence is the control:
-    a client that could name its group could name somebody else's.
-    """
-    del principal
-    return {"detail": NOT_IMPLEMENTED}
+    return not_implemented(request)

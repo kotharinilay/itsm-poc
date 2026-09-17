@@ -40,6 +40,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import ColumnElement, Interval, Table, insert, literal, select, true, update
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.functions import func
 
@@ -54,6 +55,7 @@ from ragcore.domain.identifiers import (
     CorrelationId,
     EntraTenantId,
     IdempotencyKey,
+    MessageId,
     OperationId,
     OperationIdentity,
     PrincipalId,
@@ -63,7 +65,14 @@ from ragcore.domain.identifiers import (
 )
 from ragcore.domain.roles import RoleSet, StaffRole
 from ragcore.domain.tenancy import TenantContext, TenantStatus
-from ragcore.domain.work import ApprovalVerdict, ConsentVerdict, WorkItemState
+from ragcore.domain.work import (
+    ApprovalVerdict,
+    ConsentVerdict,
+    FeedbackSignal,
+    SenderKind,
+    WorkItemState,
+)
+from ragcore.governance.catalogue import CatalogueRecord, record_from_row
 from ragcore.persistence import enums, models
 from ragcore.persistence.concurrency import (
     VersionedRow,
@@ -648,7 +657,9 @@ class OperationCatalogue(_TenantScoped):
     treatment would get in.
     """
 
-    async def lookup(self, tenant: TenantContext, identity: OperationIdentity) -> Any | None:  # noqa: ANN401
+    async def lookup(
+        self, tenant: TenantContext, identity: OperationIdentity
+    ) -> CatalogueRecord | None:
         """Resolve a catalogue entry, **entitled to this organisation**.
 
         The join to ``tenant_entitlement`` is not an optimisation. A capability is callable only
@@ -656,9 +667,22 @@ class OperationCatalogue(_TenantScoped):
         Resolving the entry without the join would return something callers could treat as a
         permission.
 
+        **Returns a validated record, never the raw row.** The column is ``default_treatment`` and
+        the field deterministic policy reads is ``treatment``; ``accepted_roles`` is an array of
+        text and policy needs a :class:`~ragcore.domain.roles.RoleSet`. Handing the row straight
+        to the gate would fail at an attribute somewhere inside the execution path instead of at
+        this boundary, and a row shaped slightly differently might not fail at all. See
+        :func:`~ragcore.governance.catalogue.record_from_row`.
+
         Returns:
             The entry, or ``None``. **``None`` is a refusal, not a default**: an operation with no
             entry does not proceed.
+
+        Raises:
+            CatalogueRecordError: When the stored row is not a usable catalogue entry — including
+                a row claiming ``requires_elevation``, which the database also refuses. Raised
+                rather than returning ``None``, because a malformed entry is a platform defect and
+                reporting it as "not in the catalogue" would hide it behind an ordinary refusal.
         """
         catalogue = models.GOVERNANCE_RECORD
         entitlement = models.TENANT_ENTITLEMENT
@@ -687,7 +711,9 @@ class OperationCatalogue(_TenantScoped):
             )
         )
         async with read_session(self._sessions) as session:
-            return (await session.execute(statement)).one_or_none()
+            row = (await session.execute(statement)).one_or_none()
+
+        return None if row is None else record_from_row(row)
 
     async def is_entitled(self, tenant: TenantContext, catalogue_id: str) -> bool:
         """Whether this organisation may call this capability at all.
@@ -1076,3 +1102,127 @@ class AuditSink(_TenantScoped):
         )
         async with read_session(self._sessions) as session:
             return list((await session.execute(statement)).all())
+
+
+# ---------------------------------------------------------------------------
+# Feedback — a quality signal, and never an input to a decision
+# ---------------------------------------------------------------------------
+
+
+class FeedbackRepository(_TenantScoped):
+    """Per-message thumbs signals.
+
+    Satisfies :class:`~ragcore.application.ports.FeedbackRepositoryPort`.
+
+    **Ownership is resolved here, in the same transaction as the write.** A message identifier
+    carries no ownership and a route parameter is client input, so both methods below join the
+    message to its session and compare the session's ``requester_oid`` to the caller. A check
+    constraint cannot reach another table, which is why this is the repository's job rather than
+    the schema's — and why the join is part of the write predicate rather than a separate read
+    somebody could forget to perform.
+
+    **Only an agent-authored message may carry feedback.** The predicate is on ``sender_kind`` and
+    it is not cosmetic: a thumbs-down on one's own message is not a quality signal about the
+    platform, and allowing it would put noise into the one figure this table exists to produce.
+
+    **Revisable, not accumulating** (spec FR-SESS-010). The write is an upsert onto the unique
+    constraint ``(message_id, given_by_oid)``, so recording twice replaces and never appends.
+
+    **Nothing here reads a signal back into the platform's own code paths.** There is no ``get``
+    and no ``signal_for``, deliberately: feedback MUST NOT reach authorization, governance
+    treatment, retrieval scope or execution (spec FR-SESS-013), and a reader on this class is the
+    first thing a future change would reach for. Reporting reads ``vw_message_feedback_v1``.
+    """
+
+    def _owned_message(
+        self, tenant: TenantContext, message_id: MessageId, given_by: PrincipalId
+    ) -> Any:  # noqa: ANN401 — a SQLAlchemy Select, whose generic parameters are not worth spelling
+        """The caller's own agent-authored message, as a subquery.
+
+        Three predicates, all required: the organisation, the message, and the session's requester.
+        Expressed as one selectable so every caller applies all three — a helper returning the
+        session identifier alone would let a caller apply two.
+        """
+        message = models.MESSAGE
+        session = models.CHAT_SESSION
+        return (
+            select(message.c.message_id, message.c.session_id)
+            .join(session, session.c.session_id == message.c.session_id)
+            .where(
+                self._scope(tenant, message),
+                self._scope(tenant, session),
+                message.c.message_id == message_id.value,
+                message.c.sender_kind == SenderKind.AGENT,
+                session.c.requester_oid == given_by.value,
+            )
+        )
+
+    async def record(
+        self,
+        tenant: TenantContext,
+        message_id: MessageId,
+        given_by: PrincipalId,
+        signal: FeedbackSignal,
+    ) -> bool:
+        """Record or replace the caller's signal on one agent-authored message.
+
+        Returns:
+            ``True`` when recorded. ``False`` when the message is not an agent-authored message in
+            a session belonging to ``given_by`` — reported as absence rather than as a refusal, so
+            the caller answers 404 and existence stays tenant-scoped information.
+        """
+        session_db = current_session()
+        owned = (
+            await session_db.execute(self._owned_message(tenant, message_id, given_by))
+        ).first()
+        if owned is None:
+            return False
+
+        table = models.FEEDBACK
+        statement = (
+            pg_insert(table)
+            .values(
+                feedback_id=uuid4(),
+                tenant_id=tenant.tenant_id.value,
+                message_id=message_id.value,
+                session_id=owned.session_id,
+                given_by_oid=given_by.value,
+                signal=signal,
+            )
+            # ON CONFLICT on the unique constraint, so a repeat REPLACES. An insert that raised and
+            # a caller that caught it would be the same behaviour with a race in the middle: two
+            # tabs revising one signal would produce one error and one lost revision.
+            .on_conflict_do_update(
+                constraint="uq_feedback_message_id_given_by_oid",
+                set_={"signal": signal},
+            )
+        )
+        await session_db.execute(statement)
+        return True
+
+    async def withdraw(
+        self, tenant: TenantContext, message_id: MessageId, given_by: PrincipalId
+    ) -> bool:
+        """Remove the caller's signal.
+
+        Returns:
+            ``True`` when the message is theirs, whether or not a signal existed — a withdrawal is
+            idempotent, and withdrawing a signal somebody already withdrew is not an error.
+            ``False`` when the message is not theirs.
+        """
+        session_db = current_session()
+        owned = (
+            await session_db.execute(self._owned_message(tenant, message_id, given_by))
+        ).first()
+        if owned is None:
+            return False
+
+        table = models.FEEDBACK
+        await session_db.execute(
+            table.delete().where(
+                self._scope(tenant, table),
+                table.c.message_id == message_id.value,
+                table.c.given_by_oid == given_by.value,
+            )
+        )
+        return True

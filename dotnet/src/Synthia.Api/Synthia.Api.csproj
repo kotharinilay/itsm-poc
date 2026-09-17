@@ -1,6 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <!--
+      The contract tests ARE the emitter: the OpenAPI document comes from a built host, so the
+      artifact CI publishes has to be produced by something that boots the application. That test
+      names the audiences and the contract version from ContractOpenApi rather than restating them,
+      which is the whole point - a second list of audiences is a list that goes stale.
+
+      Scoped to this one test assembly. Synthia.ArchitectureTests deliberately has no such access:
+      its rules are about what somebody wrote, and a compiled constant loses the distinction
+      between a value declared there and one that arrived from somewhere else.
+    -->
+    <InternalsVisibleTo Include="Synthia.ContractTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />

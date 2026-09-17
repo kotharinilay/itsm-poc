@@ -51,3 +51,26 @@ class HealthStatus(ApiModel):
     """Liveness. Carries nothing about an organisation, a session or a decision."""
 
     status: str = "ok"
+
+
+class ProblemDetails(ApiModel):
+    """The RFC 9457 error body, declared so it appears in every emitted document.
+
+    **The document has to say what an error looks like, or the contract is only half emitted.**
+    :mod:`ragcore.api.middleware.problems` already returns this shape at runtime; without a model
+    the generator falls back to FastAPI's ``HTTPValidationError``, and the published contract then
+    describes an error body the service never sends.
+
+    Mirrors ``Synthia.Contracts.Errors.ProblemContract`` on the .NET side field for field, because a
+    client calls both deployables and must parse one error contract, not two.
+
+    ``correlationId`` is the one addition to RFC 9457, and it is what lets a user quoting an error
+    be followed across an asynchronous, suspendable flow (spec FR-OPS-001).
+    """
+
+    type: str
+    title: str
+    status: int
+    detail: str | None = None
+    instance: str | None = None
+    correlation_id: str

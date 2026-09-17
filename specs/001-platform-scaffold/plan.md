@@ -135,9 +135,27 @@ These are build-gating rules, not guidance. `SC-DEMO-003` and `SC-DEMO-004` meas
 - **Each audience has its own explicit contract**: `customer/*`, `staff/*` and `workload/*` are
   separate documents, because one merged document would let a customer-facing client discover the
   staff and workload surfaces.
-- **CI emits versioned artifacts** on every build and publishes them.
+- **CI emits versioned artifacts** on every build and publishes them. The contract-artifact location
+  is `build/contracts/{dotnet,ragcore}/{audience}.v1.openapi.json` — five documents, versioned by the
+  API version in the path and, as a build artifact, by the commit that produced them.
 - **Contract tests validate the emitted documents**, not hand-written copies. A route whose emitted
   shape stops matching its declared contract fails the build rather than surfacing at a client.
+
+*Extended 2026-09-17.* Emission is a gated pipeline rather than a step that produces files. Five
+gates run in order in `.github/workflows/contracts.yml`: the documents **generate** from running
+services; two emissions are **byte-identical**; each document is **publishable** — no secret or
+configuration material, no client-suppliable tenant, role or audience, RFC 9457 error contracts
+throughout (`build/scripts/openapi_validate.py`); no **breaking** difference against the committed
+contract unless recorded in `build/contracts/approved-breaking-changes.json` verbatim, with a reason
+and an expiry (`build/scripts/openapi_diff.py`); and the committed contracts are not **stale**.
+`build/scripts/verify-contract-guards.sh` plants each violation class and asserts every gate rejects
+it — and that the one permitted exception, `tenantId` as a staff query narrowing, is accepted.
+
+**No schema is written twice to produce OpenAPI.** Where the .NET generator could not see the paging
+and filtering parameters a handler reads from the query string itself, the endpoint's own
+`QueryWhitelist` was moved onto the route as metadata and is read by both the binder and the document
+transformer. Declaring the fields a second time inside a transformer would have produced a correct
+document and reintroduced exactly the drift this section exists to prevent.
 
 ## Constitution Check
 

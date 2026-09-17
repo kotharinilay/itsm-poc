@@ -1,8 +1,11 @@
 using Synthia.Api.Authorization;
+using Synthia.Api.Contracts;
 using Synthia.Api.Errors;
 using Synthia.Api.Middleware;
 using Synthia.Api.Querying;
+using Synthia.Contracts.Errors;
 using Synthia.Contracts.Paging;
+using Synthia.Contracts.Querying;
 using Synthia.Contracts.ReadModels;
 using Synthia.Modules.Approvals;
 using Synthia.Modules.Audit;
@@ -52,36 +55,48 @@ internal static class StaffViewEndpoints
         views.MapGet("/sessions/live", ListLiveSessionsAsync)
             .WithName("StaffListLiveSessions")
             .WithSummary("Lists live sessions. Cursor paged.")
+            .PagedOver(ResourceQueries.StaffLiveSessions)
+            .Returns<CursorEnvelope<SessionSummary>>()
             .AcceptsRoles(StaffRole.Technician);
 
         views.MapGet("/sessions/{sessionId:guid}", GetSessionAsync)
             .WithName("StaffGetSession")
             .WithSummary("Reads one session and its step trail.")
+            .Returns<StaffSessionDetail>()
             .AcceptsRoles(StaffRole.Technician);
 
         views.MapGet("/approvals/queue", ListApprovalQueueAsync)
             .WithName("StaffListApprovalQueue")
             .WithSummary("Lists pending approvals with their fully disclosed commands. Cursor paged.")
+            .PagedOver(ResourceQueries.StaffApprovalQueue)
+            .Returns<CursorEnvelope<ApprovalQueueEntry>>()
             .AcceptsRoles(StaffRole.Technician);
 
         views.MapGet("/approvals/unexecuted", ListUnexecutedApprovalsAsync)
             .WithName("StaffListUnexecutedApprovals")
             .WithSummary("Lists work approved but never executed. Cursor paged.")
+            .PagedOver(ResourceQueries.StaffUnexecutedApprovals)
+            .Returns<CursorEnvelope<UnexecutedApproval>>()
             .AcceptsRoles(StaffRole.Technician);
 
         views.MapGet("/audit", SearchAuditAsync)
             .WithName("StaffSearchAudit")
             .WithSummary("Searches audit records. Cursor paged.")
+            .PagedOver(ResourceQueries.StaffAudit)
+            .Returns<CursorEnvelope<AuditEventView>>()
             .AcceptsRoles(StaffRole.Technician);
 
         views.MapGet("/dashboard/platform", GetPlatformDashboardAsync)
             .WithName("StaffGetPlatformDashboard")
             .WithSummary("Reads the platform rollup. Aggregate only; no per-organisation breakdown.")
+            .Returns<DashboardRollup>()
             .AcceptsRoles(StaffRole.Administrator);
 
         views.MapGet("/tenants", ListTenantsAsync)
             .WithName("StaffListTenants")
             .WithSummary("Lists organisations. Cursor paged.")
+            .PagedOver(ResourceQueries.StaffTenants)
+            .Returns<CursorEnvelope<TenantView>>()
             .AcceptsRoles(StaffRole.Administrator);
 
         return app;
@@ -94,7 +109,7 @@ internal static class StaffViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.StaffLiveSessions,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);
@@ -102,7 +117,7 @@ internal static class StaffViewEndpoints
 
         if (!QueryBinding.TryBindPage(
                 context.Request.Query,
-                ResourceQueries.StaffLiveSessions,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out detail))
         {
@@ -158,7 +173,7 @@ internal static class StaffViewEndpoints
     {
         if (!TryBindTenantNarrowedPage(
                 context,
-                ResourceQueries.StaffApprovalQueue,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out ApprovalQueueFilter? filter,
                 out string? detail))
@@ -180,7 +195,7 @@ internal static class StaffViewEndpoints
     {
         if (!TryBindTenantNarrowedPage(
                 context,
-                ResourceQueries.StaffUnexecutedApprovals,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out ApprovalQueueFilter? filter,
                 out string? detail))
@@ -202,7 +217,7 @@ internal static class StaffViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.StaffAudit,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);
@@ -210,7 +225,7 @@ internal static class StaffViewEndpoints
 
         if (!QueryBinding.TryBindPage(
                 context.Request.Query,
-                ResourceQueries.StaffAudit,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out detail))
         {
@@ -267,7 +282,7 @@ internal static class StaffViewEndpoints
     {
         if (!QueryBinding.TryRejectUnknownFilters(
                 context.Request.Query,
-                ResourceQueries.StaffTenants,
+                QueryBinding.WhitelistOf(context),
                 out string? detail))
         {
             return Problems.ValidationFailed(context, detail!);
@@ -275,7 +290,7 @@ internal static class StaffViewEndpoints
 
         if (!QueryBinding.TryBindPage(
                 context.Request.Query,
-                ResourceQueries.StaffTenants,
+                QueryBinding.WhitelistOf(context),
                 out KeysetRequest? page,
                 out detail))
         {
@@ -307,7 +322,7 @@ internal static class StaffViewEndpoints
 
     private static bool TryBindTenantNarrowedPage(
         HttpContext context,
-        Contracts.Querying.QueryWhitelist whitelist,
+        QueryWhitelist whitelist,
         out KeysetRequest? page,
         out ApprovalQueueFilter? filter,
         out string? detail)

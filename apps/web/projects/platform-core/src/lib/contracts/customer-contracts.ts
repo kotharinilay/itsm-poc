@@ -77,12 +77,29 @@ export interface StartSessionResponse {
   readonly sessionId: SessionId;
 }
 
+/**
+ * One turn of conversation.
+ *
+ * The field is `content`, matching the emitted contract. It was `body` here until Stage 12, which
+ * no client could have discovered without sending a turn and getting a 422 — the emitted OpenAPI
+ * is the authority, and this file is what it is compared against.
+ *
+ * **Chat text cannot grant authority** (spec FR-IDENT-004). An affirmative message is never
+ * consent — only `POST /work/{id}/consent` records that — so there is no `confirm` field here for
+ * a client to set.
+ */
 export interface SendMessageRequest {
-  readonly body: string;
+  readonly content: string;
 }
 
+/**
+ * An answer to a pending clarifying question.
+ *
+ * Answerable only by the end user of the session (spec FR-INTR-004). Who that is comes from trusted
+ * identity, so it is not a field here — and an affirmative answer is not consent.
+ */
 export interface AnswerRequest {
-  readonly answer: string;
+  readonly content: string;
 }
 
 /** Only the work item's requester may consent. An affirmative chat message is never consent. */

@@ -1,0 +1,37 @@
+<!--
+  A group, so assistive technology announces the two buttons as one control rather than as two
+  unrelated actions next to a message.
+-->
+<div class="cf-feedback" role="group" aria-label="Was this helpful?">
+  <button
+    type="button"
+    class="cf-feedback__button"
+    [attr.aria-pressed]="current() === 'positive'"
+    [attr.data-state]="current() === 'positive' ? 'on' : 'off'"
+    (click)="choose('positive')"
+  >
+    <!--
+      A text label, not an icon alone. `aria-pressed` carries the state to assistive technology and
+      `data-state` drives a visible treatment, so what is recorded is conveyed by more than colour.
+    -->
+    Helpful
+  </button>
+
+  <button
+    type="button"
+    class="cf-feedback__button"
+    [attr.aria-pressed]="current() === 'negative'"
+    [attr.data-state]="current() === 'negative' ? 'on' : 'off'"
+    (click)="choose('negative')"
+  >
+    Not helpful
+  </button>
+
+  <!--
+    Rendered, not only announced: a user who was not focused on the control when it failed would
+    otherwise never learn that their signal was not saved.
+  -->
+  @if (failed()) {
+    <p class="cf-feedback__failure" role="alert">Your feedback could not be saved.</p>
+  }
+</div>

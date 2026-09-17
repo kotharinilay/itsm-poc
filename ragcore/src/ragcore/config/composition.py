@@ -30,6 +30,7 @@ from ragcore.application.ports import (
     ClockPort,
     ConsentRepositoryPort,
     DirectoryPort,
+    FeedbackRepositoryPort,
     ModelPort,
     NotificationPort,
     OperationCataloguePort,
@@ -47,6 +48,7 @@ from ragcore.config.secrets import (
     SecretValue,
 )
 from ragcore.config.settings import Settings, get_settings
+from ragcore.graph.dependencies import GraphDependencies
 from ragcore.infrastructure.cache import NullCache, RedisTransientCache, TransientCachePort
 from ragcore.infrastructure.clock import SystemClock
 from ragcore.integrations.credentials import TenantCredentialResolver
@@ -59,12 +61,13 @@ from ragcore.integrations.model.gateway import AiGatewayEgress
 from ragcore.integrations.model.local import LocalDevelopmentEgress
 from ragcore.integrations.servicenow.adapter import ServiceNowAdapter
 from ragcore.integrations.servicenow.queue import InMemoryCaseWriteQueue
-from ragcore.persistence.engine import create_engine, create_session_factory
+from ragcore.persistence.engine import UnitOfWork, create_engine, create_session_factory
 from ragcore.persistence.repositories import (
     ApprovalRepository,
     AuditSink,
     ConsentRepository,
     EntitlementCredentials,
+    FeedbackRepository,
     OperationCatalogue,
     Outbox,
     TenantRegistry,
@@ -135,6 +138,7 @@ class Container:
     work_items: WorkItemRepositoryPort | None = None
     approvals: ApprovalRepositoryPort | None = None
     consents: ConsentRepositoryPort | None = None
+    feedback: FeedbackRepositoryPort | None = None
     catalogue: OperationCataloguePort | None = None
     retrieval: RetrievalPort | None = None
     model: ModelPort | None = None
@@ -146,6 +150,36 @@ class Container:
     notifications: NotificationPort | None = None
     audit: AuditSinkPort | None = None
     cache: TransientCachePort = field(default_factory=NullCache)
+
+    sessions: async_sessionmaker[AsyncSession] | None = None
+    """The session factory every repository was built with.
+
+    Held so :meth:`unit_of_work` can open a transaction. It is **not** a port and no application
+    module receives it: ``application/ports.py`` is stated in domain terms, and an ``AsyncSession``
+    parameter there would put SQLAlchemy in the application layer. What crosses that boundary is
+    :class:`~ragcore.application.ports.UnitOfWorkPort`, which is what this returns.
+    """
+
+    def unit_of_work(self) -> UnitOfWork:
+        """Open a transaction.
+
+        **The only way a write path begins**, because the transactional outbox depends on an outbox
+        row landing in the same transaction as the state change it describes. A repository that
+        opened its own session would break that without failing, which is why
+        :func:`~ragcore.persistence.engine.current_session` refuses a write with no boundary open.
+
+        Raises:
+            RuntimeError: When this container was built without persistence — a test double, or a
+                worker that has no database. Raised rather than returning a no-op boundary, because
+                a no-op boundary is a write that silently does not commit.
+        """
+        if self.sessions is None:
+            raise RuntimeError(
+                "this container has no session factory, so no transaction can be opened. A write "
+                "path needs persistence; there is no in-memory fallback, because a boundary that "
+                "commits nothing is worse than one that is absent."
+            )
+        return UnitOfWork(self.sessions)
 
     async def aclose(self) -> None:
         """Release what this container owns.
@@ -194,6 +228,7 @@ def build_container(settings: Settings | None = None) -> Container:
         settings=resolved,
         clock=clock,
         engine=engine,
+        sessions=sessions,
         http=http,
         # Every repository takes the same session factory and holds no state of its own. They are
         # separate classes rather than one facade because a generic repository would give every
@@ -202,6 +237,7 @@ def build_container(settings: Settings | None = None) -> Container:
         work_items=WorkItemRepository(sessions),
         approvals=ApprovalRepository(sessions),
         consents=ConsentRepository(sessions),
+        feedback=FeedbackRepository(sessions),
         catalogue=OperationCatalogue(sessions),
         outbox=Outbox(sessions),
         audit=AuditSink(sessions),
@@ -323,3 +359,57 @@ class _NoVaultResolver:
             "no Key Vault is configured for this process, and there is no other source of secret "
             "material. Set SYNTHIA_KEYVAULT_VAULT_URI",
         )
+
+
+def graph_dependencies(container: Container) -> GraphDependencies | None:
+    """Assemble what the graph is bound to, or report that this process cannot host one.
+
+    **Every field is required and none is defaulted.** A graph compiled with a stand-in for a
+    missing adapter is a graph that runs and quietly does less than it appears to — an empty
+    retrieval leg looks like an organisation with no knowledge, and a no-op execution port looks
+    like an operation that succeeded. Returning ``None`` instead makes "this process does not host
+    a run loop" a fact the caller has to handle.
+
+    Args:
+        container: The constructed adapters.
+
+    Returns:
+        The dependencies, or ``None`` when any of them is unbound. The scaffold binds no tool
+        execution adapter — **no autonomous ITSM operation is implemented** — so a scaffold process
+        legitimately returns ``None`` here, and the conversation surface reports an honest empty
+        stream rather than inventing progress.
+    """
+    required = (
+        container.catalogue,
+        container.retrieval,
+        container.model,
+        container.work_items,
+        container.approvals,
+        container.consents,
+        container.execution,
+        container.audit,
+    )
+    if any(binding is None for binding in required):
+        return None
+
+    catalogue, retrieval, model, work_items, approvals, consents, execution, audit = required
+    assert catalogue is not None  # noqa: S101 — narrowing for the type checker, checked above
+    assert retrieval is not None  # noqa: S101
+    assert model is not None  # noqa: S101
+    assert work_items is not None  # noqa: S101
+    assert approvals is not None  # noqa: S101
+    assert consents is not None  # noqa: S101
+    assert execution is not None  # noqa: S101
+    assert audit is not None  # noqa: S101
+
+    return GraphDependencies(
+        clock=container.clock,
+        catalogue=catalogue,
+        retrieval=retrieval,
+        model=model,
+        work_items=work_items,
+        approvals=approvals,
+        consents=consents,
+        execution=execution,
+        audit=audit,
+    )

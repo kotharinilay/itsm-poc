@@ -374,11 +374,55 @@ configuration review explicitly does not substitute. These are the scaffold's lo
 
 ### OpenAPI contract emission *(added 2026-09-16)*
 
+**Status 2026-09-17** — T234–T238 were audited against the emission requirements and the artifacts
+they produced. The tasks were complete as written; the *documents* were not contracts. Five gaps
+were closed. They strengthen T234–T238 rather than adding tasks, so no task id changed state. New
+task ids **T239a–T239d** record the work that had no task at all.
+
+1. **The .NET documents described nothing.** Every handler returns `IResult`, which the generator can
+   infer nothing from, so each operation published a bare `200: OK` with no schema, no parameters and
+   no error responses — a document that named the routes and described none of them. The routes now
+   declare their success body and the RFC 9457 error set (`ContractResponses.Returns<T>()`), and the
+   paging, sorting and filtering parameters are published from the endpoint's **own** `QueryWhitelist`,
+   moved onto the route as metadata and read by the binder through `QueryBinding.WhitelistOf`. One
+   declaration, read twice; restating the fields in a transformer would have fixed the document and
+   introduced the drift the generated-contract rule exists to prevent.
+2. **Both stacks published an error contract the services do not send.** RagCore's document declared
+   FastAPI's `HTTPValidationError` for 422 while `problems.py` returned RFC 9457; the .NET documents
+   declared no error at all. Both now declare `ProblemDetails`/`ProblemContract` at
+   `application/problem+json`, and `openapi_validate.py` fails a build where any non-2xx response is
+   anything else.
+3. **`servers: [{"url": "http://localhost/"}]` was published.** The test host's address, in a
+   committed contract — configuration material describing a deployment (spec FR-DEMO-012) that also
+   differs between the machine that emits and the machine that verifies. Stripped, and the document
+   is now versioned `v1` rather than by the assembly version, which moves on a patch release changing
+   no route.
+4. **Emission was not deterministic and nothing checked.** The .NET emitter wrote unsorted keys and
+   `Environment.NewLine`; RagCore's wrote platform line endings. Every gate downstream compares bytes.
+   Both are canonical now, and CI emits **twice** and requires byte-identical output — a single
+   emission always looks deterministic.
+5. **`/realtime/negotiate` was registered twice.** `customer/routes.py` served a 501 while
+   `negotiate.py`'s 200 won the OpenAPI path entry, so the published document disagreed with the
+   running service about a route that exists. The duplicate is gone; `negotiate.py` owns it (T124).
+
+The audit also corrected the disclosure policy. `tenantId`, `roles` and `audience` were forbidden by
+**name, anywhere** — which blocked read models from reporting the organisation an audit record
+concerns, the field a staff reviewer opens it for, and which a rename would have satisfied without
+closing any channel. The rule is now positional: forbidden in a parameter or a request body on every
+audience, permitted in a response, with `tenantId` as a **query** parameter on the **staff**
+documents named as the one exception (contracts §README). Proven by
+`build/scripts/verify-contract-guards.sh`, which plants eleven violation classes and asserts the
+staff narrowing is *accepted*.
+
 - [X] T234 [P] Emit the **customer** audience OpenAPI document from the running services — FastAPI for RagCore, the built-in generator for .NET Minimal APIs — written to `build/contracts/customer.v1.openapi.json` — Boundary: API contract | Validates: Spec §FR-DEMO-013
 - [X] T235 [P] Emit the **staff** audience OpenAPI document to `build/contracts/staff.v1.openapi.json` — Boundary: API contract | Validates: Spec §FR-DEMO-013
 - [X] T236 [P] Emit the **workload** audience OpenAPI document to `build/contracts/workload.v1.openapi.json`. **One document per audience; a merged document is prohibited** — it would let a customer-facing client discover the staff and workload surfaces — Boundary: API contract | Validates: Contracts §README rule 5
 - [X] T237 Publish **versioned OpenAPI artifacts** from CI in `.github/workflows/contracts.yml` — emitted on every build, versioned by API version and commit, and attached to the build rather than committed by hand — Boundary: CI | Validates: Spec §FR-DEMO-013
 - [X] T238 Implement **CI contract validation** in `.github/workflows/contracts.yml` — contract tests run against the **emitted** documents, not hand-written copies, and a route whose emitted shape stops matching its declared contract **fails the build** rather than surfacing at a client — Boundary: CI | Validates: Spec §SC-DEMO-011
+- [X] T239a Declare the **request and response schemas** on both stacks so the emitted documents describe what the services accept and return — `.NET` through `Synthia.Api/Contracts/ContractResponses.cs` and the query-whitelist metadata in `Synthia.Api/Querying/QueryDeclaration.cs`, `RagCore` through per-router `problem_responses(...)` and an explicit `ProblemDetails` model. **No schema is duplicated to produce OpenAPI**: the application contract is the source, and where the generator could not see a parameter the endpoint's own whitelist was moved to where both the binder and the document read it — Boundary: API contract | Validates: Spec §FR-DEMO-013, Contracts §README
+- [X] T239b Make emission **deterministic on every platform** — sorted keys and bare line feeds in `dotnet/tests/Synthia.ContractTests/OpenApiEmissionTests.cs` and `ragcore/scripts/emit_contracts.py` — and gate it in CI by emitting **twice** and requiring byte-identical output. A single emission always looks deterministic, and every gate downstream compares bytes — Boundary: CI | Validates: Spec §SC-DEMO-011
+- [X] T239c Implement **publishability validation** over the emitted artifacts in `build/scripts/openapi_validate.py` — no secret or configuration material, no client-suppliable tenant/role/audience, RFC 9457 error contracts throughout, and no `servers` block or assembly version. One validator for both stacks reading `build/policy/openapi-disclosure.json`; the authority rule is **positional**, with the staff `tenantId` narrowing as its one named exception — Boundary: CI | Validates: Spec §FR-DEMO-012, §FR-IDENT-002, Constitution P-I, Contracts §README rule 1
+- [X] T239d Implement the **breaking-change approval register** in `build/contracts/approved-breaking-changes.json`, honoured by `build/scripts/openapi_diff.py --approved` — an approval quotes the finding verbatim, names a person, gives a reason and a client migration, and **expires**. No environment variable and no commit-message keyword bypasses the gate. Proven in both directions by `build/scripts/verify-contract-guards.sh`, which also asserts an expired or differently-worded approval does not apply — Boundary: CI | Validates: Spec §SC-DEMO-011
 
 **Checkpoint**: Configuration fails fast; images are digest-pinned, non-root and read-only; the edge and gateway exist and derive identity; every audience emits a validated contract.
 
@@ -388,20 +432,42 @@ configuration review explicitly does not substitute. These are the scaffold's lo
 
 **Goal**: Complete the enforcement surface and seed the inert reference operations.
 
-- [ ] T153 Implement the governance catalogue and deterministic treatment policy in `ragcore/src/ragcore/governance/catalogue.py` — treatment assigned from the catalogue, **never** from model output — Boundary: Governance | Validates: Spec §FR-AGENT-004
-- [ ] T154 Implement the control gate in `ragcore/src/ragcore/governance/gate.py` evaluating Knowledge, Ability and Security as independent conditions where none averages away another and Knowledge may withhold but never authorize — Boundary: Governance | Validates: Spec §FR-AGENT-005
-- [ ] T155 Seed the four inert reference operations in `ragcore/src/ragcore/governance/fixtures.py` — one per treatment, `is_reference_fixture=true`, no external effect, excluded from production configuration — Boundary: Governance | Validates: Spec §FR-SCOPE-004, §FR-SCOPE-006
-- [ ] T156 [P] Unit tests for the treatment policy in `ragcore/tests/unit/test_treatment_policy.py` asserting treatment comes from the catalogue entry and is unaffected by any model-supplied value — Boundary: Governance | Validates: Spec §FR-AGENT-004
-- [ ] T157 [P] Unit tests for the atomic claim and idempotency key in `ragcore/tests/unit/test_claim.py` covering first-claim-wins, already-claimed, expired and cancelled — Boundary: Work | Validates: Spec §FR-EXEC-004
+- [X] T153 Implement the governance catalogue and deterministic treatment policy in `ragcore/src/ragcore/governance/catalogue.py` — treatment assigned from the catalogue, **never** from model output — Boundary: Governance | Validates: Spec §FR-AGENT-004
+- [X] T154 Implement the control gate in `ragcore/src/ragcore/governance/gate.py` evaluating Knowledge, Ability and Security as independent conditions where none averages away another and Knowledge may withhold but never authorize — Boundary: Governance | Validates: Spec §FR-AGENT-005
+- [X] T155 Seed the four inert reference operations in `ragcore/src/ragcore/governance/fixtures.py` — one per treatment, `is_reference_fixture=true`, no external effect, excluded from production configuration — Boundary: Governance | Validates: Spec §FR-SCOPE-004, §FR-SCOPE-006
+- [X] T156 [P] Unit tests for the treatment policy in `ragcore/tests/unit/test_treatment_policy.py` asserting treatment comes from the catalogue entry and is unaffected by any model-supplied value — Boundary: Governance | Validates: Spec §FR-AGENT-004
+- [X] T157 [P] Unit tests for the atomic claim and idempotency key in `ragcore/tests/unit/test_claim.py` covering first-claim-wins, already-claimed, expired and cancelled — Boundary: Work | Validates: Spec §FR-EXEC-004
 - [X] T158 Write the full authorization matrix test in `dotnet/tests/Synthia.AuthorizationTests/RoleMatrixTests.cs` covering every role combination against every operation, including the empty intersection — Boundary: authorization | Validates: Spec §SC-AUTHZ-001
 - [X] T159 [P] Write a test in `dotnet/tests/Synthia.AuthorizationTests/NoImpliedPrivilegeTests.cs` asserting `administrator` never implies `technician` — Boundary: authorization | Validates: Spec §FR-AUTHZ-003
-- [ ] T160 [P] Write a test in `ragcore/tests/authorization/test_role_change_midflight.py` asserting a role change neither rewrites a recorded decision nor cancels authorized work — Boundary: authorization | Validates: Spec §FR-AUTHZ-011
+- [X] T160 [P] Write a test in `ragcore/tests/authorization/test_role_change_midflight.py` asserting a role change neither rewrites a recorded decision nor cancels authorized work — Boundary: authorization | Validates: Spec §FR-AUTHZ-011
 - [X] T161 [P] Write tenant isolation tests in `dotnet/tests/Synthia.TenantIsolationTests/` asserting no read path returns another organisation's data and a foreign resource returns 404 — Boundary: tenant isolation | Validates: Spec §SC-IDENT-002
 - [X] T162 [P] Write an aggregate leakage test in `dotnet/tests/Synthia.TenantIsolationTests/AggregateLeakageTests.cs` asserting no count, ranking or distribution reveals a single organisation's contribution — Boundary: tenant isolation | Validates: Spec §FR-IDENT-010
-- [ ] T163 [P] Write adversarial retrieval tests in `ragcore/tests/isolation/test_cross_tenant_retrieval.py` asserting the tenant filter cannot be evaded by crafted input — Boundary: Retrieval | Validates: Spec §FR-IDENT-009
-- [ ] T164 [P] Write a test in `ragcore/tests/governance/test_no_elevation.py` asserting no catalogue entry can be created or activated with `requires_elevation = true` — Boundary: Governance | Validates: ADR-0004
-- [ ] T165 [P] Write a test in `ragcore/tests/governance/test_fixtures_excluded.py` asserting reference fixtures are absent from production configuration and never counted as UC-01..UC-12 — Boundary: scaffold scope | Validates: Spec §FR-SCOPE-007
-- [ ] T166 Write hard-failure tests in `ragcore/tests/security/test_hard_failures.py` — one per item in Principle VIII, each failing when its protection is removed — Boundary: cross-cutting | Validates: Stage 11 gate
+- [X] T163 [P] Write adversarial retrieval tests in `ragcore/tests/isolation/test_cross_tenant_retrieval.py` asserting the tenant filter cannot be evaded by crafted input — Boundary: Retrieval | Validates: Spec §FR-IDENT-009
+- [X] T164 [P] Write a test in `ragcore/tests/governance/test_no_elevation.py` asserting no catalogue entry can be created or activated with `requires_elevation = true` — Boundary: Governance | Validates: ADR-0004
+- [X] T165 [P] Write a test in `ragcore/tests/governance/test_fixtures_excluded.py` asserting reference fixtures are absent from production configuration and never counted as UC-01..UC-12 — Boundary: scaffold scope | Validates: Spec §FR-SCOPE-007
+- [X] T166 Write hard-failure tests in `ragcore/tests/security/test_hard_failures.py` — one per item in Principle VIII, each failing when its protection is removed — Boundary: cross-cutting | Validates: Stage 11 gate
+
+**Status 2026-09-17** — Phase 11 completed. Three notes on how the tasks landed, so the differences
+between what they say and what exists read as decisions rather than drift:
+
+1. **T153's treatment policy already existed**, in `governance/policy.py`, which is where it belongs —
+   the task named one file for two things. What was genuinely missing was the catalogue *type*, and
+   its absence was a live defect: `OperationCatalogue.lookup` returned a raw database row whose
+   treatment column is `default_treatment` and whose roles are an array of text, while
+   `assign_treatment` reads `entry.treatment` and `entry.accepted_roles`. The production path would
+   have failed on an attribute inside the execution path. `governance/catalogue.py` is now where a
+   row becomes a validated `CatalogueRecord`, and the repository returns one.
+2. **T154's Knowledge/Ability/Security conditions did not exist.** The gate evaluated treatment,
+   decision and roles — which is the *security* condition alone. `governance/conditions.py` adds the
+   other two, with the rule expressed structurally rather than asserted: every condition answers a
+   boolean, the combiner is a conjunction, and there is nowhere to put a weight without deleting a
+   type. Knowledge exposes `withholds` and no `authorizes`. The gate checks it **before** the
+   treatment branches, so an ungrounded proposal cannot be put in front of a human to approve.
+3. **T155's fixtures enforce their own exclusion.** `reference_fixtures(environment)` raises in
+   production rather than relying on a runbook step. It decides whether rows are *installed*, never
+   what a row *means* — no treatment, role or entitlement varies by environment, and
+   `test_fixtures_excluded.py` asserts that separately, because "exclude the fixtures in production"
+   is one careless step away from "relax the gate in development".
 
 **Checkpoint**: Every hard failure has a test that fails when its protection is removed. **Scaffold complete.**
 
@@ -413,32 +479,68 @@ configuration review explicitly does not substitute. These are the scaffold's lo
 
 **Independent test**: Drive the `AUTO` reference operation from a chat turn to a verified outcome with a complete actor chain, and drive the `NOT_ALLOWED` reference operation to a recorded refusal.
 
-- [ ] T167 [P] [US1] Implement the session lifecycle use case in `ragcore/src/ragcore/application/sessions.py` including the triage gate — a work record commits only when a genuine problem is articulated — Boundary: Session | Validates: Spec §FR-SESS-003
-- [ ] T168 [US1] Implement case creation at the triage gate in `ragcore/src/ragcore/application/cases.py`, anchoring each session to exactly one case — Boundary: Integration—ServiceNow | Validates: Spec §FR-EXT-002
-- [ ] T169 [P] [US1] Implement hybrid retrieval in `ragcore/src/ragcore/retrieval/hybrid.py` combining a dense leg with a weighted, load-bearing sparse lexical leg — Boundary: Retrieval | Validates: Plan Stage 12
-- [ ] T170 [P] [US1] Implement cost-gated rerank in `ragcore/src/ragcore/retrieval/rerank.py` reranking a small top-k above a minimum floor — Boundary: Retrieval | Validates: Plan Stage 12
-- [ ] T171 [P] [US1] Implement confidence and margin in `ragcore/src/ragcore/retrieval/confidence.py` using absolute score plus top-1-minus-top-2, thresholds as global constants defined **only in this module**, with both comparisons `>=` so a value exactly equal to its threshold passes (plan Stage 12), plus unit tests asserting the boundary in both directions — Boundary: Retrieval | Validates: Spec §FR-AGENT-014, §FR-AGENT-015
-- [ ] T172 [P] [US1] Implement the embedding path in `ragcore/src/ragcore/retrieval/embedding.py` embedding the symptom or description field only — Boundary: Retrieval | Validates: Plan Stage 9
-- [ ] T173 [US1] Implement graph nodes for intake, classify and ground in `ragcore/src/ragcore/graph/nodes/` where classification never authorizes — Boundary: Agent/RagCore | Validates: Spec §FR-AGENT-002
-- [ ] T174 [US1] Implement content safety in `ragcore/src/ragcore/integrations/model/safety.py` — inbound before the model, outbound before a response returns, every decision logged with its correlation identifier — Boundary: model egress | Validates: Spec §FR-AGENT-010, §FR-AGENT-013
-- [ ] T175 [US1] Implement the scope guardrail in `ragcore/src/ragcore/graph/nodes/guardrail.py` declining non-ITSM requests and routing unanswered IT questions to vendor fallback — Boundary: Agent/RagCore | Validates: Spec §FR-SCOPE-009, §FR-SCOPE-010
-- [ ] T176 [US1] Implement `POST /api/customer/v1/sessions` and `.../messages` with SSE streaming in `ragcore/src/ragcore/api/customer/sessions.py` — Boundary: Customer API | Validates: Contracts §customer-api
-- [ ] T177 [US1] Implement the execution leg and verification stage in `ragcore/src/ragcore/execution/executor.py` recording `server_confirmed`, `client_attested` or `contradicted` — Boundary: Tool Execution | Validates: Spec §FR-AGENT-008
-- [ ] T178 [US1] Implement audit writing in `ragcore/src/ragcore/application/audit.py` capturing requester, approver, executor, method, organisation and result — Boundary: Audit | Validates: Spec §FR-AUDIT-001
-- [ ] T179 [US1] Implement the escalation path in `ragcore/src/ragcore/application/escalation.py` placing the request on the ServiceNow queue with transcript, candidates and reason, and telling the user **why** — Boundary: Integration—ServiceNow | Validates: Spec §FR-FALL-002, §FR-FALL-010
-- [ ] T180 [P] [US1] Implement the Sessions read module in `dotnet/src/Modules/Synthia.Modules.Sessions/` over `vw_session_summary_v1`, `vw_session_message_v1`, `vw_session_step_v1` — Boundary: Session (read) | Validates: Contracts §read-views
-- [ ] T181 [P] [US1] Implement customer view endpoints in `dotnet/src/Synthia.Api/Endpoints/CustomerViews.cs` with cursor pagination and whitelisted sort — Boundary: Customer API | Validates: Contracts §customer-api
-- [ ] T182 [P] [US1] Implement the chat feature in `apps/web/projects/customer-features/chat/` consuming the SSE stream with accessible live-region announcement — Boundary: presentation | Validates: Spec §FR-SURF-011
-- [ ] T183 [P] [US1] Implement the handoff notice in `apps/web/projects/customer-features/handoff/` stating plainly that a human will take the request — Boundary: presentation | Validates: Spec §FR-FALL-007
-- [ ] T184 [US1] Implement `PUT` and `DELETE /api/customer/v1/messages/{messageId}/feedback` in `ragcore/src/ragcore/api/customer/feedback.py` — an idempotent replace of the signal, owner-scoped so only the session's own user may record against an agent-authored message — Boundary: Customer API | Validates: Spec §FR-SESS-009, §FR-SESS-010, §FR-SESS-011
-- [ ] T185 [P] [US1] Implement the feedback read path in `dotnet/src/Modules/Synthia.Modules.Sessions/` over `vw_message_feedback_v1`, exposing aggregate figures retained independently of the underlying signals — Boundary: Session (read) | Validates: Spec §FR-SESS-012, §FR-SESS-014
-- [ ] T186 [P] [US1] Implement the feedback control in `apps/web/projects/customer-features/chat/feedback/` as a keyboard-operable binary signal announced to assistive technology, with the current state visible — Boundary: presentation | Validates: Spec §FR-SESS-009, §SC-SESS-003
-- [ ] T187 [P] [US1] Write a test in `ragcore/tests/governance/test_feedback_no_influence.py` asserting feedback reaches no authorization, governance treatment, retrieval scope or execution path — Boundary: Governance | Validates: Spec §FR-SESS-013
-- [ ] T188 [P] [US4] Implement the clarification interrupt node and `POST .../answers` in `ragcore/src/ragcore/graph/nodes/clarification_interrupt.py` and `api/customer/answers.py` — Boundary: Agent/RagCore | Validates: Spec §FR-INTR-004
-- [ ] T189 [P] [US1] Governance test in `ragcore/tests/governance/test_auto_path.py` asserting the `AUTO` reference operation reaches execution without any human gate and with treatment from the catalogue — Boundary: Governance | Validates: Stage 12 gate
-- [ ] T190 [P] [US1] Governance test in `ragcore/tests/governance/test_not_allowed_path.py` asserting the `NOT_ALLOWED` reference operation is refused at the gate, never surfaced to a human as an approvable proposal, and recorded as a denial in audit — Boundary: Governance | Validates: Spec §SC-SCOPE-002, §FR-AUDIT-003
-- [ ] T191 [P] [US1] Injection containment test in `ragcore/tests/integration/test_injection_containment.py` asserting injected instructions in retrieved content produce at most a proposal and never reach execution — Boundary: Agent/RagCore | Validates: Stage 12 gate
-- [ ] T192 [P] [US1] End-to-end golden path test in `ragcore/tests/e2e/test_auto_golden_path.py` asserting a verified outcome and a complete actor chain — Boundary: cross-cutting | Validates: Stage 12 gate
+- [X] T167 [P] [US1] Implement the session lifecycle use case in `ragcore/src/ragcore/application/sessions.py` including the triage gate — a work record commits only when a genuine problem is articulated — Boundary: Session | Validates: Spec §FR-SESS-003
+- [X] T168 [US1] Implement case creation at the triage gate in `ragcore/src/ragcore/application/cases.py`, anchoring each session to exactly one case — Boundary: Integration—ServiceNow | Validates: Spec §FR-EXT-002
+- [X] T169 [P] [US1] Implement hybrid retrieval in `ragcore/src/ragcore/retrieval/hybrid.py` combining a dense leg with a weighted, load-bearing sparse lexical leg — Boundary: Retrieval | Validates: Plan Stage 12
+- [X] T170 [P] [US1] Implement cost-gated rerank in `ragcore/src/ragcore/retrieval/rerank.py` reranking a small top-k above a minimum floor — Boundary: Retrieval | Validates: Plan Stage 12
+- [X] T171 [P] [US1] Implement confidence and margin in `ragcore/src/ragcore/retrieval/confidence.py` using absolute score plus top-1-minus-top-2, thresholds as global constants defined **only in this module**, with both comparisons `>=` so a value exactly equal to its threshold passes (plan Stage 12), plus unit tests asserting the boundary in both directions — Boundary: Retrieval | Validates: Spec §FR-AGENT-014, §FR-AGENT-015
+- [X] T172 [P] [US1] Implement the embedding path in `ragcore/src/ragcore/retrieval/embedding.py` embedding the symptom or description field only — Boundary: Retrieval | Validates: Plan Stage 9
+- [X] T173 [US1] Implement graph nodes for intake, classify and ground in `ragcore/src/ragcore/graph/nodes/` where classification never authorizes — Boundary: Agent/RagCore | Validates: Spec §FR-AGENT-002
+- [X] T174 [US1] Implement content safety in `ragcore/src/ragcore/integrations/model/safety.py` — inbound before the model, outbound before a response returns, every decision logged with its correlation identifier — Boundary: model egress | Validates: Spec §FR-AGENT-010, §FR-AGENT-013
+- [X] T175 [US1] Implement the scope guardrail in `ragcore/src/ragcore/graph/nodes/guardrail.py` declining non-ITSM requests and routing unanswered IT questions to vendor fallback — Boundary: Agent/RagCore | Validates: Spec §FR-SCOPE-009, §FR-SCOPE-010
+- [X] T176 [US1] Implement `POST /api/customer/v1/sessions` and `.../messages` with SSE streaming in `ragcore/src/ragcore/api/customer/sessions.py` — Boundary: Customer API | Validates: Contracts §customer-api
+- [X] T177 [US1] Implement the execution leg and verification stage in `ragcore/src/ragcore/execution/executor.py` recording `server_confirmed`, `client_attested` or `contradicted` — Boundary: Tool Execution | Validates: Spec §FR-AGENT-008
+- [X] T178 [US1] Implement audit writing in `ragcore/src/ragcore/application/audit.py` capturing requester, approver, executor, method, organisation and result — Boundary: Audit | Validates: Spec §FR-AUDIT-001
+- [X] T179 [US1] Implement the escalation path in `ragcore/src/ragcore/application/escalation.py` placing the request on the ServiceNow queue with transcript, candidates and reason, and telling the user **why** — Boundary: Integration—ServiceNow | Validates: Spec §FR-FALL-002, §FR-FALL-010
+- [X] T180 [P] [US1] Implement the Sessions read module in `dotnet/src/Modules/Synthia.Modules.Sessions/` over `vw_session_summary_v1`, `vw_session_message_v1`, `vw_session_step_v1` — Boundary: Session (read) | Validates: Contracts §read-views
+- [X] T181 [P] [US1] Implement customer view endpoints in `dotnet/src/Synthia.Api/Endpoints/CustomerViews.cs` with cursor pagination and whitelisted sort — Boundary: Customer API | Validates: Contracts §customer-api
+- [X] T182 [P] [US1] Implement the chat feature in `apps/web/projects/customer-features/chat/` consuming the SSE stream with accessible live-region announcement — Boundary: presentation | Validates: Spec §FR-SURF-011
+- [X] T183 [P] [US1] Implement the handoff notice in `apps/web/projects/customer-features/handoff/` stating plainly that a human will take the request — Boundary: presentation | Validates: Spec §FR-FALL-007
+- [X] T184 [US1] Implement `PUT` and `DELETE /api/customer/v1/messages/{messageId}/feedback` in `ragcore/src/ragcore/api/customer/feedback.py` — an idempotent replace of the signal, owner-scoped so only the session's own user may record against an agent-authored message — Boundary: Customer API | Validates: Spec §FR-SESS-009, §FR-SESS-010, §FR-SESS-011
+- [X] T185 [P] [US1] Implement the feedback read path in `dotnet/src/Modules/Synthia.Modules.Sessions/` over `vw_message_feedback_v1`, exposing aggregate figures retained independently of the underlying signals — Boundary: Session (read) | Validates: Spec §FR-SESS-012, §FR-SESS-014
+- [X] T186 [P] [US1] Implement the feedback control in `apps/web/projects/customer-features/chat/feedback/` as a keyboard-operable binary signal announced to assistive technology, with the current state visible — Boundary: presentation | Validates: Spec §FR-SESS-009, §SC-SESS-003
+- [X] T187 [P] [US1] Write a test in `ragcore/tests/governance/test_feedback_no_influence.py` asserting feedback reaches no authorization, governance treatment, retrieval scope or execution path — Boundary: Governance | Validates: Spec §FR-SESS-013
+- [X] T188 [P] [US4] Implement the clarification interrupt node and `POST .../answers` in `ragcore/src/ragcore/graph/nodes/clarification_interrupt.py` and `api/customer/answers.py` — Boundary: Agent/RagCore | Validates: Spec §FR-INTR-004
+- [X] T189 [P] [US1] Governance test in `ragcore/tests/governance/test_auto_path.py` asserting the `AUTO` reference operation reaches execution without any human gate and with treatment from the catalogue — Boundary: Governance | Validates: Stage 12 gate
+- [X] T190 [P] [US1] Governance test in `ragcore/tests/governance/test_not_allowed_path.py` asserting the `NOT_ALLOWED` reference operation is refused at the gate, never surfaced to a human as an approvable proposal, and recorded as a denial in audit — Boundary: Governance | Validates: Spec §SC-SCOPE-002, §FR-AUDIT-003
+- [X] T191 [P] [US1] Injection containment test in `ragcore/tests/integration/test_injection_containment.py` asserting injected instructions in retrieved content produce at most a proposal and never reach execution — Boundary: Agent/RagCore | Validates: Stage 12 gate
+- [X] T192 [P] [US1] End-to-end golden path test in `ragcore/tests/e2e/test_auto_golden_path.py` asserting a verified outcome and a complete actor chain — Boundary: cross-cutting | Validates: Stage 12 gate
+
+**Status 2026-09-17** — Phase 12 completed. Five notes on how the tasks landed, so the differences
+between what they say and what exists read as decisions rather than drift:
+
+1. **T171 moved two constants and split one comparison out.** The knowledge thresholds already
+   existed, in `governance/conditions.py`, which is one of the two places the plan says they must
+   not be. They now live in `retrieval/confidence.py` alone and governance imports them;
+   `test_confidence.py` asserts identity rather than equality, so two modules holding `0.45` fails
+   rather than passes. The comparison itself is now `clears_thresholds`, because the boundary the
+   plan demands be asserted **directly** is not reachable from a pair of scores: the difference of
+   two doubles near 0.85 is a multiple of that binade's ulp, and 0.08's stored value is not such a
+   multiple. Feeding in scores and hoping for equality would have asserted `>` or `<` at the mercy
+   of whichever values somebody picked — the exact accident the plan calls out. The extracted
+   predicate takes the thresholds themselves, and the answer is unambiguous.
+2. **T173's three nodes are two new modules and one addition.** `intake` and `classify` are their
+   own files; `ground` sits beside `retrieve` in `grounding.py`, because the two are one
+   question — what did we find, and is it enough — and separating them would have put a file
+   boundary through the middle of it. `classify` is deliberately redundant: the gate re-reads the
+   catalogue and re-assigns the treatment, so deleting the node would change what a user is told
+   and nothing about what is permitted. That redundancy is the point — a classification the gate
+   *trusted* would be an authorization written by an earlier, cheaper node.
+3. **T175's guardrail escalates on "unanswered", not on "ungrounded".** The first implementation
+   read the grounding assessment alone and broke the `AUTO` path: an operation acting on platform
+   state needs no retrieved knowledge, which is exactly what the gate's
+   `KnowledgeCondition.not_required` says. Requiring grounding for both would have withheld every
+   operational request on the grounds that no article described it.
+4. **T176 needed a run host, and T188 did not get one.** `graph/host.py` compiles the graph once at
+   startup and turns a turn into typed events that the transport renders as SSE — the endpoint
+   holds no orchestration policy, and the graph layer does not know what SSE is. `POST .../answers`
+   is implemented as far as it honestly can be and **returns 501**: the interrupt node, its payload
+   contract and the bounded answer exist and are tested, but wiring a resume against a graph the
+   process may not host would be a route that appears to work and silently drops the answer.
+5. **T184 exposed a live contract defect.** `SendMessageRequest` and `AnswerRequest` were declared
+   with `body` and `answer` in `platform-core`, while the emitted OpenAPI has said `content` since
+   Stage 6. No client could have discovered that without sending a turn and reading a 422. The
+   TypeScript now matches the artifact, which is the authority.
 
 **Checkpoint**: Golden path A validated — the machine works end to end without a human, and refuses what it must. `AUTO` and `NOT_ALLOWED` demonstrated.
 
@@ -564,7 +666,7 @@ decision rather than an omission.
 requiring a human decision is refused or routed to manual fallback — **never auto-approved**. T256a
 below asserts it.
 
-- [ ] T256a [P] Write a fail-closed test in `ragcore/tests/governance/test_unexercised_gate_refuses.py` asserting an operation classified `STAFF_APPROVAL` or `END_USER_APPROVAL` is refused or routed to manual fallback and **never auto-approved** while the workflow is unbuilt — Boundary: Governance | Validates: Spec §FR-DEMO-018, §SC-DEMO-014
+- [X] T256a [P] Write a fail-closed test in `ragcore/tests/governance/test_unexercised_gate_refuses.py` asserting an operation classified `STAFF_APPROVAL` or `END_USER_APPROVAL` is refused or routed to manual fallback and **never auto-approved** while the workflow is unbuilt — Boundary: Governance | Validates: Spec §FR-DEMO-018, §SC-DEMO-014
 
 ---
 

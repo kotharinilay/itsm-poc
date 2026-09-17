@@ -332,8 +332,9 @@ flowchart TB
 | **Customer plane** | Customer-owned identity and estate. Federated in, never managed | Customer Entra, customer M365, customer network, customer systems |
 | **Client tier** | End-user and staff interaction surfaces | Desktop app, Staff portal, Customer portal (post-Alpha) |
 | **Edge and gateway** | Public ingress, edge protection, token validation, API trust boundary | Front Door + WAF, Gateway (APIM) |
-| **Application services** | Business logic, session and work ownership, governance, approval, integration | Session, Governance, Approval, Tenant & Configuration, Integration adapters |
-| **AI plane** | Agent orchestration, retrieval, model access, tool execution, safety | RagCore, Retrieval Service, AI Gateway, model endpoints, Content Safety, Tool Execution |
+| **Application services** | Business logic, session and work ownership, governance, approval | Session, Governance, Approval, Tenant & Configuration |
+| **AI plane** | Agent orchestration, retrieval, model access, safety | RagCore, Retrieval Service, AI Gateway, model endpoints, Content Safety |
+| **Integration plane** | **All** capability execution and **all** traffic to external systems | **Integrations Service** (§21.6) — tool catalogue, connector registry, adapters, MCP client, credential resolution |
 | **Execution** | Tenant-bound execution of approved work | Workload; Desktop script execution |
 | **Platform data and records** | Durable state, retrieval store, cache, secrets, telemetry | PostgreSQL, Azure AI Search, Redis, Key Vault, App Insights / Log Analytics |
 | **External systems** | System of record and customer systems | ServiceNow, Microsoft Graph, MCP servers, customer systems |
@@ -356,12 +357,15 @@ flowchart TB
         GOV["Governance Service"]
         APPR["Approval Service"]
         TEN["Tenant & Configuration Service"]
-        RAG["RagCore<br/>orchestration"]
+        RAG["RagCore<br/>orchestration · reasoning<br/><b>no external egress</b>"]
         RET["Retrieval Service"]
-        TOOL["Tool Execution"]
-        SNAD["ServiceNow adapter"]
-        GRAD["M365 / Graph adapter"]
         HUB["SignalR hub component"]
+        subgraph INTEGSVC["Integrations Service — separate deployable (§21.6)"]
+            TOOL["Tool catalogue · connector registry<br/>entitlement + policy re-check<br/>execution · idempotency · normalization"]
+            SNAD["ServiceNow adapter"]
+            GRAD["M365 / Graph adapter"]
+            MCPC["MCP client<br/>OneLogin · Duo · further systems"]
+        end
     end
 
     PG[("PostgreSQL")]
@@ -375,6 +379,7 @@ flowchart TB
 
     SNOW["ServiceNow"]
     GRAPH["Microsoft Graph"]
+    MCPX["MCP servers<br/>OneLogin · Duo · customer systems"]
     MODELS["Azure OpenAI / Foundry"]
 
     DA -. authenticate .-> ENTRA
@@ -388,9 +393,7 @@ flowchart TB
     GW --> TEN
     GW --> RAG
     GW --> RET
-    GW --> TOOL
-    GW --> SNAD
-    GW --> GRAD
+    GW -->|"(1) tool catalogue<br/>(2) sync ServiceNow ops"| TOOL
     GW --> HUB
 
     SESS --> PG
@@ -405,13 +408,20 @@ flowchart TB
     AIGW --> MODELS
     AIGW --> REDIS
     TOOL --> KV
+    TOOL --> PG
     SNAD --> SNOW
     GRAD --> GRAPH
+    MCPC --> MCPX
     HUB --> SIG
     SESS --> SIG
 
     SB -. "opaque trigger" .-> RAG
     RAG -. "service calls via FD + GW" .-> FD
+
+    RAG -. "(3a) integration.execute<br/>jobId only" .-> SB
+    SB -. "(3a)" .-> TOOL
+    TOOL -. "(3b) integration.completed<br/>jobId only" .-> SB
+    SB -. "(3b)" .-> RAG
 
     SESS --> OBS
     RAG --> OBS
@@ -419,6 +429,8 @@ flowchart TB
 ```
 
 Internal application-to-application arrows in this diagram are logical. Every one of them physically traverses the public edge and Gateway (§13.4).
+
+**RagCore reaches no external system.** Every arrow leaving the platform for ServiceNow, Microsoft Graph or an MCP server originates inside the Integrations Service, and Key Vault holds connector credentials for that service alone (§21.6). The two dotted paths marked `(3a)` and `(3b)` are the asynchronous execution seam: each message carries an opaque `jobId` and correlation context and **nothing else** (§27.2).
 
 ### 9.3 Deployment profile
 
@@ -429,6 +441,7 @@ Carried from the Identity Plane §18 and the Overall Architecture §12, reconcil
 | Public edge | Azure Front Door + WAF | Sole public ingress; WAF and rate limiting |
 | Gateway | Azure API Management, VNet-integrated | Token validation and API trust boundary |
 | Application runtime | Azure Container Apps, internal environment | No public application ingress |
+| **Integrations Service** | **Its own Container App, its own managed identity, internal ingress** | **Separate deployable (§21.6). It alone holds the Key Vault role for connector credentials and it alone has an egress path to external systems** |
 | Service-to-service | Front Door → Gateway → target, via approved outbound/NAT | No peer-to-peer application bypass |
 | Database | PostgreSQL Flexible Server, private access | Durable work, tenant mapping, audit |
 | Retrieval | Azure AI Search, private endpoint | IDX-KB and IDX-Incident |
@@ -783,6 +796,8 @@ When Service A needs Service B to act under the same human principal, it forward
 
 **This rule governs calls between platform services.** Calls to Azure data and model services the platform consumes — PostgreSQL, AI Search, Redis, Key Vault, Service Bus, SignalR, model endpoints — are data-plane dependencies over private endpoints and are not application API calls in this sense.
 
+**The RagCore → Integrations Service path is governed by this rule and is its most load-bearing instance** (§21.6.5). Both synchronous paths traverse Front Door, the WAF and the Gateway; the Gateway derives identity for the hop; the Integrations Service does not trust an identity header RagCore supplied. A direct route between the two MUST NOT exist, and a request carrying a well-formed but self-supplied identity contract is the shape a bypass actually takes.
+
 **Accepted consequence:** the hop count on the RagCore → Retrieval → adapter path increases materially. This is a named constraint against the latency objective (§34.2).
 
 ### 13.5 The AI Gateway
@@ -807,7 +822,9 @@ It is answered at the Gateway with a fixed success response, makes no backend ca
 
 ### 14.1 Bounded contexts
 
-Eleven contexts. Splitting further is a later decision; these are the business responsibility boundaries, not a technical partitioning.
+Eleven contexts. These are the business responsibility boundaries, not a technical partitioning.
+
+**Three of them deploy together as the Integrations Service** — `Tool Execution`, `Integration — ServiceNow` and `Integration — Microsoft Graph` (§21.6, ADR-0007). Their responsibilities below are unchanged by that; only their runtime placement is. A context becomes a separately deployed service **only** by explicit architectural decision recorded as an ADR, never by implementation convenience.
 
 | Context | Owns |
 |---|---|
@@ -1159,11 +1176,13 @@ RagCore runtime
   └── executing approved work     → Workload managed identity, Workload API audience
 ```
 
-After an approval or consent resolves, the graph resumes and the execution leg authenticates as the Workload against the Workload API, which is served by Tool Execution and the Work context.
+After an approval or consent resolves, the graph resumes and the execution leg authenticates as the Workload against the Workload API, served by the Work context. The Workload verifies and claims the work, then **hands the effect to the Integrations Service** over the asynchronous seam of §21.6.5; it performs no external call itself.
 
-**Named consequence, accepted.** One runtime holds two credential classes. A compromise of the RagCore runtime yields both a delegated context and the Workload's app-only credential. The controls that remain are: database-enforced immutability of authority fields (§15.6), the claim boundary, tenant resolution from durable state only, and the audit chain. The control that is *not* present is runtime separation of credential classes.
+**Named consequence, partially discharged.** One runtime still holds two *platform* credential classes: a delegated context and the Workload's app-only credential. A compromise of the RagCore runtime yields both. The controls that remain are: database-enforced immutability of authority fields (§15.6), the claim boundary, tenant resolution from durable state only, and the audit chain.
 
-This is recorded as a security risk in §35.2 and as a GA research item in §40 (OQ-02). The recommended target structure remains split runtimes of the same orchestrator — a user-facing instance on delegated context and a resume/execution instance holding the Workload identity, sharing the checkpointer and work store — which satisfies the same graph-resume requirement without co-locating credential classes.
+**What the Integrations Service changes.** The highest-value credentials — per-organisation connector credentials for ServiceNow, Microsoft Graph and every third-party system — **no longer resolve in the RagCore runtime at all**. That service holds the Key Vault role; RagCore's identity does not (§21.6.3, §21.4). A compromise of the orchestrator therefore no longer yields customer-system credentials, which was the most damaging part of the original co-location.
+
+What remains outstanding for OQ-02 is the narrower question of separating the delegated and Workload *platform* credential classes within RagCore. The recommended structure is unchanged: split runtimes of the same orchestrator — a user-facing instance on delegated context and a resume instance holding the Workload identity, sharing the checkpointer and work store.
 
 ### 18.3 Workload data access
 
@@ -1497,16 +1516,25 @@ Iteration is bounded: maximum clarify iterations, maximum verify loops, maximum 
 ### 21.1 Layering
 
 ```text
-Agent proposes a tool-bound operation
-      ↓
-Governance:      operation catalogue → execution treatment
-      ↓
-Tool Execution:  binding resolution → tenant entitlement → credential reference
-      ↓
-Adapter or MCP:  external contract, retries, rate limits, idempotency
-      ↓
-External system
+                 ┌─ RagCore ──────────────────────────────────────────────┐
+Agent proposes a tool-bound operation                                     │
+      ↓                                                                   │
+Governance:      operation catalogue → execution treatment                │
+      ↓                                                                   │
+Work:            authority record → atomic claim → durable job record     │
+                 └──────────────────────────────────────────────────────┬─┘
+      ↓  APIM (synchronous)  ·  Service Bus (asynchronous)               │
+                 ┌─ Integrations Service (§21.6) ───────────────────────┴─┐
+Tool Execution:  re-verify entitlement, registration, version, window     │
+                 → connector binding → credential reference               │
+      ↓                                                                   │
+Adapter or MCP:  external contract, retries, rate limits, idempotency     │
+                 └──────────────────────────────────────────────────────┬─┘
+      ↓                                                                   │
+External system                                                           ┘
 ```
+
+The layering is unchanged from the original design; **the deployment boundary now falls between Work and Tool Execution.** Everything above it decides; everything below it executes.
 
 ### 21.2 Tools
 
@@ -1534,9 +1562,13 @@ External systems are reached only through dedicated adapters that encapsulate th
 
 Rate limits, retries, backoff, idempotency keys and dead-letter handling live **inside** the adapter, not in callers. No other component calls ServiceNow or Graph directly.
 
+**Every adapter is hosted by the Integrations Service** (§21.6). The adapter set is open — OneLogin, Duo and further third-party systems are reached as MCP servers through the same service (ADR-0005) — but ServiceNow and Microsoft Graph remain the only two with dedicated bounded contexts. **RagCore hosts no adapter and reaches no external system.**
+
 ### 21.4 Credential resolution
 
 Credentials are resolved from trusted tenant context only, through Key Vault, using managed identity. Decided (§39, Q7): **Key Vault is the sole secret source.** No second credential store participates in the runtime path.
+
+**Resolution happens inside the Integrations Service and nowhere else** (§21.6.3). That service's managed identity holds the Key Vault role for connector credentials; **RagCore's identity does not hold it**, so no connector credential is reachable from the orchestrator's runtime even in principle. This is the control that §35.2 previously recorded as absent.
 
 | Credential class | Scope |
 |---|---|
@@ -1553,6 +1585,188 @@ Egress is constrained and auditable. A recipient, endpoint or destination is **n
 
 ---
 
+### 21.6 The Integrations Service
+
+The `Tool Execution`, `Integration — ServiceNow` and `Integration — Microsoft Graph` contexts (§14.1) deploy together as **one separate service, parallel to RagCore**. It is the platform's only path to any external system.
+
+This is a deployment decision recorded in ADR-0007, taken under the rule in §14.1 that a bounded context becomes a separately deployed service only by explicit architectural decision. The contexts themselves and their responsibilities are unchanged; what changes is that they no longer run inside the orchestrator.
+
+#### 21.6.1 Responsibilities
+
+The Integrations Service owns, exclusively:
+
+| Responsibility | Note |
+|---|---|
+| **Tool catalogue** | The tenant-resolved capability set a caller may use |
+| **Connector registry** | How a capability executes: connector, endpoint, signing profile, idempotency policy |
+| **Tenant tool configuration** | Per-organisation entitlement — which capabilities an organisation may use |
+| **Access checks** | Entitlement and registration, re-evaluated at execution time |
+| **Policy checks at execution** | Every authority *fact* re-verified before any effect (§21.6.6) |
+| **Operation execution** | The invocation itself, against the stored action and stored target |
+| **MCP client** | The client half of every MCP conversation |
+| **MCP connector and server integration** | Discovery, contract validation, transport |
+| **External API calls** | ServiceNow, Microsoft Graph, OneLogin, Duo and every further system |
+| **Credential lookup** | Per organisation and per system, from Key Vault via managed identity |
+| **Result normalization** | Provider output parsed into platform types at the boundary |
+| **Idempotency — external** | Boundary 2 (§29.4): the derived key carried to the external system |
+| **Execution records** | The durable record of what was attempted externally |
+| **Integration telemetry, audit and trace** | Emitted for every invocation, correlated to the platform journey |
+
+#### 21.6.2 Non-responsibilities
+
+The Integrations Service does **not** own, and MUST NOT implement:
+
+| Not owned | Owner |
+|---|---|
+| User conversation | Session (§32.1) |
+| Reasoning and graph orchestration | RagCore (§32.5) |
+| **Tool-selection reasoning** | RagCore. The service executes the capability it is instructed to execute and chooses nothing |
+| Approval waiting and the approval UI | Approval (§32.4), Staff portal |
+| Graph interrupt and resume | RagCore (§32.5) |
+| **Execution-treatment assignment** | Governance (§32.3). Treatment is deterministic governance's decision and MUST NOT be re-derived here |
+| **Role-set intersection** | Governance and Approval. Roles are a request-time, Gateway-derived concept |
+| Final verification of the issue, and the conclusion drawn from it | RagCore (§21.6.9) |
+| The decision to close a case | RagCore and Session |
+| Idempotency — platform (the atomic claim) | Work (§32.2). The claim belongs with the authority record |
+
+**The service executes; it never decides.** This is §Principle-III's separation applied at a deployment boundary: it repeats checks so that a compromised or mistaken caller cannot cause an unauthorized effect, but it never *originates* an authorization.
+
+#### 21.6.3 Deployment boundary
+
+| Property | Rule |
+|---|---|
+| Runtime | Its own Container App, internal ingress, its own managed identity |
+| Egress | **The only component with a network path to ServiceNow, Microsoft Graph or an MCP server** |
+| Secrets | **The only component holding the Key Vault role for connector credentials.** RagCore's identity does not hold it |
+| Database | The shared PostgreSQL instance. It owns the `integration` schema and reads platform state through published views only |
+| Scaling and failure | Independent of RagCore. An Integrations outage suspends execution; it does not stop conversation (§21.6.11) |
+
+#### 21.6.4 Trust boundary
+
+**The Integrations Service is not a trust boundary, and it is not an identity boundary. The Gateway remains both** (§13.1).
+
+| Rule | |
+|---|---|
+| Token parsing | The service MUST NOT parse an access token. It consumes only the closed `X-Idp-*` contract APIM emits (§11.5) |
+| Caller identity | It MUST NOT trust an identity header supplied by RagCore. The Gateway re-establishes trusted identity on the hop (§13.4) |
+| Reachability | No direct path from RagCore may exist — not pod to pod, not container to container, not by internal address |
+| Tenant | **Never taken from a request field, a message payload, a token's `tid`, model output or tool output.** Resolved only as §21.6.7 describes |
+| Authority | It re-verifies authority; it never accepts an asserted one. A caller stating "this was approved" establishes nothing |
+
+#### 21.6.5 Communication paths
+
+Exactly three, and no other path exists.
+
+**(1) Tool catalogue — synchronous, RagCore → APIM → Integrations**
+
+```text
+RagCore  →  Front Door + WAF  →  APIM  →  Integrations Service
+           app-only workload credential, distinct app role
+           carries an opaque sessionId or workItemId — never a tenant
+```
+
+**(2) Synchronous ServiceNow operations — RagCore → APIM → Integrations → ServiceNow**
+
+```text
+RagCore  →  Front Door + WAF  →  APIM  →  Integrations Service  →  ServiceNow
+```
+
+Used where the platform must know the outcome before proceeding — case creation is the governing example, because a session that cannot commit a case cannot enter Resolution Mode (§22.5).
+
+**(3) Normal tool execution — asynchronous, both directions over Service Bus**
+
+```text
+RagCore  →  integration_job row committed  →  outbox  →  Service Bus  →  Integrations
+                                                { jobId, correlationId, kind }
+
+Integrations  →  result written to durable state  →  Service Bus  →  RagCore
+                                                { jobId, correlationId, kind }
+```
+
+**The durable job record is the mechanism, and it is the same one §18.5 already requires of execution triggers.** RagCore selects the capability and its parameters and writes them to the job record in the same transaction as the state change. The message carries only the opaque identifier. Integrations reads the instruction from the record, never from the message.
+
+```text
+The message causes work to happen.
+The durable job record provides the instruction, the authority and the tenant context.
+```
+
+A service that executed what a message told it to would turn an at-least-once redelivery, or a malformed publish, into an ungoverned external call.
+
+#### 21.6.6 Execution-time checks
+
+Every check below is performed by the Integrations Service **at execution time, against durable state**, even where the caller has already retrieved the catalogue and even where governance has already gated the operation. Prior retrieval is not standing permission.
+
+| Check | Failing behaviour |
+|---|---|
+| Organisation is `active` | No execution (§29.5) |
+| Work is authorized, not cancelled, within its execution window | No execution |
+| Organisation is entitled to the capability | Refused, distinctly from unreachable (§FR-EXT-022) |
+| Capability is registered in the catalogue | Refused — discovery is not entitlement (§21.2) |
+| Catalogue version matches what was authorized | Refused — the approval bound a version |
+| Capability is reached past the control gate | Refused — an `action` is never callable from the agent loop |
+
+**What it does not re-derive:** the execution treatment, and the role-set intersection. Those are deterministic governance's decisions (§32.3) and re-deriving them would create a second policy authority that can disagree with the first.
+
+The division is: **Integrations re-verifies every fact. Governance and Approval remain the sole authority for every decision.**
+
+#### 21.6.7 Tenant propagation
+
+**The tenant is never propagated. It is re-derived at every boundary.**
+
+| Path | Source |
+|---|---|
+| Asynchronous execution | The durable job record |
+| Synchronous call | The durable object the opaque identifier names — the chat session or the work item |
+| Never | A request parameter, a message field, the caller's token `tid`, model output, tool output |
+
+A workload-audience token's `tid` is the Operator tenant and is **never** the customer tenant (§11.2). The legitimate provenances of a tenant binding are exactly those of §11.6; the Integrations Service introduces no new one.
+
+Credential selection follows the tenant and never precedes it: organisation → tenant mapping → external system identifier → credential reference → Key Vault (§18.4, §21.4).
+
+#### 21.6.8 Idempotency
+
+The two boundaries of §29.4 are **split across the two services**, and both remain required.
+
+| Boundary | Owner | Mechanism |
+|---|---|---|
+| **1 — platform** | **RagCore (Work)** | The atomic claim on the work item. Protects against duplicate delivery and concurrent executors |
+| **2 — external** | **Integrations Service** | The derived idempotency key carried to the external system. Protects against a duplicate external effect |
+
+The key is **derived, never random** — a deterministic function of the organisation, the work item and the operation — so a redelivered command produces the same key and therefore the same external effect exactly once. Integrations derives it **after** recovering the tenant from durable state, never from the message.
+
+Neither boundary substitutes for the other, and the split does not weaken either: the claim still protects the platform, the key still protects the far side.
+
+#### 21.6.9 Execution records, telemetry and audit
+
+| Concern | Rule |
+|---|---|
+| **Execution record** | The Integrations Service owns the durable record of what was attempted externally — connector, endpoint, derived key, external reference, normalized outcome — in its own schema |
+| **Platform conclusion** | The `operation` record remains the platform's conclusion and remains RagCore-owned (§33). The two are distinct: *what was attempted* and *what the platform concluded* are different facts |
+| **Audit** | **One audit store, unchanged** (§28.1). The actor chain records the Integrations principal as the executing principal, with the execution method, alongside the requester and the approver |
+| **Telemetry** | Emitted per invocation. It MUST NOT carry credentials, tokens, secret material or cross-tenant information, and it MUST NOT answer an audit question |
+| **Correlation** | W3C Trace Context propagates across the APIM hop and across Service Bus. One correlation identifier spans the whole journey, on every log, span, message, execution record and audit record. **A custom propagation header MUST NOT replace it** (§28) |
+
+**Verification is split deliberately.** The verification *call* is an external call and belongs to the Integrations Service, which reports what it observed as `server_confirmed`, `client_attested` or `contradicted`. The *conclusion* — whether the platform may tell a user the issue is resolved — is RagCore's. A service that both acted and judged its own success would be reporting an attestation as a confirmation.
+
+#### 21.6.10 Result normalization
+
+Provider output is **data** (§FR-EXT-017). It is size-checked and contract-checked at the boundary before it leaves the Integrations Service, and it MUST NOT become an instruction, a destination, an identity, a tenant or a source of authority. Output that is malformed, oversized or off-contract is rejected at the boundary rather than passed inward.
+
+#### 21.6.11 Failure and retry responsibilities
+
+| Failure | Responsibility |
+|---|---|
+| Transient external failure on a **read** | Integrations. Retried with backoff inside the adapter |
+| **Side-effecting operation** | **Not automatically retried, by anyone.** A failed authorized action requires fresh human authorization (§29.3). Adapter-internal retry is permitted only where the external contract is idempotent and the key is carried |
+| External system unreachable | Integrations reports *temporarily unavailable*, distinctly from *not entitled*. Neither is presented to the user as a failure of their request |
+| ServiceNow outage | Integrations queues write-backs and replays them idempotently (§22.5) |
+| Duplicate command delivery | Absorbed by the claim (RagCore) and by the derived key (Integrations) |
+| Command dead-lettered | **Not automatically replayed.** Dead-lettered work a human approved is a governance failure and surfaces as approved-but-not-executed; recovery is fresh authorization |
+| Result message lost | The work item remains authorized until its window expires, then requires fresh authorization. Stalled work surfaces operationally |
+| Integrations Service unavailable | Execution suspends; conversation, retrieval and guidance continue. Capabilities requiring an effect fall back to manual resolution or escalation, explicitly and visibly |
+
+---
+
 ## 22. ServiceNow Integration
 
 ### 22.1 Role
@@ -1560,6 +1774,8 @@ Egress is constrained and auditable. A recipient, endpoint or destination is **n
 ServiceNow is the **enterprise ITSM system of record**. The platform complements the ITSM queue rather than replacing it. PostgreSQL holds platform operational data; Azure AI Search holds derived retrieval data; ServiceNow holds the authoritative case.
 
 ServiceNow is **not** the workflow authority for platform approvals (§17.1).
+
+**All ServiceNow traffic is owned by the Integrations Service** (§21.6). Case creation, work notes, the approval mirror, state transitions, outcomes and escalation all originate there. **RagCore never calls ServiceNow.** Where the platform must know the outcome before proceeding — case creation being the governing example, since a session that cannot commit a case cannot enter Resolution Mode (§22.5) — the call is the synchronous path of §21.6.5(2); otherwise it is the asynchronous path of §21.6.5(3).
 
 ### 22.2 Topology
 
@@ -1606,6 +1822,8 @@ Write-backs are idempotent so retries cannot double-post. If ServiceNow is unava
 The Microsoft Graph adapter owns all Graph and directory interaction for customer tenants: directory and productivity context reads, and directory operations such as credential resets.
 
 The source material was inconsistent here — one section scoped the adapter to reads, another to all directory interaction and manipulations. Reconciled: **the adapter owns both reads and writes.** Writes are governed operations; scoping them out of the adapter would create a second Graph path, which is forbidden.
+
+**The adapter is hosted by the Integrations Service** (§21.6), which owns all Graph traffic and the per-organisation Graph credentials. **RagCore never calls Microsoft Graph.**
 
 ### 23.2 Governance
 
@@ -1757,24 +1975,30 @@ Notification delivery is best-effort. PostgreSQL is the source of truth for anyt
 | Use | Mechanism |
 |---|---|
 | Execution trigger after authorization | Service Bus message, application event, or service-to-service call |
+| **Tool execution command — RagCore → Integrations** | **Service Bus, its own queue** (§21.6.5) |
+| **Execution result — Integrations → RagCore** | **Service Bus, its own queue** |
 | Ingestion orchestration | Scheduled job with Service Bus eventing |
 | Deferred and background work | Service Bus |
+
+The execution command and the execution result use **queues of their own**, separate from the resume trigger. Each lifecycle has its own expiry and dead-letter semantics, and mixing them in one queue would make dead-letter triage ambiguous.
 
 ### 27.2 The trigger contract
 
 **Every trigger is untrusted.** A trigger message carries:
 
 ```text
-opaque work identifier
+one opaque identifier — the work item, or the integration job
 correlation identifiers
 ```
 
-It does **not** carry, and may not carry, tenant, requester, role, action, target, approval state or any other authority-bearing value. A consumer that reads authority from a message is defective regardless of where the message came from.
+It does **not** carry, and may not carry, tenant, requester, role, action, target, parameters, approval state, command content, credentials or any other authority-bearing value. A consumer that reads authority from a message is defective regardless of where the message came from.
 
 ```text
 The event causes work to happen.
-The durable work record provides the authority and the tenant context.
+The durable record provides the instruction, the authority and the tenant context.
 ```
+
+**The integration job identifier is an opaque platform identifier of the same class as the work identifier.** It names a durable row; it carries no tenant, no actor, no action and no authority, and it grants nothing. The Integrations Service reads its instruction from the row that identifier names, never from the message that carried it (§21.6.5).
 
 ### 27.3 Delivery semantics
 
@@ -1801,6 +2025,8 @@ Conceptual, for the service-design phase. Each carries the opaque work or sessio
 | `approval.decided` | Approval | Agent trigger, Realtime, Integration, Audit |
 | `consent.decided` | Approval | Agent trigger, Realtime, Audit |
 | `work.authorized` | Work | Execution trigger |
+| `integration.execute` | Agent — RagCore | **Integrations Service** |
+| `integration.completed` / `integration.failed` | **Integrations Service** | Agent — RagCore |
 | `work.executed` / `work.failed` | Execution | Agent, Realtime, Integration, Audit |
 | `session.state_changed` | Session | Realtime, Integration, Audit |
 | `tenant.status_changed` | Tenant & Configuration | Realtime, all services' cache invalidation |
@@ -1909,6 +2135,8 @@ Because the graph is durably checkpointed, an auditor can reconstruct what the a
 | Model provider unavailable | The AI Gateway fails over to an alternate binding. With none available, assist degrades to retrieval-only or a graceful message |
 | ServiceNow unavailable | Write-backs queue idempotently and replay. Case creation failure prevents entry to Resolution Mode |
 | Adapter or tool failure | The run stops, the failure is recorded on the case, the session escalates. **No blind retry of a side-effecting operation** |
+| **Integrations Service unavailable** | Execution suspends; conversation, retrieval and guidance continue. A capability requiring an external effect falls back to manual resolution or escalation, explicitly and visibly. Commands remain queued within their window and dead-letter rather than executing once it passes |
+| **Execution result lost** | The work item remains authorized until its window expires, then requires fresh authorization. The effect may already have occurred, so recovery reads real state rather than re-executing |
 | Desktop execution failure | Result posted back with exit status; run stops; session escalates |
 | Trigger lost | The work item remains authorized until its window expires, then requires fresh authorization. Operational visibility surfaces stalled work |
 | Duplicate trigger | Absorbed by the atomic claim |
@@ -2069,33 +2297,52 @@ sequenceDiagram
     participant R as RagCore
     participant RS as Retrieval
     participant GV as Governance
-    participant T as Tool Execution
+    participant I as Integrations Service
+    participant SB as Service Bus
     participant SN as ServiceNow
 
     U->>D: "I can't log into Concur"
     D->>G: Customer API, bearer token
     G->>S: trusted identity context
     S->>S: triage gate fires
-    S->>SN: create case (AUTO)
+    S->>G: sync — create case (AUTO), opaque sessionId
+    G->>I: workload audience, app-only
+    I->>I: resolve organisation from the session record
+    I->>SN: create case, tenant-stamped
+    SN-->>I: case reference
+    I-->>S: case reference
     S->>R: start session graph
     R->>RS: probe retrieval, tid-filtered
     RS-->>R: candidates, confidence, margin
+    R->>G: sync — read tool catalogue, opaque sessionId
+    G->>I: workload audience, app-only
+    I-->>R: capabilities entitled to this organisation
     R->>R: assess, propose operation
     R->>GV: evaluate control gate
     GV-->>R: treatment = AUTO
-    R->>T: invoke read/action tool
-    T->>T: resolve binding, entitlement, credential
-    T-->>R: result
-    R->>R: verify real state
+    R->>R: write integration job — capability, version, parameters
+    R->>SB: integration.execute { jobId, correlationId }
+    SB->>I: deliver
+    I->>I: read the job; recover organisation; re-verify entitlement,<br/>registration, version, window
+    I->>I: resolve credential from Key Vault
+    I->>I: invoke with derived idempotency key; normalize result
+    I->>I: write execution record; update job result fields
+    I->>SB: integration.completed { jobId, correlationId }
+    SB->>R: deliver
+    R->>R: read the result; verify real state; conclude
     R-->>S: resolution
     S-->>D: streamed steps and answer
-    S->>SN: work notes, state
+    S->>G: work notes, state
+    G->>I: → ServiceNow
 ```
 
 ```text
 Authorization:  end_user, own tenant, own records
-Data:           session, work item, operations in PostgreSQL; case in ServiceNow
-Async:          none
+Data:           session, work item, operations, integration job in PostgreSQL `platform`;
+                execution record in `integration`; case in ServiceNow
+Sync:           catalogue read and case creation — RagCore → APIM → Integrations
+Async:          tool execution — command and result, each carrying jobId and correlation only
+External:       every external call originates in the Integrations Service
 Audit:          operation with gate decision, executed_by, target, result
 ```
 
@@ -2111,7 +2358,8 @@ sequenceDiagram
     actor ST as Staff
     participant G as Edge + Gateway
     participant W as Workload
-    participant T as Tool Execution
+    participant SB as Service Bus
+    participant I as Integrations Service
     participant X as External system
 
     R->>GV: evaluate control gate
@@ -2130,19 +2378,30 @@ sequenceDiagram
     A->>R: trigger — opaque identifier only
     R->>W: execution leg as Workload, app-only, Workload API
     W->>W: load work item; verify approved, active, not cancelled, not expired
-    W->>W: atomic claim
-    W->>T: execute stored action against stored target
-    T->>X: invoke with idempotency key
-    X-->>T: result
-    W->>W: record outcome, executed_by = Workload, on_behalf_of = requester
-    R->>R: verify real state
+    W->>W: atomic claim — idempotency boundary 1
+    W->>W: write integration job — stored action, stored target, parameters
+    W->>SB: integration.execute { jobId, correlationId }
+    SB->>I: deliver
+    I->>I: read the job; recover organisation from it
+    I->>I: re-verify organisation active, entitlement, registration,<br/>catalogue version, execution window
+    I->>I: resolve per-organisation credential from Key Vault
+    I->>X: invoke with derived idempotency key — boundary 2
+    X-->>I: result
+    I->>I: normalize; write execution record; update job result fields
+    I->>SB: integration.completed { jobId, correlationId }
+    SB->>W: deliver
+    W->>W: record outcome, executed_by = Integrations principal,<br/>on_behalf_of = requester
+    R->>R: verify real state; draw the conclusion
 ```
 
 ```text
-Authorization:  staff technician for the verdict; Workload app-only for execution;
-                tenant from the immutable work item throughout
-Async:          trigger carries the opaque identifier and correlation only
-External:       adapter or tool, credential from trusted tenant context
+Authorization:  staff technician for the verdict; Workload app-only for the claim;
+                Integrations app-only for the effect;
+                tenant from durable state at every boundary, never propagated
+Async:          every message carries an opaque identifier and correlation only
+External:       the Integrations Service alone; credential from trusted tenant context
+Idempotency:    boundary 1 — the claim, in RagCore; boundary 2 — the derived key,
+                in the Integrations Service. Both required
 Audit:          requested_by → approved_by → executed_by, execution method,
                 downstream principal, target tenant, result
 ```
@@ -2192,6 +2451,8 @@ Service A / Workload
 ```
 
 There is no direct application call from A to B. The Gateway derives identity again for the next hop. B does not trust identity headers supplied by A.
+
+**RagCore → Integrations Service is the governing instance** (§21.6.5). The synchronous catalogue read and the synchronous system-of-record operations both take this path, on the workload audience with an app-only credential and a distinct app role. The call carries an opaque identifier and never a tenant; the Integrations Service resolves the organisation from the durable object that identifier names.
 
 ### 31.8 Retrieval
 
@@ -2377,16 +2638,16 @@ Business responsibility boundaries, not a technical partitioning. A later servic
 
 | | |
 |---|---|
-| **Responsibility** | Tool binding resolution, tenant entitlement, credential resolution, invocation, idempotency key management |
-| **Inputs** | Authorized operation, tool binding, work item tenant |
-| **Outputs** | Tool result |
-| **Owns** | Tool invocation record |
-| **Exposes** | Workload API: execute operation |
-| **Emits** | Execution telemetry |
-| **Consumes** | None |
+| **Responsibility** | Tool catalogue, connector registry, tenant entitlement, access and policy re-checks, credential resolution, invocation, result normalization, idempotency key management, execution records |
+| **Inputs** | The durable integration job — authorized operation, connector binding, organisation |
+| **Outputs** | Normalized tool result; outcome classification |
+| **Owns** | Tool catalogue, connector registry, tenant tool configuration, **execution record** |
+| **Exposes** | Workload API: read tool catalogue; synchronous system-of-record operations. **Execution itself is not exposed as an endpoint** — it is reached only as a Service Bus command (§21.6.5) |
+| **Emits** | `integration.completed`, `integration.failed`; execution telemetry and audit |
+| **Consumes** | `integration.execute` |
 | **External** | Adapters, MCP servers, native connectors, Key Vault |
-| **AuthZ boundary** | App-only Workload credential class. **Tenant and target read from the work item only** |
-| **Nature** | Synchronous within an execution |
+| **AuthZ boundary** | App-only workload credential class with its own app role. **Tenant, action and target read from durable state only** — never from a message, a parameter or a token `tid` |
+| **Nature** | **Deployed as the Integrations Service (§21.6).** Asynchronous for execution; synchronous for catalogue and system-of-record operations |
 
 ### 32.8 Integration — ServiceNow
 
@@ -2394,10 +2655,10 @@ Business responsibility boundaries, not a technical partitioning. A later servic
 |---|---|
 | **Responsibility** | All ServiceNow traffic; tenant stamping; idempotent write-back; notification routing |
 | **Owns** | External contract, retry, backoff, idempotency, dead-letter |
-| **Exposes** | Internal: create case, journal, transition, mirror approval, escalate |
+| **Exposes** | Workload API, through the Integrations Service: create case, journal, transition, mirror approval, escalate |
 | **External** | ServiceNow shared instance |
 | **AuthZ boundary** | Platform-level credential; tenant discriminator from trusted context |
-| **Nature** | Synchronous with queued replay on failure |
+| **Nature** | **Hosted by the Integrations Service (§21.6).** Synchronous with queued replay on failure. **No other component calls ServiceNow** |
 
 ### 32.9 Integration — Microsoft Graph
 
@@ -2405,10 +2666,10 @@ Business responsibility boundaries, not a technical partitioning. A later servic
 |---|---|
 | **Responsibility** | All Graph and directory traffic, reads and writes |
 | **Owns** | External contract, token caching, throttling compliance, retry |
-| **Exposes** | Internal: catalogued directory and productivity operations |
+| **Exposes** | Catalogued directory and productivity operations, through the Integrations Service |
 | **External** | Microsoft Graph |
 | **AuthZ boundary** | Per-tenant credential resolved from trusted tenant context |
-| **Nature** | Synchronous |
+| **Nature** | **Hosted by the Integrations Service (§21.6).** Synchronous. **No other component calls Graph** |
 
 ### 32.10 Tenant and Configuration
 
@@ -2465,9 +2726,11 @@ No schema, columns, indexes, keys or ORM concerns. This exists so a later databa
 | **Consent record** | End-user authorization of a self-scoped operation | Approval | Per tenant + user | PostgreSQL | Created once, immutable | Work, Audit |
 | **Operation catalogue entry** | What an operation is and how it is treated | Governance | Global, tenant-overridable by entitlement | PostgreSQL | Versioned config | Governance, Agent, Staff portal |
 | **Action definition** | Governance contract for an action: enabled, risk tier, approval requirement, parameter schema | Governance | Global with tenant scoping | PostgreSQL | Versioned config | Agent, Governance |
-| **Action-to-tool binding** | How an action executes: tool, kind, endpoint, signing profile, idempotency policy | Governance | Per tenant | PostgreSQL | Versioned config | Tool Execution |
+| **Connector binding** | How an action executes: connector, endpoint, signing profile, idempotency policy | **Tool Execution** | Per tenant | PostgreSQL, `integration` schema | Versioned config | Tool Execution |
 | **Script catalogue entry** | A predefined executable unit, its commands, descriptions, parameters, risk tier | Governance | Global with tenant entitlement | PostgreSQL | Versioned config | Governance, Approval payload, Desktop execution |
-| **Tool entitlement** | Which tools a tenant may use | Tenant & Configuration | Per tenant | PostgreSQL | Config | Tool Execution, Agent |
+| **Tool entitlement** | Which tools a tenant may use | Tenant & Configuration | Per tenant | PostgreSQL | Config | Tool Execution (read), Agent |
+| **Integration job** | **The durable instruction handed to the Integrations Service: organisation, capability, version, parameters, and the result written back against it** | Agent — RagCore | Per tenant | PostgreSQL | Created → dispatched → completed \| failed | Tool Execution (reads the instruction; writes **only** the result fields) |
+| **Execution record** | What was attempted externally: connector, endpoint, derived key, external reference, normalized outcome | **Tool Execution** | Per tenant | PostgreSQL, `integration` schema | Append-only | Tool Execution, Audit |
 | **Graph checkpoint** | Agent working state for durable suspend and resume | Agent | Per tenant + session | PostgreSQL | Created → superseded → retained per policy | Agent only |
 | **Long-term memory record** | User profile and prior outcomes; **advisory** | Agent | Per tenant + user | PostgreSQL | Written on outcome, idempotent | Agent only |
 | **Case** | The ITSM record | Integration — ServiceNow | Per tenant, logical within a shared instance | **ServiceNow** | Created → updated → resolved/closed | Platform via adapter; Synoptek ITSM users |
@@ -2479,7 +2742,7 @@ No schema, columns, indexes, keys or ORM concerns. This exists so a later databa
 
 ### 33.1 Source-of-truth rules
 
-1. **PostgreSQL is authoritative for all platform state**, including the authority record, approvals and audit.
+1. **PostgreSQL is authoritative for all platform state**, including the authority record, approvals and audit. One database, two schemas: `platform`, owned by RagCore, and `integration`, owned by the Integrations Service. **The Integrations Service reads platform state only through published views, holds no write grant on any platform base table, and may update only the result fields of an integration job, addressed by its identifier. It cannot alter the instruction it was given** — an executing service able to rewrite its own instruction could perform an operation other than the one governance authorized.
 2. **ServiceNow is authoritative for the ITSM case.** The platform does not become a second system of record for incidents.
 3. **Azure AI Search is derived.** Loss of an index is a rebuild, not data loss.
 4. **Redis is authoritative for nothing.**

@@ -94,6 +94,42 @@
         </return-response>
       </when>
     </choose>
+
+    <!--
+      PER-ORGANISATION RATE AND BUDGET BOUNDARY (spec FR-OPS-005, plan §Constraints).
+      Placed HERE, after identity derivation, and that position is the whole control.
+
+      The global policy already rate-limits by IP, and that bounds an anonymous flood before it
+      costs gateway capacity. It cannot do this job: one organisation behind one NAT is one IP, and
+      fifty users of another organisation are fifty. Counting by IP therefore throttles the wrong
+      people and protects nobody from a noisy neighbour, which is precisely what FR-OPS-005
+      prohibits — no single organisation's load may degrade another's service.
+
+      The counter key is the DERIVED X-Idp-Tenant-Id, never a caller-supplied value. It cannot be
+      read before this point because it does not exist before this point: the global policy deleted
+      every inbound copy, and the header above is the first one APIM itself wrote. A budget keyed on
+      anything a caller can set is a budget a caller can escape by changing it.
+
+      A THROTTLE IS NOT A FAILURE (spec FR-OPS-006). 429 and 403 from here mean the request was
+      LIMITED, and the user must be told that rather than told their request failed. The Retry-After
+      header below is what makes that actionable rather than merely true.
+
+      This is the request budget. The TOKEN budget is enforced at the AI Gateway, on the same
+      per-organisation key (build/infra/ai-gateway/policy.xml) — two different resources, two
+      different meters, deliberately not merged: model spend and request volume fail for different
+      reasons and at different rates.
+    -->
+    <rate-limit-by-key
+        calls="{{customer-calls-per-minute}}"
+        renewal-period="60"
+        counter-key="@(context.Request.Headers.GetValueOrDefault("X-Idp-Tenant-Id", string.Empty))"
+        remaining-calls-header-name="X-RateLimit-Remaining"
+        retry-after-header-name="Retry-After" />
+
+    <quota-by-key
+        calls="{{customer-calls-per-day}}"
+        renewal-period="86400"
+        counter-key="@(context.Request.Headers.GetValueOrDefault("X-Idp-Tenant-Id", string.Empty))" />
   </inbound>
 
   <backend><base /></backend>

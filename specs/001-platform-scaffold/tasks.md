@@ -308,6 +308,28 @@ cross-cutting `global.inbound.xml` plus one file per audience rather than a sing
 policy per audience is what makes "the surface decides the authorization model" structural, since there
 is then no shared branch in which the customer path could read a role claim.
 
+**Status 2026-09-17** — the edge scaffold was audited against the twelve edge/gateway requirements and
+three gaps were closed. They strengthen T227, T228 and T237 rather than adding tasks, so no task id
+changed state:
+
+1. **Routing was prose.** `/api/{audience}/v1/views/...` → .NET and everything else → RagCore lived in
+   `contracts/README.md` and in T227's description, enforced by nothing. It is now
+   `build/infra/apim/apis.json` — five APIs, two backends, each naming the manifest it routes to. A
+   misrouted view does not fail loudly: it reaches a service that serves the audience but not the
+   route and returns a 404 indistinguishable from a client error.
+2. **The OpenAPI documents were emitted but never imported.** T234–T236 produce five generated
+   documents; nothing said which API imported which. Each API now names its source document, the
+   generator that produced it, and `handWritten: false` — asserted, along with the converse: a
+   document the contract workflow emits and no API imports is a surface nobody routed.
+3. **The rate boundary was per-IP only.** `FR-OPS-005` is per *organisation*, and counting by IP
+   throttles the wrong callers — one organisation behind one NAT is one IP. Each audience policy now
+   applies `rate-limit-by-key` and `quota-by-key` on the **derived** `X-Idp-Tenant-Id`, after
+   identity derivation, because a budget keyed on anything a caller supplies is one a caller escapes.
+
+Proven by `ragcore/tests/security/test_edge_topology.py` and
+`dotnet/tests/Synthia.ArchitectureTests/ApimRoutingTests.cs`, with seven planted violation classes in
+`build/scripts/verify-architecture-guards.sh`.
+
 **These tasks define committed configuration; they do not provision it.** Acceptance still requires a
 deployed environment (`FR-DEMO-019`, `SC-DEMO-001`), and T256 remains the gate. Provisioning is tracked
 separately under *Azure provisioning* below (T227a, T227b) together with the certificate issuance it

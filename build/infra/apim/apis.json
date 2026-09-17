@@ -1,0 +1,281 @@
+{
+  "$comment": [
+    "APIM API AND BACKEND DEFINITIONS. What the policy files could not say.",
+    "",
+    "The XML beside this file decides IDENTITY: it proves edge provenance, deletes every inbound",
+    "copy of the identity contract, validates the token once and states the closed X-Idp-* contract.",
+    "It cannot say which URL reaches which deployable, and until this file existed that routing lived",
+    "only in prose — specs/001-platform-scaffold/contracts/README.md and a sentence in tasks.md.",
+    "",
+    "ROUTING IN PROSE IS ROUTING THAT IS SILENTLY WRONG. A misrouted /views path does not fail: it",
+    "reaches RagCore, which serves the audience but not that route, and returns a 404 that looks",
+    "exactly like a client calling something that does not exist. This file makes the routing table",
+    "a reviewable artifact and gives the validation tests something to check it against.",
+    "",
+    "THE OPENAPI DOCUMENTS ARE GENERATED, NEVER HAND-WRITTEN (spec FR-DEMO-013, contracts README",
+    "rule 5). Every `openApi.source` below points at a document emitted from a RUNNING service —",
+    "FastAPI's schema for RagCore, the built-in generator for .NET Minimal APIs — and published by",
+    ".github/workflows/contracts.yml. A hand-maintained copy imported here would drift from what the",
+    "service accepts, and the drift would be invisible until a client believed the document.",
+    "",
+    "ONE DOCUMENT PER AUDIENCE PER DEPLOYABLE, AND NEVER A MERGED ONE. A merged document would let a",
+    "customer-facing client discover the staff and workload surfaces, which is why the emission tasks",
+    "produce five documents rather than one."
+  ],
+
+  "policyVersion": "1.0.0",
+
+  "$topology": [
+    "client → Front Door + WAF → APIM → Container Apps (internal ingress) → RagCore / .NET",
+    "",
+    "Each hop carries two independent controls, listed in build/policy/edge-trust.json. This file",
+    "configures the third hop's routing; it does not restate the controls."
+  ],
+
+  "backends": [
+    {
+      "id": "ragcore",
+      "name": "RagCore execution leg",
+      "urlSetting": "{{ragcore-backend-url}}",
+      "containerApp": "build/docker/containerapps/ragcore.yaml",
+      "credentials": {
+        "type": "client-certificate",
+        "certificateId": "{{gateway-client-certificate-id}}",
+        "$comment": [
+          "MUTUAL TLS, AND IT IS A NAMED EXEMPTION RATHER THAN A PREFERENCE.",
+          "",
+          "Managed identity is the platform default and is used for every Azure resource that",
+          "supports it (build/policy/azure-identity.json). It is not used on THIS hop, and the",
+          "reason is recorded as the one exemption in that file: what would validate a",
+          "managed-identity token at the ingress layer is Container Apps built-in authentication,",
+          "which is documented only for external ingress-enabled apps. These backends are",
+          "internal-only by design. Validating the token in application code instead is prohibited",
+          "by constitution Principle I — services MUST NOT parse an access token — so the choice is",
+          "between mutual TLS and giving the backends a JWT library, and the second one is worse.",
+          "",
+          "WHAT IS ACTUALLY EXEMPTED IS NARROW. No component holds a standing secret: the private",
+          "key is in Key Vault, APIM reads it AS A MANAGED IDENTITY, and the backends hold only a",
+          "public SHA-256 hash. The exemption is not 'a credential lives outside the vault' — it is",
+          "that this credential has a lifecycle and an expiry, which a managed identity would not.",
+          "That residual is managed rather than accepted: rotation is a sequenced release and",
+          "expiry is alerted 45 days ahead.",
+          "",
+          "Referenced by certificate-id and NEVER by thumbprint: a thumbprint changes on rotation",
+          "and a policy identifying it that way silently stops attaching a certificate at all."
+        ]
+      }
+    },
+    {
+      "id": "monolith",
+      "name": ".NET read monolith",
+      "urlSetting": "{{monolith-backend-url}}",
+      "containerApp": "build/docker/containerapps/monolith.yaml",
+      "credentials": {
+        "type": "client-certificate",
+        "certificateId": "{{gateway-client-certificate-id}}",
+        "$comment": "The same certificate and the same exemption. One certificate rather than two: the backends validate the hash of the certificate APIM presents, and two would double the rotation surface for no gain — neither backend needs to tell APIM apart from APIM."
+      }
+    }
+  ],
+
+  "$noSharedSecrets": [
+    "NO BACKEND CREDENTIAL IN THIS FILE IS A SECRET, and none can be added.",
+    "",
+    "APIM authenticates to a backend by presenting a certificate it reads from Key Vault as its own",
+    "managed identity. There is no authorization header value, no subscription key on a backend and",
+    "no shared key of any kind.",
+    "",
+    "The forbidden credential shapes are enumerated in ONE place, build/policy/azure-identity.json,",
+    "and deliberately not repeated here. Two copies of a list like that drift, and the drift is",
+    "invisible until the weaker copy is the one somebody checked against.",
+    "",
+    "ragcore/tests/security/test_azure_identity.py scans committed build/**/*.json against that",
+    "list — including this file. It scans raw text, because JSON has no docstring for a scanner to",
+    "exclude, so a file explaining the rule by quoting it would trip it. That is a feature: it is",
+    "what makes the registry the single copy rather than the first of several."
+  ],
+
+  "apis": [
+    {
+      "id": "customer-v1",
+      "displayName": "Synthia Customer API v1",
+      "audience": "customer",
+      "path": "api/customer/v1",
+      "protocols": ["https"],
+      "backend": "ragcore",
+      "policy": "build/infra/apim/customer.v1.xml",
+      "openApi": {
+        "source": "build/contracts/ragcore/customer.v1.openapi.json",
+        "generatedBy": "FastAPI, from the Pydantic models on each route",
+        "emittedBy": "ragcore/scripts/emit_contracts.py",
+        "handWritten": false
+      },
+      "subscriptionRequired": false,
+      "$comment": [
+        "Subscription keys are OFF, and that is deliberate rather than an oversight. A subscription",
+        "key is a shared secret distributed to clients, and this platform authenticates callers with",
+        "an Entra token validated in the policy. Requiring both would add a credential that grants",
+        "nothing extra, cannot be attributed to a person, and would be the thing pasted into a",
+        "front-end bundle."
+      ]
+    },
+    {
+      "id": "customer-v1-views",
+      "displayName": "Synthia Customer Read Views v1",
+      "audience": "customer",
+      "path": "api/customer/v1/views",
+      "protocols": ["https"],
+      "backend": "monolith",
+      "policy": "build/infra/apim/customer.v1.xml",
+      "openApi": {
+        "source": "build/contracts/dotnet/customer.v1.openapi.json",
+        "generatedBy": ".NET Minimal APIs built-in OpenAPI generation",
+        "handWritten": false
+      },
+      "subscriptionRequired": false,
+      "$comment": [
+        "THE LONGEST MATCHING PATH WINS, and that is the whole routing rule for this audience:",
+        "/api/customer/v1/views/... reaches the monolith and everything else under",
+        "/api/customer/v1 reaches RagCore. APIM resolves the most specific prefix first, so the two",
+        "APIs coexist under one prefix without an ordering flag to get wrong.",
+        "",
+        "SAME POLICY FILE AS THE API ABOVE, deliberately. Identity is derived per AUDIENCE, not per",
+        "deployable: a person is an end user on the customer surface whichever backend answers them.",
+        "Two policies here would be two places for the derivation to drift, and the drift would",
+        "appear as one backend seeing a role the other did not.",
+        "",
+        "The monolith is READ-ONLY (ADR-0001), which is enforced at the platform rather than here:",
+        "its managed identity holds no Service Bus, SignalR, AI Search or model role at all."
+      ]
+    },
+    {
+      "id": "staff-v1",
+      "displayName": "Synthia Staff API v1",
+      "audience": "staff",
+      "path": "api/staff/v1",
+      "protocols": ["https"],
+      "backend": "ragcore",
+      "policy": "build/infra/apim/staff.v1.xml",
+      "openApi": {
+        "source": "build/contracts/ragcore/staff.v1.openapi.json",
+        "generatedBy": "FastAPI, from the Pydantic models on each route",
+        "emittedBy": "ragcore/scripts/emit_contracts.py",
+        "handWritten": false
+      },
+      "subscriptionRequired": false
+    },
+    {
+      "id": "staff-v1-views",
+      "displayName": "Synthia Staff Read Views v1",
+      "audience": "staff",
+      "path": "api/staff/v1/views",
+      "protocols": ["https"],
+      "backend": "monolith",
+      "policy": "build/infra/apim/staff.v1.xml",
+      "openApi": {
+        "source": "build/contracts/dotnet/staff.v1.openapi.json",
+        "generatedBy": ".NET Minimal APIs built-in OpenAPI generation",
+        "handWritten": false
+      },
+      "subscriptionRequired": false
+    },
+    {
+      "id": "workload-v1",
+      "displayName": "Synthia Workload API v1",
+      "audience": "workload",
+      "path": "api/workload/v1",
+      "protocols": ["https"],
+      "backend": "ragcore",
+      "policy": "build/infra/apim/workload.v1.xml",
+      "openApi": {
+        "source": "build/contracts/ragcore/workload.v1.openapi.json",
+        "generatedBy": "FastAPI, from the Pydantic models on each route",
+        "emittedBy": "ragcore/scripts/emit_contracts.py",
+        "handWritten": false
+      },
+      "subscriptionRequired": false,
+      "$comment": [
+        "NO VIEWS COUNTERPART, and that is a fact about the architecture rather than a gap. The",
+        "workload audience is the execution leg; the monolith is read-only and serves no execution",
+        "route. It is also the audience through which one service reaches another — app-only, and",
+        "through APIM like any other caller, because a direct pod-to-pod route MUST NOT exist",
+        "(contracts README rule 4)."
+      ]
+    }
+  ],
+
+  "rateBoundary": {
+    "$comment": [
+      "THE RATE AND BUDGET BOUNDARY, at two levels that count different things.",
+      "",
+      "GLOBAL, per IP (build/infra/apim/global.inbound.xml): bounds an anonymous flood before it",
+      "costs gateway capacity. It runs before any token is validated, which is exactly when it is",
+      "needed and exactly why it cannot be per-organisation — there is no organisation yet.",
+      "",
+      "PER AUDIENCE, per ORGANISATION (the audience policy files): the control FR-OPS-005 actually",
+      "asks for. Counting by IP cannot do this job — one organisation behind one NAT is one IP and",
+      "fifty users of another are fifty — so it throttles the wrong callers and protects nobody from",
+      "a noisy neighbour.",
+      "",
+      "The counter key is the DERIVED X-Idp-Tenant-Id, which is why the policy sits after identity",
+      "derivation. A budget keyed on anything a caller supplies is a budget a caller escapes by",
+      "changing it.",
+      "",
+      "A THROTTLE IS NOT A FAILURE (FR-OPS-006). The user is told the request was limited.",
+      "",
+      "The values are named values rather than literals: they are tuned per environment, and a",
+      "limit a deployment cannot adjust is one that gets removed entirely the first time it bites."
+    ],
+    "global": {
+      "scope": "all APIs",
+      "counterKey": "client IP",
+      "callsPerMinute": 600,
+      "definedIn": "build/infra/apim/global.inbound.xml"
+    },
+    "perOrganisation": [
+      {
+        "audience": "customer",
+        "counterKey": "X-Idp-Tenant-Id",
+        "callsPerMinuteSetting": "{{customer-calls-per-minute}}",
+        "callsPerDaySetting": "{{customer-calls-per-day}}"
+      },
+      {
+        "audience": "staff",
+        "counterKey": "X-Idp-Tenant-Id",
+        "callsPerMinuteSetting": "{{staff-calls-per-minute}}",
+        "callsPerDaySetting": "{{staff-calls-per-day}}"
+      },
+      {
+        "audience": "workload",
+        "counterKey": "X-Idp-Tenant-Id",
+        "callsPerMinuteSetting": "{{workload-calls-per-minute}}",
+        "callsPerDaySetting": "{{workload-calls-per-day}}"
+      }
+    ],
+    "tokenBudget": {
+      "$comment": "Model spend is metered and budgeted separately, at the AI Gateway, on the same per-organisation key. Two resources, two meters, deliberately not merged: request volume and token spend fail for different reasons and at different rates.",
+      "definedIn": "build/infra/ai-gateway/policy.xml",
+      "policy": "llm-token-limit"
+    }
+  },
+
+  "namedValues": {
+    "$comment": [
+      "Resolved at deployment. NONE is a credential: two are internal URLs, one is a certificate",
+      "ENTITY id (not the certificate), and the rest are numbers.",
+      "",
+      "The backend URLs are internal Container Apps addresses. Knowing one grants nothing — ingress",
+      "is internal-only and requires a client certificate, so an attacker who learns the address",
+      "still has no way to reach it."
+    ],
+    "ragcore-backend-url": { "source": "deployment", "why": "The internal ingress address of the RagCore container app." },
+    "monolith-backend-url": { "source": "deployment", "why": "The internal ingress address of the monolith container app." },
+    "gateway-client-certificate-id": { "source": "deployment", "why": "The APIM certificate ENTITY that points at the Key Vault certificate. Not the certificate, and not its thumbprint." },
+    "customer-calls-per-minute": { "source": "deployment", "why": "Per-organisation request rate, customer audience." },
+    "customer-calls-per-day": { "source": "deployment", "why": "Per-organisation daily request quota, customer audience." },
+    "staff-calls-per-minute": { "source": "deployment", "why": "Per-organisation request rate, staff audience." },
+    "staff-calls-per-day": { "source": "deployment", "why": "Per-organisation daily request quota, staff audience." },
+    "workload-calls-per-minute": { "source": "deployment", "why": "Per-organisation request rate, workload audience." },
+    "workload-calls-per-day": { "source": "deployment", "why": "Per-organisation daily request quota, workload audience." }
+  }
+}

@@ -50,6 +50,8 @@ py_leak() { (cd ragcore && uv run pytest tests/integrations/test_no_provider_lea
 py_isolation() { (cd ragcore && uv run pytest tests/isolation -q -m 'not integration'); }
 py_leakage() { (cd ragcore && uv run pytest tests/security/test_no_leakage.py -q); }
 py_config()  { (cd ragcore && uv run pytest tests/unit/test_settings.py tests/unit/test_cache.py -q); }
+py_edge()    { (cd ragcore && uv run pytest tests/security/test_edge_topology.py -q); }
+net_routing() { (cd dotnet && dotnet test tests/Synthia.ArchitectureTests --nologo -v quiet --filter 'FullyQualifiedName~ApimRoutingTests'); }
 net_arch() { (cd dotnet && dotnet test tests/Synthia.ArchitectureTests --nologo -v quiet); }
 net_build() { (cd dotnet && dotnet build Synthia.sln --nologo -v quiet -warnaserror); }
 
@@ -227,6 +229,73 @@ sed -i 's/    async def put(self, tenant: TenantContext, key: str, value: str, \
 expect_fail "a cache write with an optional TTL" py_config
 cp /tmp/synthia-cache.bak "$CACHE"
 rm -f /tmp/synthia-cache.bak
+
+# --- 15: a read view routed to the deployable that writes ----------------------
+# The routing rule that is invisible when it is wrong. A /views path delivered to RagCore reaches a
+# service that serves the audience but not the route, and returns a 404 indistinguishable from a
+# client calling something that does not exist. Both stacks read the same registry, so both are
+# asked - the .NET side owns the read-only claim (ADR-0001).
+APIS=build/infra/apim/apis.json
+cp "$APIS" /tmp/synthia-apis.bak
+restore+=("/tmp/synthia-apis.bak:$APIS")
+sed -i '0,/"backend": "monolith"/s//"backend": "ragcore"/' "$APIS"
+expect_fail "a read view routed to the write deployable" py_edge
+cp /tmp/synthia-apis.bak "$APIS"
+
+# --- 16: a hand-written OpenAPI document imported into the gateway -------------
+# Every document is emitted from a RUNNING service (FR-DEMO-013). A hand-maintained copy imported
+# here drifts from what the service accepts, and the drift is invisible until a client believes it.
+sed -i '0,/"handWritten": false/s//"handWritten": true/' "$APIS"
+expect_fail "a hand-written OpenAPI document imported" py_edge
+cp /tmp/synthia-apis.bak "$APIS"
+
+# --- 17: a backend shared secret -----------------------------------------------
+# APIM presents a certificate read from Key Vault as its own managed identity. A key here would be
+# a standing credential on the one hop the whole trust boundary rests on.
+sed -i '0,/"type": "client-certificate"/s//"type": "header", "apiKey": "{{ragcore-backend-key}}"/' "$APIS"
+expect_fail "a shared secret on an APIM backend" py_edge
+cp /tmp/synthia-apis.bak "$APIS"
+
+# --- 18: a per-organisation budget re-keyed to something a caller controls ------
+# FR-OPS-005 is per ORGANISATION. Counting by IP throttles the wrong callers - one organisation
+# behind one NAT is one IP - and a key a caller can set is a budget a caller escapes.
+CUSTOMER=build/infra/apim/customer.v1.xml
+cp "$CUSTOMER" /tmp/synthia-customer.bak
+restore+=("/tmp/synthia-customer.bak:$CUSTOMER")
+sed -i 's|counter-key="@(context.Request.Headers.GetValueOrDefault("X-Idp-Tenant-Id", string.Empty))"|counter-key="@(context.Request.IpAddress)"|' "$CUSTOMER"
+expect_fail "a per-organisation budget re-keyed to the client IP" py_edge
+cp /tmp/synthia-customer.bak "$CUSTOMER"
+rm -f /tmp/synthia-customer.bak
+
+# --- 19: the WAF switched out of prevention mode -------------------------------
+# Detection mode is a WAF that writes reports about the attack it allowed through.
+FD=build/infra/frontdoor/front-door.json
+cp "$FD" /tmp/synthia-fd.bak
+restore+=("/tmp/synthia-fd.bak:$FD")
+sed -i 's/"mode": "Prevention"/"mode": "Detection"/' "$FD"
+expect_fail "the public edge WAF switched to Detection mode" py_edge
+cp /tmp/synthia-fd.bak "$FD"
+rm -f /tmp/synthia-fd.bak
+
+# --- 20: a write route pointed at the read-only deployable ---------------------
+# The .NET half of the same registry. Its identity holds no write role, so this would fail at the
+# platform - but only AFTER being routed there, as a 500 nobody can place.
+python - <<'PLANTED'
+import json, pathlib
+p = pathlib.Path("build/infra/apim/apis.json")
+d = json.loads(p.read_text(encoding="utf-8"))
+d["apis"].append({
+    "id": "planted-write-on-monolith", "displayName": "planted", "audience": "staff",
+    "path": "api/staff/v1/approvals", "protocols": ["https"], "backend": "monolith",
+    "policy": "build/infra/apim/staff.v1.xml",
+    "openApi": {"source": "build/contracts/dotnet/staff.v1.openapi.json",
+                "generatedBy": "planted", "handWritten": False},
+    "subscriptionRequired": False})
+p.write_text(json.dumps(d, indent=2), encoding="utf-8")
+PLANTED
+expect_fail "a write route on the read-only deployable" net_routing
+cp /tmp/synthia-apis.bak "$APIS"
+rm -f /tmp/synthia-apis.bak
 
 # --- clean tree must pass --------------------------------------------------
 (cd dotnet && dotnet build Synthia.sln --nologo -v quiet >/dev/null 2>&1)

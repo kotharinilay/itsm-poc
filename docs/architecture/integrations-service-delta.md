@@ -1,7 +1,9 @@
 # Architecture Delta — Integrations as a Separate Deployable
 
 - **Status:** Proposed — reconciliation only. **No implementation may begin from this document.**
-- **Date:** 2026-09-17
+  Twelve decisions were taken on 2026-09-18 (§5.0); they must be carried into **ADR-0007** before
+  any code changes, because a decision recorded only here is not a decision under Principle X.
+- **Date:** 2026-09-17. Decisions recorded 2026-09-18
 - **Change:** Promote the integration boundary out of RagCore into an independently deployed
   **Integrations Service**, parallel to RagCore.
 - **Source material reconciled:** `Synthia-Platform-Specification.md`, `.specify/memory/constitution.md`
@@ -339,11 +341,120 @@ well-formed but self-supplied header contract**.
 
 ---
 
-## 5. Decisions requiring explicit resolution
+## 5. Decisions
 
-Each of these is a genuine gap: the current architecture does not answer it, and answering it by
-implementation would be exactly the silent divergence Principle X exists to catch. A recommendation
-is given where one option is materially better supported; the recommendation is **not** the decision.
+Each of these was a genuine gap: the current architecture did not answer it, and answering it by
+implementation would have been exactly the silent divergence Principle X exists to catch.
+
+**Twelve were resolved by the platform architecture owner on 2026-09-18** and are recorded in §5.0.
+They are decisions, not recommendations, and they carry into ADR-0007. What remains genuinely open
+is listed in §5.13.
+
+### 5.0 Decisions taken — 2026-09-18
+
+#### The durable-handoff pattern, which resolves D-03, D-05, D-06 and D-07 together
+
+The load-bearing decision is a **durable job record**. RagCore writes it; the message carries only
+its opaque identifier; Integrations reads everything it needs from it.
+
+```text
+RagCore                          platform.integration_job          Integrations
+───────                          ────────────────────────          ────────────
+decides the tool and the
+parameters, writes the job  ───► job_id, tenant_id,
+row in the same transaction      catalogue_id, version,
+as the state change              parameters, work_item_id,
+                                 session_id, status
+      │
+      │ outbox → Service Bus
+      │ { jobId, correlationId, kind }        ◄── nothing else
+      └──────────────────────────────────────────►  reads the job row
+                                                    recovers tenant  (from_platform_object)
+                                 result columns ◄── re-verifies every fact
+                                 updated by job_id   executes, normalizes
+      ◄── { jobId, correlationId, kind }             writes its own attempt record
+          resume trigger                             in the `integration` schema
+```
+
+**Why this shape.** It is the pattern §18.5 already mandates for execution triggers — *"the event
+causes work to happen; the durable work record provides the authority and the tenant context"* —
+applied to a second seam. Nothing authority-bearing travels in a message, and Integrations performs
+no tool-selection reasoning: RagCore decides, and its decision is durable before the message exists.
+
+| ID | Decision |
+|---|---|
+| **D-03** | **Tenant is recovered from durable state, never from a message or a token.** Async: from the job row. Sync (catalogue read, ServiceNow operations): the call carries an opaque `sessionId` or `workItemId` and Integrations resolves the tenant from the existing durable object. `TenantContext` is built through `from_platform_object` / `from_work_item` — **no fourth `TenantSource` provenance is introduced** |
+| **D-05** | **One execution record, owned by Integrations**, in its own `integration` schema. `operation` keeps only the platform's *conclusion*, updated by RagCore from the result. Integrations additionally updates the job row's **result columns, keyed by `jobId`** |
+| **D-06** | **RagCore selects the tool and the parameters; Integrations performs no tool-selection reasoning.** The selection is written to the job row and read from the job row — **never taken from the message**. A message-borne instruction would make an at-least-once redelivery an ungoverned external call |
+| **D-07** | **The trigger envelope keeps its shape**: `jobId` + `correlationId` + `kind`, three fields, nothing authority-bearing. `triggers.md`'s *"that is the entire payload"* rule **stands unamended**. Only the closed kind set extends, by `integration.execute`, `integration.completed`, `integration.failed`. The result message is a wake-up signal; the outcome is read from durable state |
+
+#### Ownership, storage and grants
+
+| ID | Decision |
+|---|---|
+| **D-04** | `governance_record` **stays in RagCore, unchanged** — treatment and accepted roles must stay with deterministic governance (Principle III). `tenant_entitlement` **stays**, read by Integrations through a new published view. The **connector binding** (endpoint, signing profile, idempotency policy) is **greenfield on the Integrations side** — it exists nowhere today, so nothing is migrated or split |
+| **D-08** | **One database.** Integrations reads platform state through published views; **no separate database** |
+| **D-10** | **One Alembic project, two schemas** — `platform` and `integration` — applied by one gated migration job |
+| **D-11a** | **Python**, on the existing 3.12 baseline. The adapters in §3.1 move rather than being rewritten |
+
+**The grant model, which follows from D-05 and D-08 and must be built the way the repo already
+builds this kind of rule.** Integrations holds:
+
+| Grant | Scope |
+|---|---|
+| Write | Everything in the `integration` schema — its execution record, idempotency ledger and its own outbox |
+| **Column-scoped UPDATE** | **The job row's result columns only**, addressed by `job_id` |
+| Read | Published `vw_*` views only |
+| **No** grant | Any base table in `platform`; any non-result column of the job row |
+
+**Integrations MUST NOT be able to modify what it was asked to do.** `catalogue_id`, `version`,
+`parameters`, `tenant_id` and the job's authority fields are not writable by it. An Integrations
+principal able to rewrite its own instruction would be able to execute a different operation than
+the one governance authorized — a Principle VIII hard failure. This is enforced **at the database
+permission boundary**, following `0017_work_item_immutability` and `0019_database_principals`, not
+in application code.
+
+#### Derived from the above, for confirmation
+
+These were not decided directly; they follow from the decisions above and are recorded so they are
+reviewed rather than assumed.
+
+| ID | Derived position |
+|---|---|
+| **D-01** | `/api/workload/v1/integrations/...` → a new `integrations` backend, by the longest-matching-path idiom `apis.json` already proves with `/views`. Same `workload.v1.xml` policy |
+| **D-02** | Same workload audience, **distinct app role** (e.g. `Integrations.Invoke`), so a generic workload-audience caller cannot drive connectors |
+| **D-09** | Two dedicated queues — `synthia-integration-commands` and `synthia-integration-results`. `synthia-triggers` is **not** reused: it is the resume path's queue with its own kinds and TTL semantics, and mixing lifecycles makes dead-letter triage ambiguous. Integrations runs its own transactional outbox for result publication |
+| **D-12** | **Integrations re-verifies every *fact*** — tenant active, entitlement, registration, version match, execution window, work state. **RagCore remains sole authority for every *decision*** — treatment assignment, role intersection, approval sufficiency. This satisfies "repeat the checks" without creating the second policy authority Principle IV forbids |
+
+#### What these decisions preserved
+
+Three rules survived that the change initially appeared to break, and each is worth stating because
+it removes an amendment from §8:
+
+- **`contracts/README.md` rule 4 stands.** Because tenant comes from durable state rather than from
+  the token, the synchronous call stays on the **workload audience**, app-only, through APIM. No
+  amendment. **O-09 is withdrawn.**
+- **`contracts/triggers.md`'s payload rule stands.** Three fields, nothing authority-bearing.
+  **O-11 narrows** from "the envelope changes" to "the closed kind set extends."
+- **No new tenant provenance.** `TenantSource` keeps exactly three members, as its own docstring
+  requires.
+
+---
+
+### 5.13 What remains open
+
+| ID | Question | Why it is still open |
+|---|---|---|
+| **D-11b** | The exact route list, and **which ServiceNow operations are synchronous**. §22.3 lists six write classes and classifies all of them `AUTO`; §22.5 makes only case creation clearly blocking, since a session that cannot commit a case cannot enter Resolution Mode | Not derivable from current material |
+| **G-01** | The precise result-column set on the job row, and the exact `GRANT` statement expressing the column scope | Follows D-05 but must be written and reviewed as DDL |
+| **OQ-06** | The latency re-baseline | Cannot be closed until the new hop count is measured |
+
+---
+
+### 5.1–5.12 The decisions as originally stated
+
+Retained so the reasoning behind each resolution stays visible, and so a later reader can see what
+was considered and rejected rather than only what was chosen.
 
 ---
 
@@ -650,9 +761,9 @@ left to be contradicted by code**, which is the failure mode Principle X names.
 | O-06 | Divergence #1: eleven contexts → two deployables | ADR-0001 | Partially withdrawn |
 | O-07 | "RagCore owns that whole chain internally; no gateway hops between its stages" (Divergence #2, §31.4) | ADR-0001 | Gateway hops return to the tool-execution leg; the §34.2 hop-count baseline changes again |
 | O-08 | "A client legitimately calls both deployables. They are two backends behind one trust boundary." | `contracts/README.md` | Three backends. Integrations is not client-facing, which is itself worth stating |
-| O-09 | Rule 4's synchronous form — service-to-service *is* the workload audience | `contracts/README.md` | Survives or not depending on **D-03** |
+| O-09 | ~~Rule 4's synchronous form — service-to-service *is* the workload audience~~ | `contracts/README.md` | **WITHDRAWN 2026-09-18.** D-03 recovers the tenant from durable state, so the synchronous call stays on the workload audience. Rule 4 stands unamended |
 | O-10 | "Both the publisher and the consumer currently live in the RagCore deployable, so a direct function call would be simpler today" | `contracts/triggers.md` §Why the queue exists | No longer true — and the section's third reason ("so a further decomposition of RagCore can become its own deployable later as a deployment change") is now being *exercised*. Rewrite as vindication, not as hypothesis |
-| O-11 | "That is the entire payload… it carries nothing else" over a closed five-kind set | `contracts/triggers.md` | D-07 |
+| O-11 | A closed five-kind set | `contracts/triggers.md` | **NARROWED 2026-09-18.** The payload rule — *"that is the entire payload"* — **stands**: the envelope remains `jobId` + `correlationId` + `kind`. Only the kind set extends, by three members (D-07) |
 | O-12 | "for Alpha, the RagCore runtime holds the Workload managed identity and performs the execution leg as the Workload" | Spec §18.2 | The external-effect leg moves |
 | O-13 | "One runtime holds two credential classes… the control that is *not* present is runtime separation of credential classes" | Spec §18.2, §35.2 | **Materially improved.** Update the risk rather than deleting it — connector credentials leave the RagCore runtime |
 | O-14 | Ownership rows: operation catalogue entry, action-to-tool binding, tool entitlement, credential reference | Spec §33 | D-04 |
@@ -733,9 +844,11 @@ RagCore        ↛ ServiceNow · Microsoft Graph · OneLogin · Duo · any MCP s
 RagCore        ↛ connector secrets in Key Vault           (role assignment, not code)
 RagCore        ↛ Integrations by any direct network path  (must traverse APIM)
 Integrations   ↛ RagCore                                   (no reverse call — avoids the cycle)
-Integrations   ↛ any write on the platform schema
+Integrations   ↛ any platform base table                   (reads vw_*_v1 only)
+Integrations   ↛ any non-result column of the job row      (it may not rewrite its own instruction)
 Integrations   ↛ AI Gateway · model providers              (it does no reasoning)
 Integrations   ↛ SignalR                                   (notification is RagCore's leaf)
+Integrations   ↛ tool-selection reasoning                  (RagCore decides; the job row records it)
 .NET monolith  ↛ everything except vw_*_v1                 (unchanged, ADR-0001)
 any deployable ↛ any other by internal address             (unchanged, §13.4)
 ```
@@ -750,23 +863,27 @@ turns two services into a distributed monolith.
 
 ## 8. What must happen before implementation
 
-In order. None of these is a code change.
+In order. None of these is a code change. Steps 1 and 2 of the original sequence are **done** —
+§5.0 records them.
 
-1. **Resolve D-03.** It determines the audience, the route, the policy file and the catalogue API
-   shape. Nothing downstream can be specified until it is answered.
-2. **Resolve D-04 and D-05.** Ownership decides the schema, which decides the migrations, which
-   decides the deployment sequencing.
-3. **Write ADR-0007.** Constitution Principle V makes it a precondition, not a deliverable. It must
-   name the conflict with ADR-0001, carry the justification against "premature distributed
-   decomposition is a defect", restate the §34.2 hop-count cost, and claim the OQ-02 credit.
-4. **Amend ADR-0001, ADR-0003, ADR-0005 and the ADR index** in the same change — a divergence
+1. ~~Resolve D-03, D-04, D-05.~~ **Done 2026-09-18.**
+2. **Write ADR-0007.** Constitution Principle V makes it a precondition, not a deliverable, and
+   Principle X means a decision recorded only in this document does not yet exist. It must carry
+   the twelve resolutions of §5.0, name the conflict with ADR-0001, carry the justification against
+   "premature distributed decomposition is a defect", restate the §34.2 hop-count cost, and claim
+   the OQ-02 credit.
+3. **Amend ADR-0001, ADR-0003, ADR-0005 and the ADR index** in the same change — a divergence
    withdrawn in one record and left standing in another is worse than either.
-5. **Amend the specification** — §9, §13.4's example, §14.1, §18.2, §21, §27, §31, §32.7–§32.9,
+4. **Amend the specification** — §9, §13.4's example, §14.1, §18.2, §21, §27, §31, §32.7–§32.9,
    §33, §35.2, §40 — with §33 as the load-bearing one.
-6. **Amend the constitution** for O-01, O-02, O-03, with a Sync Impact Report and a version bump.
-7. **Resolve D-01, D-02, D-06 through D-12** and record each in ADR-0007 or its own record.
-8. **Update the feature artefacts** — `plan.md`, `contracts/*`, `data-model.md`, `tasks.md` — and
+5. **Amend the constitution** for O-01, O-02, O-03, with a Sync Impact Report and a version bump.
+6. **Resolve D-11b and G-01** (§5.13) and confirm the derived positions D-01, D-02, D-09, D-12.
+7. **Update the feature artefacts** — `plan.md`, `contracts/*`, `data-model.md`, `tasks.md` — and
    only then generate tasks.
+
+**The `integration_job` table and its grants are the first migration**, and they are the piece most
+worth reviewing as DDL rather than as prose: the column-scoped UPDATE is what stops Integrations
+rewriting its own instruction, and it is enforced in the database or not at all.
 
 **The test obligations this change owes** are mechanical under the constitution's "which change
 requires which category" table, and they are large: contract and authorization (new API and message

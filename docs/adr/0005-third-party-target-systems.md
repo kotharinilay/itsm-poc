@@ -1,9 +1,21 @@
 # 0005. Third-party target systems: OneLogin, Duo and the extensible set
 
-- **Status:** Accepted
-- **Date:** 2026-09-15
+- **Status:** Accepted — **relocated by [0007](0007-integration-service-boundary.md)**
+- **Date:** 2026-09-15 | **Amended:** 2026-09-18
 - **Deciders:** Platform architecture owner
-- **Related:** [0001 — RagCore owns orchestration and execution](0001-ragcore-owns-orchestration-dotnet-owns-read.md)
+- **Related:** [0001 — RagCore owns orchestration and execution](0001-ragcore-owns-orchestration-dotnet-owns-read.md), [0007 — The Integrations Service boundary](0007-integration-service-boundary.md)
+
+> **The decision stands; the code moved — 2026-09-18.** OneLogin and Duo remain third-party target
+> systems reached as MCP servers, an open set, requiring only catalogue registration and entitlement.
+> ADR-0007 moves the adapters and the MCP client **out of RagCore into the Integrations Service**, so
+> the paths named below (`application/`, `integrations/`) are RagCore-relative and stale: ports and
+> adapters now live in the Integrations Service, with ports declared in its `application/` and
+> connectors in its `connectors/` and `mcp/`.
+>
+> This record's central claim is **strengthened** by the move. It argued that adding a third-party
+> system needs no new architecture — only registration and entitlement. That is now provable at a
+> deployment boundary: a new connector touches one service, which is the only component with an
+> egress path or a connector credential.
 
 ## Context and Problem Statement
 

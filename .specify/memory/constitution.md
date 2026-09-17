@@ -1,6 +1,60 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.1.0 -> 3.2.0
+
+Bump rationale: MINOR. The Principle V realization statement is updated to describe three
+deployables rather than two, following Synthia-Platform-Specification.md §21.6 and ADR-0007, which
+make Integrations a separately deployed service parallel to RagCore.
+
+WHY MINOR AND NOT MAJOR. The versioning policy reserves MAJOR for removing or redefining a
+principle, or relaxing a non-negotiable. None of that happens here:
+
+  * No principle is removed or renumbered. Roman numerals I-X keep their numerals and meanings.
+  * Principle V's RULE is unchanged — boundaries are mandatory, a context becomes a separately
+    deployed service only by explicit ADR, and premature distributed decomposition is a defect.
+    What changed is the REALIZATION PARAGRAPH describing which deployables currently exist. That
+    paragraph has always been a statement of fact about the current architecture, and ADR-0007 is
+    exactly the mechanism Principle V requires for changing it.
+  * No non-negotiable is relaxed. Principle III is untouched: treatment assignment and role
+    intersection stay with deterministic governance in RagCore, and the new service originates no
+    authorization. Principle IV gains no second durable authority — governance_record stays with
+    RagCore, `operation` remains the platform's conclusion, audit remains one store, and the
+    Integrations Service owns only what nothing owned before.
+  * The boundary rules are STRENGTHENED, not loosened: a new enforced deployment boundary, a
+    narrowed credential blast radius, and authority re-verified at the point of effect.
+
+Amended in this pass, four statements that had become false and one that had become incomplete:
+
+  1. Principle V realization — "RagCore owns orchestration, execution and all state-changing
+     operations; the .NET modular monolith is read-only" described two deployables and gave RagCore
+     the execution leg. Replaced with the three-deployable table, the one-directional dependency,
+     the no-shared-library rule, and the Integrations Service's grant limits.
+  2. Principle V schema contract — "RagCore owns every migration" now reads as one gated Alembic
+     project applying two schemas, with the column-scoped grant that stops an executing service
+     rewriting its own instruction.
+  3. Engineering Standards, Resilience — "RagCore calls MCP servers, the system of record, Graph
+     and the realtime service" was factually wrong in three of its four clauses. RagCore calls
+     none of the first three. Also records that the fifteen-minute window now spans two hops.
+  4. Engineering Standards, Idempotency and messaging — records that each publishing deployable
+     runs its own outbox, and that the two idempotency boundaries now sit in different deployables
+     while both remain required.
+  5. Compliance review — the forbidden-dependency list named only "between the two deployables".
+     Now names the graph's actual prohibitions, including the reverse call from Integrations to
+     RagCore and any RagCore path to an external system or connector credential.
+
+Migration path for work in flight: none required at the code level by THIS document. Work completed
+under 3.1.0 remains valid; the integrations package relocates under ADR-0007 and plan Stage 16,
+which is an architecture decision this constitution follows rather than creates. No task in
+specs/001-platform-scaffold/tasks.md changes meaning as a result of this amendment, though the task
+list is separately stale for other reasons recorded in plan.md §Phase Status.
+
+Related records amended in the same change, per the rule that a divergence withdrawn in one record
+and left standing in another is worse than either: ADR-0001 (amendment notice, divergence table),
+ADR-0003 (second schema owner), ADR-0005 (adapters relocated), docs/adr/README.md (index).
+
+-- 3.1.0 report retained below --
+
 Version change: 3.0.0 -> 3.1.0
 
 Bump rationale: MINOR. Two gaps found by the 2026-09-16 reviewer pass over
@@ -216,15 +270,35 @@ outer implementation detail. **Ports belong to the consuming module; provider im
 infrastructure.** Domain and application policy MUST NOT depend on an infrastructure implementation.
 Cross-module abstraction MUST be justified by a real shared contract.
 
-Within the current realization (ADR-0001): **RagCore owns orchestration, execution and all
-state-changing operations; the .NET modular monolith is read-only.** They have no application-level
-dependency in either direction — no API call, no library reference, no deployment coupling — and meet
-only at PostgreSQL and asynchronous messaging. Module boundaries inside the monolith are enforced by
-architecture tests, not convention.
+Within the current realization (ADR-0001, narrowed by ADR-0007), **three** application deployables:
 
-Because the two deployables share one database, **the schema is the contract between them**. RagCore
-owns every migration. The monolith reads only through explicitly versioned views, never altered in
-place: a new version is added alongside, the consumer migrates, the old is dropped once unreferenced.
+| Deployable | Owns |
+|---|---|
+| **RagCore** | Orchestration, reasoning, governance, approval, the authority record, the atomic claim, and every state change to platform data. **It reaches no external system.** |
+| **Integrations Service** | The tool catalogue, the connector registry, and all traffic to external systems — the sole holder of connector credentials |
+| **.NET modular monolith** | Read-only. Query, listing, dashboard and reporting |
+
+RagCore and the monolith have no application-level dependency in either direction — no API call, no
+library reference, no deployment coupling — and meet only at PostgreSQL and asynchronous messaging.
+**RagCore depends on the Integrations Service in one direction only**; results return asynchronously
+rather than as a call, which is what keeps the graph acyclic. A reverse call from Integrations to
+RagCore MUST NOT be introduced: it would make two services a distributed monolith. Module boundaries
+inside the monolith are enforced by architecture tests, not convention.
+
+**The two Python deployables share no library.** Correlation, error-contract, settings and telemetry
+scaffolding are duplicated deliberately: a shared package would be a build-level dependency between
+deployables required to have none, and it would not appear as a cross-tree path where the boundary
+check could catch it. This is the "duplication across boundaries is cheaper than a false shared
+contract" rule of Principle VI applied to a deployment boundary.
+
+Because the deployables share one database, **the schema is the contract between them**. Alembic owns
+every migration, as a single gated project applying both schemas: `platform`, written by RagCore, and
+`integration`, written by the Integrations Service. Consumers read only through explicitly versioned
+views, never altered in place: a new version is added alongside, the consumer migrates, the old is
+dropped once unreferenced. **The Integrations Service holds no write grant on any `platform` base
+table**, and may update only the result fields of an integration job, addressed by its identifier — it
+MUST NOT be able to alter the instruction it was given, and that is enforced at the database
+permission boundary rather than in application code.
 
 *Rationale:* Boundaries that exist only in a diagram erode. Making them compile-time and test-enforced
 is what keeps a modular monolith from becoming a ball of mud, and what keeps a later decomposition
@@ -403,8 +477,9 @@ with global query filters for soft-deleted rows, and standard audit columns.
 > deployment topology requires them. **In this platform that rule has no current application:** ADR-0001
 > and ADR-0003 make the .NET monolith read-only with no schema ownership, so `Database.Migrate()`,
 > `EnsureCreated()` and EF migration files are prohibited there and an architecture test enforces it.
-> Alembic owns every migration; the monolith reads versioned views. Soft-delete, query filters and audit
-> columns are therefore schema rules owned by RagCore's migrations, which the published views must
+> Alembic owns every migration — a single gated project applying both the `platform` and `integration`
+> schemas (ADR-0007) — and every consumer reads versioned views. Soft-delete, query filters and audit
+> columns are therefore schema rules owned by those migrations, which the published views must
 > respect. **If .NET is intended to own schema, ADR-0001 and ADR-0003 must be amended first.** This
 > constitution does not decide that.
 
@@ -446,16 +521,26 @@ and critical dependency readiness. `/health/startup` where useful.
 **Resilience.** `IHttpClientFactory` with typed clients and `DelegatingHandler` chains, using standard
 `Http.Resilience`/Polly v8 capabilities applied consistently. `HttpClient` MUST NOT be instantiated
 manually and one-off unmanaged clients MUST NOT be created. Resilience distinguishes transient from
-non-transient failure. **Every outbound HTTP call carries an explicit timeout** — RagCore calls MCP
-servers, the system of record, Graph and the realtime service inside a fifteen-minute window, and a call
-without a timeout can hold work past its expiry.
+non-transient failure. **Every outbound HTTP call carries an explicit timeout** — the Integrations
+Service calls MCP servers, the system of record and Graph, and RagCore calls the Integrations Service,
+the AI Gateway and the realtime service, all inside a fifteen-minute window, and a call without a
+timeout can hold work past its expiry. **The window now spans two hops rather than one**, so the real
+budget on an execution is tighter than the rule's arithmetic suggests.
 
 **Idempotency and messaging** — platform-wide, not .NET-specific, since the monolith is read-only and
 publishes nothing. Idempotency-key handling where required, with idempotency state persisted in
 PostgreSQL. Outbound calls carry deterministic deduplication keys wherever the provider supports them.
 Azure Service Bus Standard with a **transactional outbox in PostgreSQL**: an outbox record becomes
-durable before asynchronous publication. Consumers assume at-least-once delivery, so every external side
-effect requires idempotency and a retry MUST NOT produce a duplicate consequential action.
+durable before asynchronous publication. **Each publishing deployable runs its own outbox** — RagCore
+for triggers and integration commands, the Integrations Service for execution results. Consumers assume
+at-least-once delivery, so every external side effect requires idempotency and a retry MUST NOT produce
+a duplicate consequential action.
+
+**The two idempotency boundaries now sit in different deployables, and both remain required.** The
+atomic claim on the work item stays with the authority record in RagCore; the derived key carried to
+the external system belongs to the Integrations Service. Neither substitutes for the other, and a test
+that cannot say which boundary absorbed a duplicate is not evidence that either works — it passes
+whenever one of them does.
 
 **Concurrency.** Distributed locking MUST NOT be an architectural primitive. Use optimistic concurrency
 and atomic database claims; asynchronous jobs for singleton or background processing; state transitions
@@ -667,7 +752,9 @@ and the Sync Impact Report at the top of this file.
 
 Every pull request verifies compliance with these principles. Reviewers reject changes that add
 complexity without justification, widen a module's responsibility, introduce an application dependency
-between the two deployables, or take identity, tenant or authorization from an untrusted source.
+the dependency graph does not permit — between RagCore and the monolith in either direction, or from
+the Integrations Service back to RagCore — give RagCore a path to an external system or to a connector
+credential, or take identity, tenant or authorization from an untrusted source.
 Standing constraints are re-verified at each release gate alongside the zero-cross-tenant-exposure and
 retrieval-evaluation gates.
 
@@ -675,4 +762,4 @@ Runtime development guidance for agents and contributors derives from this const
 `Synthia-Platform-Specification.md`; where a guidance file disagrees with either, the authoritative
 artefact for that axis wins.
 
-**Version**: 3.1.0 | **Ratified**: 2026-09-15 | **Last Amended**: 2026-09-16
+**Version**: 3.2.0 | **Ratified**: 2026-09-15 | **Last Amended**: 2026-09-18

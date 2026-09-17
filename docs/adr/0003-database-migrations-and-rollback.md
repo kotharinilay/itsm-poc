@@ -1,9 +1,22 @@
 # 0003. Database migrations: Alembic, CI-gated execution, and the rollback policy
 
-- **Status:** Accepted
-- **Date:** 2026-09-15
+- **Status:** Accepted — **extended by [0007](0007-integration-service-boundary.md)**
+- **Date:** 2026-09-15 | **Amended:** 2026-09-18
 - **Deciders:** Platform architecture owner
-- **Related:** [0001 — RagCore owns orchestration and execution](0001-ragcore-owns-orchestration-dotnet-owns-read.md), [0002 — Approval API placement and graph resume path](0002-approval-api-placement-and-graph-resume.md)
+- **Related:** [0001 — RagCore owns orchestration and execution](0001-ragcore-owns-orchestration-dotnet-owns-read.md), [0002 — Approval API placement and graph resume path](0002-approval-api-placement-and-graph-resume.md), [0007 — The Integrations Service boundary](0007-integration-service-boundary.md)
+
+> **Extension, not exception — 2026-09-18.** ADR-0007 adds a **second schema owner**. Every rule in
+> this record stands: one Alembic project, one gated job, never at application startup,
+> expand/contract rather than rollback, views versioned and never altered in place.
+>
+> What changes is the scope of "the platform schema": the same single Alembic project now applies
+> **two** schemas — `platform`, written by RagCore, and `integration`, written by the Integrations
+> Service. There is **no second Alembic project and no second migration job**, deliberately: two
+> histories against one database would need an ordering discipline nothing enforces.
+>
+> The Integrations Service is additionally a **third consumer** of published views, which this record
+> assumed was the monolith alone. Extending the view contract to a third reader is a real change to
+> its scope, not a free reuse, and `contracts/read-views.md` records it.
 
 ## Context and Problem Statement
 
@@ -35,7 +48,8 @@ migration is a platform-wide incident, not a service-local one.
 ### 1. Tooling
 
 **Alembic**, bootstrapped from its async template (`alembic init -t async`) against asyncpg, is the
-single migration tool for the platform schema. `env.py` uses `async_engine_from_config` with
+single migration tool for the platform schema — **and, since ADR-0007, for the `integration` schema
+too, from the same project and the same history**. `env.py` uses `async_engine_from_config` with
 `NullPool` and drives migrations through `connection.run_sync`.
 
 **The .NET monolith runs no migrations at all.** EF Core is used read-only: `Database.Migrate()`,

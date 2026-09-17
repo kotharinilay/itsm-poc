@@ -1,10 +1,24 @@
 # 0001. RagCore owns orchestration and execution; the .NET modular monolith owns read
 
-- **Status:** Accepted
-- **Date:** 2026-09-15
+- **Status:** Accepted — **amended in part by [0007](0007-integration-service-boundary.md)**
+- **Date:** 2026-09-15 | **Amended:** 2026-09-18
 - **Deciders:** Platform architecture owner
 - **Supersedes:** nothing
 - **Related:** [0002 — Approval API placement and graph resume path](0002-approval-api-placement-and-graph-resume.md)
+
+> **Read this notice before the decision below.** [ADR-0007](0007-integration-service-boundary.md)
+> **partially withdraws this record's Divergence #1 and #2.** There are now **three** application
+> deployables, not two: `Tool Execution`, `Integration — ServiceNow` and `Integration — Microsoft
+> Graph` deploy together as the **Integrations Service**, parallel to RagCore.
+>
+> What this record still decides, unchanged: RagCore owns orchestration and every state change to
+> platform data; the .NET monolith is read-only; the two have no application-level dependency in
+> either direction and meet only at PostgreSQL and asynchronous messaging; the schema is the contract
+> between them and views are versioned, never altered in place.
+>
+> What ADR-0007 changed: RagCore no longer performs the external-effect leg and no longer holds
+> connector credentials, and a one-directional dependency `RagCore → Integrations` now exists.
+> **Where this record and ADR-0007 disagree, ADR-0007 is the later record and governs.**
 
 ## Context and Problem Statement
 
@@ -40,17 +54,23 @@ while collapsing the hop count and giving the agent loop a single owner.
 
 ## Decision Outcome
 
-**Option 3.** Ownership is split across exactly two application deployables:
+**Option 3.** Ownership is split across two application deployables — **three since ADR-0007**:
 
 | Deployable | Stack | Owns |
 |---|---|---|
-| **RagCore** | Python 3.12, LangGraph | Conversational orchestration, agent decisions, interruption and resume, execution orchestration, verification, and all state-changing operations |
+| **RagCore** | Python 3.12, LangGraph | Conversational orchestration, agent decisions, interruption and resume, execution orchestration, verification, and all state-changing operations *(external effects moved to the Integrations Service by ADR-0007)* |
 | **Platform application** | .NET 10 modular monolith | Query, read, listing, dashboard and reporting capabilities. Read-only |
+| **Integrations Service** *(added by ADR-0007)* | Python 3.12, FastAPI | The tool catalogue, the connector registry, and all traffic to external systems |
 
-**There is no application-level dependency between them in either direction.** Neither calls the
-other as an application API, references the other as a library, or requires the other to be deployed
-in order to serve its own requests. They communicate only through shared durable state in PostgreSQL
-and through asynchronous messaging.
+**There is no application-level dependency between RagCore and the monolith in either direction.**
+Neither calls the other as an application API, references the other as a library, or requires the
+other to be deployed in order to serve its own requests. They communicate only through shared durable
+state in PostgreSQL and through asynchronous messaging.
+
+*Scoped 2026-09-18.* That zero-dependency property describes **RagCore ↔ monolith**, not the system.
+ADR-0007 introduces one directed edge, `RagCore → Integrations`, with results returning
+asynchronously so the graph stays acyclic. Citing this paragraph as a system-wide property is a
+misreading of it.
 
 The §13.4 rule is re-scoped, not relaxed: calls **between deployables** traverse the edge and the
 Gateway; in-process calls between modules of the monolith are not service-to-service calls and are
@@ -60,12 +80,16 @@ not described as such. Module boundaries inside the monolith are enforced by arc
 
 Recorded rather than silently absorbed, per constitution Principle X.
 
-| # | Specification | This decision |
-|---|---|---|
-| 1 | §14.1 — eleven independently addressable bounded contexts | Two application deployables; the contexts become modules of the monolith or components of RagCore |
-| 2 | §31.4 — synchronous chain `Session → RagCore → Retrieval → Governance → Tool Execution` | RagCore owns that whole chain internally; no gateway hops between its stages |
-| 3 | §13.4 — every service-to-service application call traverses edge and Gateway | Holds between the two deployables. In-process module calls inside the monolith are out of its scope |
-| 4 | §37.1 — the customer web portal is deferred beyond Alpha | Included in the monorepo as a scaffolded Angular application, under constitution Principle IX (scaffold, not product) |
+| # | Specification | This decision | Status |
+|---|---|---|---|
+| 1 | §14.1 — eleven independently addressable bounded contexts | Two application deployables; the contexts become modules of the monolith or components of RagCore | **Narrowed by ADR-0007.** Three of the eleven — `Tool Execution`, `Integration — ServiceNow`, `Integration — Microsoft Graph` — are now independently deployed as the Integrations Service, which is what §14.1 described. Eight remain RagCore packages |
+| 2 | §31.4 — synchronous chain `Session → RagCore → Retrieval → Governance → Tool Execution` | RagCore owns that whole chain internally; no gateway hops between its stages | **Narrowed by ADR-0007.** RagCore owns the chain **as far as Tool Execution**; that leg now crosses a deployment boundary, and the gateway hops it avoided return to it |
+| 3 | §13.4 — every service-to-service application call traverses edge and Gateway | Holds between the two deployables. In-process module calls inside the monolith are out of its scope | Holds between **all three**. The `RagCore → Integrations` path is its newest and most load-bearing instance |
+| 4 | §37.1 — the customer web portal is deferred beyond Alpha | Included in the monorepo as a scaffolded Angular application, under constitution Principle IX (scaffold, not product) | Unchanged |
+
+**Divergences 1 and 2 shrank rather than grew.** ADR-0007 returns three contexts to the
+independently deployed shape §14.1 always described, so the realization now departs from the
+specification in *fewer* places than this record originally established.
 
 Everything the specification states about identity derivation, the closed Gateway header contract,
 tenant isolation, deterministic governance, the immutability of work-item authority fields, the
@@ -110,9 +134,13 @@ gate that the original open item assumed.
 
 ## Unresolved
 
-- Nothing outstanding for this decision.
+- Nothing outstanding for this decision. Items arising from the 2026-09-18 amendment are recorded in
+  [ADR-0007](0007-integration-service-boundary.md) §Unresolved, not here.
 
 ## More Information
 
-- Constitution v2.0.0 Principle V (RagCore Orchestrates, the Monolith Reads) and Principle X.
-- `Synthia-Platform-Specification.md` §13.4, §14.1, §31.4, §34.2, §37.1.
+- Constitution **v3.2.0** Principle V and Principle X. *(This record originally cited v2.0.0's
+  Principle V title, "RagCore Orchestrates, the Monolith Reads", which no longer exists; Principle V
+  is now "Modular Boundaries Are Mandatory" and its realization paragraph names three deployables.)*
+- `Synthia-Platform-Specification.md` §13.4, §14.1, §21.6, §31.4, §34.2, §37.1.
+- [ADR-0007](0007-integration-service-boundary.md) — the amendment to this record.

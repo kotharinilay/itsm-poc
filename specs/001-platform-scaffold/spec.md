@@ -28,6 +28,18 @@ authenticated securely — through inert sample flows (FR-DEMO-001 onward). It d
 business approval semantics, and it does not need to: an approval workflow exercised against a
 fixture proves that the fixture was wired up, not that the platform underneath it is sound.
 
+**The scaffold has three application deployables** (`Synthia-Platform-Specification.md` §21.6,
+ADR-0007):
+
+| # | Deployable | Owns |
+|---|---|---|
+| 1 | **Platform read API** | The read side. Query, listing, dashboard and reporting over published views. **Read-only** |
+| 2 | **RagCore** | Conversation, orchestration, reasoning, governance, approval, the authority record and the atomic claim. **Reaches no external system** |
+| 3 | **Integrations Service** | The tool catalogue, the connector registry, and **all** traffic to external systems (FR-INTEG-001 onward) |
+
+They meet only through the API gateway, the message transport and the durable store. **No deployable
+reaches another directly** (FR-DEMO-004a).
+
 **Why build the skeleton before the use cases**: the risky parts of this product are not the use
 cases — they are identity, organisation isolation, deterministic authorization, the integrity of the
 durable store, and honest reporting of what actually happened. Those must be proven first, because
@@ -85,11 +97,49 @@ in running code.
   and the published views. Synchronously, a service reaches another through the **workload audience**.
   In every case the call routes **through the API gateway** — a service MUST NOT reach another
   service directly, bypassing the gateway.
+  - *Count superseded 2026-09-18: there are now **three** deployables. The answer itself is unchanged
+    and applies to every pair — the RagCore → Integrations Service path is its newest instance.*
 - Q: Must the sample flows be exercised through a deployed public edge and gateway, or may they be
   driven against the deployables with the edge verified separately? → A: Through the **real deployed
   path**. Every sample flow is driven end to end through the public edge, the web application
   firewall, the API gateway and the container platform in a deployed environment. Configuration
   review does not substitute for traversal.
+
+### Session 2026-09-18 — the Integrations Service boundary
+
+Reconciling this specification with `Synthia-Platform-Specification.md` §21.6 and ADR-0007, which
+make Integrations a separately deployed service parallel to RagCore. **The scaffold now has three
+deployables.** No architecture is decided here; these answers decide only how the scaffold *proves*
+the boundary the architecture defines.
+
+- Q: How should the scaffold prove that RagCore cannot reach an external connector and holds no
+  connector secrets, given that no sample flow may touch a real external system? → A: By **attempting
+  the bypass and observing it fail**, not by asserting an absence. An inert reference connector is
+  reachable only from the Integrations Service; RagCore's attempt to reach it fails at the network
+  layer and its attempt to resolve a connector secret fails at Key Vault; an architecture test
+  asserts no adapter, connector or provider client remains in RagCore. This mirrors the shape
+  `FR-DEMO-004a` already uses for the no-direct-route rule.
+- Q: What should the scaffold's synchronous ServiceNow path run against? → A: **The same inert
+  reference connector**, serving an inert case-like operation. The scaffold proves the seam, not the
+  vendor contract; adapter-versus-fake fidelity stays with the adapter tests, and nothing stubs a
+  success and presents it as a real case.
+- Q: Which idempotency boundaries must the scaffold prove now that the command crosses a deployment
+  boundary? → A: **Both, proven independently.** A duplicate resume trigger absorbed by the atomic
+  claim in RagCore, and a redelivered command absorbed by the derived key in the Integrations
+  Service — each test failing if its own boundary alone is removed. A single end-to-end duplicate
+  test would stay green on the day one of the two silently stopped working.
+- Q: When a Service Bus command arrives carrying a tenant field it is not allowed to carry, what
+  should the Integrations Service do? → A: **Both refuse and derive.** Boundary validation refuses
+  the out-of-contract message and dead-letters it with an alert; separately, the effect is proven
+  bound to the organisation on the durable record even when a conflicting one is asserted. Refusal
+  proves the payload contract is closed; the binding proves where the organisation actually came
+  from.
+- Q: What must "the Integrations Service emits its own observable telemetry" concretely require? →
+  A: The service appears as a **distinct source** in traces and logs while one correlation identifier
+  still spans the journey, **and** it emits its own connector-invocation metrics — attempts,
+  outcomes, duration — **and** its execution records are queryable without reference to RagCore. A
+  separate telemetry workspace is explicitly not adopted; it would make the correlation identifier
+  harder to follow across the seam.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -271,13 +321,15 @@ privilege.
 ### User Story 6 - The platform proves its own plumbing before it carries any product (Priority: P1)
 
 An engineer deploys the scaffold and exercises a representative flow on each public audience —
-customer, staff and workload — plus one service-to-service call between the two deployables. Each
+customer, staff and workload — plus service-to-service calls **among the three deployables**. Each
 flow acts only on an inert reference operation. Between them the flows write to and read from the
 authoritative store, commit a message to the transactional outbox in the same transaction as the
 state change, publish and consume that message through the queue, deliver a notification to the
-originating client, and carry one correlation identifier and one organisation binding from the public
-edge all the way through. Every hop authenticates as itself; no secret appears in source or
-configuration; the API contract is emitted from the running services rather than hand-written.
+originating client, **execute an inert capability through the Integrations Service and return its
+result**, and carry one correlation identifier and one organisation binding from the public edge all
+the way through. Every hop authenticates as itself; no secret appears in source or configuration;
+**no connector credential is reachable from RagCore**; the API contract is emitted from the running
+services rather than hand-written.
 
 **Why this priority**: This is what the scaffold is *for*. The risky parts of the platform are the
 seams — the transaction boundary between a state change and the message announcing it, the identity
@@ -302,7 +354,7 @@ in any external system.
 3. **Given** the workload principal, **When** it exercises the workload sample flow, **Then** it
    authenticates as an application rather than as a person, and carries no customer-organisation
    authority of its own.
-4. **Given** one deployable calling the other, **When** the call is made, **Then** the caller
+4. **Given** one deployable calling another, **When** the call is made, **Then** the caller
    authenticates as itself and the callee rejects an unauthenticated or wrongly-scoped caller.
 5. **Given** a sample flow that changes state, **When** the change commits, **Then** the state change
    and its outbox message are durable together or not at all, and a crash between them loses neither
@@ -320,6 +372,31 @@ in any external system.
    the point of use.
 10. **Given** a running service, **When** its API contract is requested, **Then** the contract is
     emitted from the running service and matches what the service actually accepts.
+11. **Given** RagCore and an inert reference connector reachable only from the Integrations Service,
+    **When** RagCore attempts to reach that connector directly, **Then** the attempt fails at the
+    network layer — and its attempt to resolve a connector credential fails at the secret store,
+    because its identity holds no such role.
+12. **Given** RagCore needing the tool catalogue or an inert system-of-record operation, **When** it
+    calls the Integrations Service, **Then** the call traverses the API gateway and authenticates as
+    an application — and a call arriving by any other route fails, including one carrying a
+    well-formed but self-supplied identity contract.
+13. **Given** an inert capability to execute, **When** RagCore dispatches it, **Then** the command
+    travels over the message transport carrying only an opaque job identifier and correlation
+    context, the Integrations Service reads its instruction from the durable job record, and the
+    result returns over a separate queue.
+14. **Given** the same execution command delivered twice, **When** both are processed, **Then**
+    exactly one external effect occurs — and the proof identifies **which** boundary absorbed the
+    duplicate, failing if that boundary alone is removed.
+15. **Given** a command carrying an organisation field it may not carry, **When** it is received,
+    **Then** it is refused and dead-lettered with an alert rather than processed — and separately, a
+    valid command whose payload asserts a conflicting organisation still produces an effect bound to
+    the organisation on the durable record.
+16. **Given** a completed execution, **When** its result returns, **Then** it is matched to the work
+    item that originated it, and one correlation identifier is recoverable across the gateway hop,
+    both queues and all three deployables.
+17. **Given** the Integrations Service under load, **When** its telemetry is inspected, **Then** it
+    appears as a distinct source, emits connector-invocation metrics, and its execution records are
+    queryable without reference to RagCore.
 
 ---
 
@@ -472,11 +549,20 @@ recorded here so a reviewer can check the scaffold against the component list wi
 | FR-DEMO-006 | Transactional outbox flow | PostgreSQL outbox table plus its dispatcher |
 | FR-DEMO-007 | Publish and consume flow | Azure Service Bus |
 | FR-DEMO-008 | Notification flow | Azure SignalR |
-| FR-DEMO-009 | Correlation and trace propagation | W3C Trace Context across both deployables |
+| FR-DEMO-009 | Correlation and trace propagation | W3C Trace Context across all three deployables |
 | FR-DEMO-010 | Organisation propagation and isolation | Trusted tenant binding, every tier |
 | FR-DEMO-011 | Managed-identity authentication | Entra managed identity to every platform resource |
 | FR-DEMO-012 | Secret binding by reference | Azure Key Vault |
 | FR-DEMO-013 | Contract emission | OpenAPI, generated from the running services |
+| FR-DEMO-020 | Inert reference connector | Reachable only from the Integrations Service |
+| FR-DEMO-021 | RagCore cannot reach an external connector | Bypass attempted and observed to fail |
+| FR-DEMO-022 | Synchronous Integrations call | Through APIM; catalogue and inert system-of-record operation |
+| FR-DEMO-023 | Asynchronous tool execution | Service Bus command and result, separate queues |
+| FR-DEMO-024 | Duplicate delivery, one effect | Both idempotency boundaries, proven independently |
+| FR-DEMO-025 | Organisation not taken from a payload | Refused **and** bound from durable state |
+| FR-DEMO-026 | Connector secrets unreachable by RagCore | Key Vault role held by Integrations alone |
+| FR-DEMO-027 | Result correlation to the originating work | One identifier across gateway, both queues, both services |
+| FR-DEMO-028 | Integrations independently observable | Distinct source, own metrics, own execution records |
 
 The audiences, the bounded contexts and the deployable boundaries are **unchanged** by this
 correction. Nothing above introduces a component, a context or a boundary that
@@ -558,6 +644,66 @@ correction. Nothing above introduces a component, a context or a boundary that
   - **Configuration review does not substitute for traversal.** A gateway policy that is correct in
     a template and unreached at runtime protects nothing, and the failure it hides — something
     bypassing the boundary — is invisible to every test that does not actually cross it.
+
+**Proving the Integrations Service boundary.** *(added 2026-09-18)*
+
+These eight demonstrations exist because a boundary that is only described is a boundary that erodes.
+Every one is exercised against **inert reference fixtures** and reaches no real external system
+(FR-DEMO-014), and every one is driven through the real deployed path (FR-DEMO-019).
+
+- **FR-DEMO-020**: The scaffold MUST provide an **inert reference connector** — a stub external
+  endpoint reachable **only** from the Integrations Service. It produces no real effect, is excluded
+  from production configuration, and MUST NOT be counted as any of UC-01 through UC-12. It is what
+  makes FR-DEMO-021 through FR-DEMO-023 provable without a real external system.
+- **FR-DEMO-021**: The scaffold MUST demonstrate that **RagCore cannot reach an external connector**,
+  by attempting the bypass and observing it fail — not by asserting an absence. Three proofs, and all
+  three are required:
+  1. RagCore's attempt to reach the inert reference connector directly fails at the network layer;
+  2. RagCore's attempt to resolve a connector credential fails at the secret store, because its
+     identity holds no such role;
+  3. an architecture check asserts no adapter, connector or external-provider client remains in
+     RagCore.
+
+  *An assertion that something is absent passes equally on a system where the path exists and simply
+  has no caller yet. Attempting it is what distinguishes the two.*
+- **FR-DEMO-022**: The scaffold MUST demonstrate a **synchronous Integrations call through the API
+  gateway**: RagCore reads the tool catalogue, and performs an inert case-like system-of-record
+  operation, over the gateway-routed path, authenticating as an application. A call that reached the
+  Integrations Service by any other route MUST fail — **including one carrying a well-formed but
+  self-supplied identity contract**, which is the shape a real bypass takes.
+- **FR-DEMO-023**: The scaffold MUST demonstrate **asynchronous tool execution over the message
+  transport**: a command from RagCore, an execution against the inert reference connector, and a
+  result returned over a separate queue.
+- **FR-DEMO-024**: The scaffold MUST demonstrate that **duplicate delivery produces one effect, at
+  both boundaries, proven independently**:
+  1. a duplicate resume trigger is absorbed by the **atomic claim** in RagCore;
+  2. a redelivered execution command is absorbed by the **derived idempotency key** in the
+     Integrations Service.
+
+  Each proof MUST fail if its own boundary alone is removed. *A single end-to-end duplicate test
+  passes whenever either mechanism holds, and would therefore stay green on the day one of them
+  silently stopped working — which is the failure the two-boundary design exists to survive.*
+- **FR-DEMO-025**: The scaffold MUST demonstrate that **organisation context is not accepted from a
+  command payload**, in two distinct ways:
+  1. a command carrying an out-of-contract organisation field is **refused** and dead-lettered with
+     an alert, and never processed;
+  2. the effect of a valid command is **bound to the organisation on the durable record** even when a
+     conflicting one is asserted.
+
+  *The first proves the payload contract is closed; the second proves where the organisation actually
+  came from. Neither alone proves both.*
+- **FR-DEMO-026**: The scaffold MUST demonstrate that **connector secrets are never available to
+  RagCore**: no connector credential is resolvable by RagCore's identity, none appears in its
+  configuration, environment or image, and the Integrations Service is the sole holder of that role.
+- **FR-DEMO-027**: The scaffold MUST demonstrate **result correlation back to the originating work**:
+  an execution result returned over the message transport is matched to the work item that originated
+  it, and one correlation identifier is recoverable across the gateway hop, both queues and both
+  services.
+- **FR-DEMO-028**: The scaffold MUST demonstrate that the **Integrations Service is independently
+  observable**: it appears as a distinct source in traces and logs; it emits connector-invocation
+  metrics covering attempts, outcomes and duration; and its execution records are queryable without
+  reference to RagCore — while the platform's single correlation identifier still spans the whole
+  journey.
 
 #### Personas and authorization
 
@@ -849,6 +995,116 @@ correction. Nothing above introduces a component, a context or a boundary that
   temporarily unavailable, distinctly from one that is not entitled. Neither MUST be presented to the
   user as a failure of their request.
 
+#### The Integrations Service
+
+Derived from `Synthia-Platform-Specification.md` §21.6 and ADR-0007, which are authoritative. These
+requirements state what the scaffold must build; they do **not** decide architecture, and any
+divergence between them and the platform specification is resolved in the specification's favour.
+
+**Responsibilities.**
+
+- **FR-INTEG-001**: The platform MUST deploy **Integrations as a service separate from RagCore**, with
+  its own runtime, its own workload identity and its own lifecycle.
+- **FR-INTEG-002**: The Integrations Service MUST own the **tool catalogue** — the capability set
+  resolved for one organisation — and expose it for synchronous read.
+- **FR-INTEG-003**: It MUST own the **connector registry**: how a capability executes — connector,
+  endpoint, signing profile and idempotency policy.
+- **FR-INTEG-004**: It MUST own **tenant tool configuration**: which capabilities an organisation may
+  use. There MUST be no global capability set.
+- **FR-INTEG-005**: It MUST own **operation execution**, the **MCP client**, **MCP connector and server
+  integration**, and **all external API calls** — ServiceNow, Microsoft Graph, OneLogin, Duo and every
+  further system.
+- **FR-INTEG-006**: It MUST own **credential lookup**, **result normalization**, **external
+  idempotency**, **execution records**, and its own **telemetry, audit and trace** emission.
+
+**Non-responsibilities.**
+
+- **FR-INTEG-007**: The Integrations Service MUST NOT implement user conversation, reasoning, graph
+  orchestration, **tool-selection reasoning**, approval waiting or its user interface, or graph
+  interrupt and resume.
+- **FR-INTEG-008**: It MUST NOT assign **execution treatment** and MUST NOT perform **role-set
+  intersection**. Those are deterministic governance's decisions, and a second authority for either
+  could disagree with the first.
+- **FR-INTEG-009**: It MUST NOT perform final issue verification's **conclusion**, nor decide to close
+  a case. It reports what it observed; RagCore decides what that means.
+- **FR-INTEG-010**: It MUST NOT perform the **atomic claim**. Idempotency boundary 1 belongs with the
+  authority record in RagCore.
+
+**Communication paths.** Exactly three, and no other path exists.
+
+- **FR-INTEG-011**: **Synchronous catalogue access.** RagCore MUST read the tool catalogue over
+  synchronous HTTPS, routed through the public edge and the **API gateway**, authenticating as an
+  application with its own distinct application role. The request MUST carry an opaque identifier and
+  MUST NOT carry an organisation.
+- **FR-INTEG-012**: **Synchronous system-of-record operations.** Where the platform must know the
+  outcome before proceeding, RagCore MUST reach ServiceNow **through the Integrations Service**, over
+  the same gateway-routed path.
+- **FR-INTEG-013**: **Asynchronous tool execution.** Normal tool execution MUST travel RagCore →
+  message transport → Integrations Service, and its result MUST return Integrations Service → message
+  transport → RagCore, over queues of their own, separate from the resume trigger.
+- **FR-INTEG-014**: **The command MUST carry only an opaque job identifier, correlation identifiers
+  and a routing kind.** RagCore MUST write the capability, its version and its parameters to a durable
+  job record before the message exists, and the Integrations Service MUST read its instruction from
+  that record and **never from the message**.
+- **FR-INTEG-015**: **A direct route between deployables MUST NOT exist.** RagCore MUST NOT reach the
+  Integrations Service other than through the gateway, and the Integrations Service MUST NOT trust an
+  identity header a caller supplied.
+
+**Security and isolation.**
+
+- **FR-INTEG-016**: **RagCore MUST NOT hold, resolve or be able to resolve any connector credential**,
+  and MUST NOT have a network path to any external system. The Integrations Service MUST be the sole
+  holder of the secret-store role for connector credentials.
+- **FR-INTEG-017**: Every component MUST authenticate as a **managed identity** to every platform
+  resource that supports it, and connector credentials MUST resolve from the **secret store** by
+  reference at the point of use, per organisation and per system.
+- **FR-INTEG-018**: The Integrations Service MUST resolve the organisation **only from durable
+  state** — the job record on the asynchronous path, the durable object an opaque identifier names on
+  the synchronous path. It MUST NOT accept an organisation from a request field, a message payload, a
+  token, model output or tool output.
+- **FR-INTEG-019**: **At execution time, and against durable state**, the Integrations Service MUST
+  re-verify: the organisation is active; the work is authorized, uncancelled and within its execution
+  window; the organisation is entitled to the capability; the capability is registered; its version
+  matches what was authorized; and the capability was reached past the control gate. Prior catalogue
+  retrieval MUST NOT be treated as standing permission.
+- **FR-INTEG-020**: The Integrations Service MUST NOT be able to modify the instruction it was given.
+  It MAY write the result of a job record and MUST NOT be able to alter the capability, its version,
+  its parameters or its organisation.
+
+**Execution integrity and operation.**
+
+- **FR-INTEG-021**: **Connector idempotency.** Every outbound call MUST carry a **derived**, never
+  random, idempotency key, so a redelivered command produces the same key and therefore at most one
+  external effect. This boundary MUST NOT substitute for the atomic claim, nor the claim for it.
+- **FR-INTEG-022**: **Execution records.** The Integrations Service MUST durably record what was
+  attempted externally — connector, endpoint, derived key, external reference and normalized outcome
+  — distinctly from the platform's own conclusion about the operation.
+- **FR-INTEG-023**: **Result normalization.** Provider output MUST be parsed and contract-checked at
+  the boundary and treated as data. It MUST NOT become an instruction, a destination, an identity, an
+  organisation or a source of authority.
+- **FR-INTEG-024**: **Telemetry, audit and traceability.** The service MUST appear as a distinct
+  source in traces and logs; MUST emit connector-invocation metrics; MUST make its execution records
+  queryable without reference to RagCore; and MUST carry the platform's **single correlation
+  identifier** across the gateway hop and the message transport. Audit MUST remain one store, with
+  the actor chain recording the Integrations principal as the executing principal. Telemetry MUST NOT
+  carry credentials, tokens or cross-organisation information.
+- **FR-INTEG-025**: **Contract emission.** The Integrations Service MUST emit its API contract from
+  the running service, per audience, never merged with another deployable's, under the same
+  publication gates as the existing contracts.
+- **FR-INTEG-026**: **Health and readiness.** It MUST expose a process-only liveness signal and a
+  readiness signal covering its durable store, its message transport and its secret store. Readiness
+  MUST NOT depend on any external customer system, whose unavailability is an operational condition
+  rather than an unready service.
+- **FR-INTEG-027**: **Resilience, retry and dead-lettering.** Reads MAY retry with backoff inside the
+  adapter. A **side-effecting operation MUST NOT be retried automatically**; it requires fresh human
+  authorization. Every outbound call MUST carry an explicit timeout. A command that cannot be
+  processed within its validity window MUST dead-letter rather than execute, MUST NOT be replayed
+  automatically, and where it carried authorized work MUST surface as a governance failure rather
+  than an operational one.
+- **FR-INTEG-028**: When the Integrations Service is unavailable, conversation, retrieval and guidance
+  MUST continue. A capability requiring an external effect MUST fall back to manual resolution or
+  escalation, explicitly and visibly.
+
 #### Manual fallback
 
 - **FR-FALL-001**: An unsupported or unresolved request MUST be transferred for human resolution.
@@ -942,6 +1198,20 @@ correction. Nothing above introduces a component, a context or a boundary that
   telemetry.
 - **Governance record**: The catalogue of known operations and the rules that determine how each may
   proceed and which roles may authorize it.
+- **Integration job**: The durable instruction handed to the Integrations Service — organisation,
+  capability, version and parameters — written before the command that announces it exists, and
+  carrying the result written back against it. The Integrations Service reads the instruction and may
+  write only the result.
+- **Connector binding**: How a capability actually executes — connector, endpoint, signing profile and
+  idempotency policy. Owned by the Integrations Service, and distinct from the governance record,
+  which says whether and by whom a capability may be used.
+- **Execution record**: What was attempted against an external system — connector, endpoint, derived
+  idempotency key, external reference and normalized outcome. Distinct from the platform's own
+  conclusion about the operation: *what was attempted* and *what the platform concluded* are
+  different facts.
+- **Inert reference connector**: A stub external endpoint reachable only from the Integrations
+  Service, producing no real effect. A scaffold fixture, excluded from production configuration, and
+  never one of UC-01 through UC-12.
 - **Graph checkpoint**: The agent's working state, allowing durable suspension and resume. Working
   state only — never a source of authority.
 - **Organisation mapping**: The record binding a validated organisation identifier to its platform
@@ -980,8 +1250,9 @@ appended within their group.
 verified against a deployed environment, not a unit test, because the seams these exist to prove are
 precisely the ones that do not exist in a single process.
 
-- **SC-DEMO-001**: All thirteen sample flows (FR-DEMO-001 through FR-DEMO-013) complete successfully
-  when driven through the deployed public edge, web application firewall, API gateway and container
+- **SC-DEMO-001**: All thirteen sample flows (FR-DEMO-001 through FR-DEMO-013) **and the nine
+  Integrations-boundary demonstrations (FR-DEMO-020 through FR-DEMO-028)** complete successfully when
+  driven through the deployed public edge, web application firewall, API gateway and container
   platform, and each is repeatable by an engineer following written steps without recourse to the
   authors. 0 flows are accepted on the strength of a direct-to-deployable or locally hosted run.
 - **SC-DEMO-002**: 100% of sample-flow requests are rejected when presented without a valid identity,
@@ -1016,6 +1287,37 @@ precisely the ones that do not exist in a single process.
   any sample flow.
 - **SC-DEMO-014**: Where an operation requiring a human decision is encountered while the gate is
   unexercised, it is refused or routed to manual fallback in 100% of cases, and auto-approved in 0.
+
+*Added 2026-09-18, proving the Integrations Service boundary.*
+
+- **SC-DEMO-015**: RagCore reaches an external connector in **0** of 100% of attempts — verified by
+  attempting the connection and observing it fail, and separately by attempting to resolve a
+  connector credential and observing the secret store refuse it. 0 adapters, connectors or
+  external-provider clients remain in RagCore.
+- **SC-DEMO-016**: 100% of synchronous Integrations calls — catalogue reads and inert
+  system-of-record operations — traverse the API gateway and authenticate as an application. 0 reach
+  the service by another route, including 0 carrying a well-formed but self-supplied identity
+  contract.
+- **SC-DEMO-017**: 100% of tool executions travel as a message carrying only an opaque job
+  identifier, correlation context and a routing kind. **0 carry** an organisation, actor, capability,
+  target, parameters or credential.
+- **SC-DEMO-018**: A duplicated execution command produces exactly **1** external effect in 100% of
+  trials, and **each of the two idempotency boundaries is separately shown to be load-bearing** — the
+  corresponding proof fails when that boundary alone is removed.
+- **SC-DEMO-019**: A command carrying an out-of-contract organisation field is refused and
+  dead-lettered in 100% of trials and processed in 0; and a command whose payload asserts a
+  conflicting organisation produces an effect bound to the durable organisation in 100% of trials.
+- **SC-DEMO-020**: RagCore's identity can resolve **0** connector credentials, and a scan of its
+  source, configuration, environment and image finds 0 connector secrets.
+- **SC-DEMO-021**: 100% of execution results are matched back to the work item that originated them,
+  and one correlation identifier is recoverable across the gateway hop, both queues and all three
+  deployables.
+- **SC-DEMO-022**: The Integrations Service is identifiable as a distinct telemetry source for 100%
+  of its invocations, emits attempt, outcome and duration metrics for 100% of connector calls, and
+  its execution records are answerable without reading RagCore's telemetry.
+- **SC-DEMO-023**: With the Integrations Service stopped, conversation, retrieval and guidance
+  continue to succeed in 100% of trials, and a capability requiring an external effect falls back to
+  manual resolution or escalation visibly in 100% of cases — 0 are reported to a user as completed.
 
 #### Authorization
 
@@ -1155,6 +1457,14 @@ move into Measurable Outcomes and become binding — not before.
   script privilege level, and result attestation are named open items in the platform specification.
   They block the device-execution path from carrying anything beyond non-elevated, non-destructive
   operations.
+- **The Integrations Service boundary's residual decisions.** ADR-0007 leaves two items open that
+  this specification depends on: **which system-of-record operations are synchronous** (the platform
+  specification classifies six write classes identically but makes only case creation clearly
+  blocking), and **the exact result fields of the job record together with the permission scope that
+  confines the Integrations Service to writing only those**. FR-INTEG-020 and FR-DEMO-025 are
+  specified in full and are provable only once the second is settled, because the protection is
+  enforced at the database permission boundary rather than in application code.
+  *Revisit when:* both are recorded. Neither blocks the remaining Integrations demonstrations.
   *Revisit when:* ADR-0004's two residual items close — script signing, and the taxonomy of what
   makes a catalogue entry destructive. Both are prerequisites for lifting the §35.4 shipping gate,
   and neither is needed before Stage 14.

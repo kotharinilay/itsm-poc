@@ -4,9 +4,13 @@ name: contracts
 # not a document maintained beside them. A route whose emitted shape stops matching its declared
 # contract fails the build rather than surfacing at a client.
 #
-# Both stacks emit, then ONE validator and ONE comparator check everything. A second implementation
-# of either would drift, and the drift would be invisible until the weaker of the two was the one
-# that mattered.
+# All THREE deployables emit, then ONE validator and ONE comparator check everything. A second
+# implementation of either would drift, and the drift would be invisible until the weaker of the two
+# was the one that mattered.
+#
+# RagCore and the Integrations Service both serve the workload audience and each emits its OWN
+# document (ADR-0007). They are never merged: the comparator diffs per deployable, and a merged
+# document would let a breaking change in one service be masked by the other's shape.
 #
 # WHAT THIS PIPELINE ASSERTS, in the order the steps run:
 #   1. The documents can be generated at all — from the running services, not from a template.
@@ -23,6 +27,8 @@ on:
     paths:
       - 'ragcore/src/ragcore/api/**'
       - 'ragcore/scripts/emit_contracts.py'
+      - 'integrations/src/integrations/api/**'
+      - 'integrations/scripts/emit_contracts.py'
       - 'dotnet/src/Synthia.Api/**'
       - 'dotnet/src/Synthia.Contracts/**'
       - 'dotnet/tests/Synthia.ContractTests/**'
@@ -62,14 +68,25 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: ragcore/uv.lock
+          # Both Python deployables, because each has its own lock. A single glob would cache one
+          # environment and silently rebuild the other on every run.
+          cache-dependency-glob: |
+            ragcore/uv.lock
+            integrations/uv.lock
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Sync (locked)
+      - name: Sync RagCore (locked)
         working-directory: ragcore
+        run: uv sync --all-groups --frozen
+
+      # A SEPARATE environment, from a separate lock. The two services share no package by design
+      # (ADR-0007); syncing one and emitting from both would emit the Integrations document against
+      # RagCore's dependency set, which is not what ships.
+      - name: Sync Integrations (locked)
+        working-directory: integrations
         run: uv sync --all-groups --frozen
 
       # Emitted into a directory that is NOT the committed one, so the comparison is between what
@@ -78,6 +95,12 @@ jobs:
       - name: Emit RagCore contracts
         working-directory: ragcore
         run: uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/contracts/ragcore"
+
+      # Emitted from the FastAPI application's own route models, exactly as RagCore's is, so the
+      # document cannot describe a shape the service does not accept.
+      - name: Emit Integrations contracts
+        working-directory: integrations
+        run: uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/contracts/integrations"
 
       # The .NET documents come from the running application through the contract tests, so the
       # artifact published here is produced by the same generator that serves /openapi/{audience}.json.
@@ -100,6 +123,8 @@ jobs:
           set -euo pipefail
           cd ragcore
           uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/again/ragcore"
+          cd ../integrations
+          uv run python scripts/emit_contracts.py --out "${{ runner.temp }}/again/integrations"
           cd ../dotnet
           dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj \
             --filter "FullyQualifiedName~OpenApiEmissionTests" --nologo

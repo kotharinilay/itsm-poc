@@ -1,0 +1,168 @@
+{
+  "$comment": [
+    "SERVICE BUS QUEUE AND ROLE REGISTRY. What the trigger contract could not say.",
+    "",
+    "specs/001-platform-scaffold/contracts/triggers.md defines the MESSAGES — their kinds, their",
+    "closed field sets, what they do and do not carry, and the consumer's obligations. It cannot say",
+    "which queues exist, what their transport settings are, or which identity may send on which one.",
+    "Until this file existed those lived only in role scopes inside managed-identities.json, which",
+    "named queues nothing declared.",
+    "",
+    "A QUEUE THAT EXISTS ONLY IN A ROLE SCOPE IS A QUEUE NOBODY PROVISIONS. The role assignment",
+    "deploys cleanly against a namespace with no such queue, the publisher then fails at first use,",
+    "and the failure names an authorization problem rather than a missing resource.",
+    "",
+    "THE TRANSPORT SETTINGS ARE PART OF THE CONTRACT, not tuning. `maxDeliveryCount`, the lock",
+    "duration and the message time-to-live are what make 'an expired message dead-letters rather",
+    "than executing' true — stated in triggers.md as a rule and configured here as the mechanism.",
+    "Changing one without the other makes the document describe a system that does not exist."
+  ],
+
+  "$separation": [
+    "THREE QUEUES, NOT ONE, AND THE SEPARATION IS A TRIAGE CONTROL (triggers.md).",
+    "",
+    "synthia-triggers carries the resume trigger. The two integration queues carry the execution",
+    "seam. Mixing them would make dead-letter triage ambiguous: an operator finding a dead-lettered",
+    "message could not tell 'approved work never ran' from 'a result never returned', and those call",
+    "for different actions — the first is a governance failure that surfaces in the",
+    "approved-but-not-executed list, the second is an operational one.",
+    "",
+    "COMMANDS AND RESULTS ARE ALSO SEPARATE FROM EACH OTHER, for the same reason one level down.",
+    "They flow in opposite directions between different principals, so one queue would mean each",
+    "service held both send and listen on it — and 'RagCore cannot publish a result' would stop",
+    "being enforceable by role assignment at all."
+  ],
+
+  "queues": [
+    {
+      "name": "synthia-triggers",
+      "purpose": "Approval, consent and sample-flow triggers. RagCore publishes; RagCore's workers consume.",
+      "kinds": [
+        "approval.granted",
+        "approval.rejected",
+        "consent.granted",
+        "consent.refused",
+        "sample.flow"
+      ],
+      "messageTimeToLive": "PT15M",
+      "lockDuration": "PT5M",
+      "maxDeliveryCount": 5,
+      "deadLetteringOnMessageExpiration": true,
+      "requiresSession": false,
+      "$comment": [
+        "Pre-existing. Listed here so the registry is the whole picture rather than the new half —",
+        "a file describing two of three queues is one a reader trusts for the wrong set.",
+        "",
+        "ORDERING IS NOT ASSUMED ANYWHERE (triggers.md), so sessions are off. Enabling them would",
+        "impose an ordering guarantee no consumer relies on, at the cost of head-of-line blocking:",
+        "one poison message would stall every message sharing its session."
+      ]
+    },
+    {
+      "name": "synthia-integration-commands",
+      "purpose": "RagCore asks the Integrations Service to execute an authorized capability.",
+      "kinds": ["integration.execute"],
+      "messageTimeToLive": "PT15M",
+      "lockDuration": "PT5M",
+      "maxDeliveryCount": 5,
+      "deadLetteringOnMessageExpiration": true,
+      "requiresSession": false,
+      "$comment": [
+        "THE MESSAGE CARRIES jobId, correlationId AND kind, AND NOTHING ELSE (FR-INTEG-014). The",
+        "organisation, the capability, its version, its parameters and the authority all come from",
+        "the durable integration_job row the identifier names. A field the contract does not name is",
+        "refused and dead-lettered rather than sanitised.",
+        "",
+        "messageTimeToLive MATCHES THE EXECUTION WINDOW, and that is the point rather than a",
+        "coincidence. A command outliving the authority that permitted it must dead-letter rather",
+        "than execute; expiry at the transport is what makes that true even if every consumer is",
+        "down. The consumer re-checks the window against durable state as well — two mechanisms,",
+        "because the transport cannot see an approval that was revoked inside the window.",
+        "",
+        "lockDuration is longer than any single connector call's timeout, so a slow external system",
+        "cannot cause redelivery WHILE THE FIRST ATTEMPT IS STILL RUNNING. That specific race is how",
+        "an at-least-once queue produces two external effects from one authorization — and the",
+        "derived idempotency key is the second line of defence against it, not the first.",
+        "",
+        "A DEAD-LETTERED COMMAND IS A GOVERNANCE FAILURE, not an operational one: it means approved",
+        "work never ran. It surfaces in the approved-but-not-executed list with an alert, and",
+        "recovery is fresh authorization — NEVER replay (FR-EXEC-006)."
+      ]
+    },
+    {
+      "name": "synthia-integration-results",
+      "purpose": "The Integrations Service reports an execution outcome back to RagCore.",
+      "kinds": ["integration.completed", "integration.failed"],
+      "messageTimeToLive": "PT15M",
+      "lockDuration": "PT5M",
+      "maxDeliveryCount": 5,
+      "deadLetteringOnMessageExpiration": true,
+      "requiresSession": false,
+      "$comment": [
+        "The result message carries the same three fields. RagCore reads the outcome from the four",
+        "result columns on its own integration_job row, not from the message — so a lost or",
+        "duplicated result cannot change what the platform believes happened.",
+        "",
+        "AN `integration.failed` IS NEVER A RE-DISPATCH (FR-INTEG-027). It is consumed, recorded and",
+        "escalated. A consumer that re-published a command on failure would spend one authority",
+        "record repeatedly, which is the loop the no-retry rule exists to prevent.",
+        "",
+        "A dead-lettered RESULT is operational rather than governance: the effect may well have",
+        "happened, and what is lost is RagCore's knowledge of it. The execution record in the",
+        "Integrations Service's schema is the reconciliation source — which is why the result columns",
+        "carry the execution id."
+      ]
+    }
+  ],
+
+  "roleAssignments": [
+    {
+      "identity": "id-synthia-ragcore",
+      "resource": "servicebus",
+      "role": "Azure Service Bus Data Sender",
+      "scope": "queue:synthia-integration-commands",
+      "why": "RagCore dispatches authorized work. Send only: it must not be able to consume its own commands."
+    },
+    {
+      "identity": "id-synthia-ragcore",
+      "resource": "servicebus",
+      "role": "Azure Service Bus Data Receiver",
+      "scope": "queue:synthia-integration-results",
+      "why": "RagCore consumes outcomes and resumes the graph. Receive only: it must not be able to publish a result."
+    },
+    {
+      "identity": "id-synthia-integrations",
+      "resource": "servicebus",
+      "role": "Azure Service Bus Data Receiver",
+      "scope": "queue:synthia-integration-commands",
+      "why": "The Integrations Service consumes commands. Receive only: it must not be able to dispatch work to itself."
+    },
+    {
+      "identity": "id-synthia-integrations",
+      "resource": "servicebus",
+      "role": "Azure Service Bus Data Sender",
+      "scope": "queue:synthia-integration-results",
+      "why": "It publishes the outcome through its own transactional outbox. Send only."
+    }
+  ],
+
+  "$leastPrivilege": [
+    "FOUR ASSIGNMENTS, EACH ONE DIRECTION ON ONE QUEUE. Neither service holds both roles on either",
+    "integration queue, and that asymmetry is the control rather than tidiness:",
+    "",
+    "  - RagCore cannot publish an `integration.completed`. If it could, a compromised orchestrator",
+    "    could fabricate a successful outcome for work that never ran — and because RagCore reads",
+    "    the outcome from its own row rather than the message, the forgery would have to be paired",
+    "    with a database write it also cannot make (migration 0022 grants it no UPDATE on the result",
+    "    columns).",
+    "  - The Integrations Service cannot dispatch work to itself. Every execution it performs traces",
+    "    to a command RagCore published against a job row RagCore wrote.",
+    "",
+    "DATA OWNER IS DELIBERATELY NOT USED ANYWHERE. It would collapse each pair into one line and",
+    "additionally grant management of queues and subscriptions, which no runtime component does.",
+    "",
+    "SCOPED TO THE QUEUE, NEVER THE NAMESPACE. A namespace-scoped Sender would let either service",
+    "publish to synthia-triggers and forge an approval trigger, which is the one message class that",
+    "moves work past a human decision."
+  ]
+}

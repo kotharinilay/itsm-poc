@@ -1,8 +1,14 @@
 # Runbook — rotate the gateway client certificate
 
 **The order is the control.** Widen the allow-list, *then* switch the certificate. Performing these
-steps in the other order is a total outage of every audience on both deployables, with no
+steps in the other order is a total outage of every audience on **all three deployables**, with no
 deployment and no code change to point at.
+
+**Three backends now share one certificate** (ADR-0007): RagCore, the Integrations Service and the
+monolith. That widens what this procedure can break rather than changing how it works — and it adds
+a failure mode worth naming up front. Health probes are exempt from gateway provenance, so a backend
+you forget to widen **stays green while serving nothing**. Its readiness endpoint answers; every real
+request gets a 403.
 
 Read that sentence before reading anything else on this page. Everything below is an elaboration of
 it.
@@ -97,8 +103,14 @@ Append the new thumbprint to the existing value, comma-separated. Keep the outgo
 
 Deploy both. Wait for every replica to be running the new revision.
 
-**Do not proceed until this is true of both deployables.** Both certificates are now accepted, which
-is the whole point of the overlap: there is no instant in this procedure at which neither is.
+**Do not proceed until this is true of all three deployables.** Both certificates are now accepted
+on every backend, which is the whole point of the overlap: there is no instant in this procedure at
+which neither is.
+
+Check the Integrations Service explicitly rather than inferring it from the other two. It was the
+last backend added, it is the one a reader of an older copy of this runbook would omit, and — because
+its probes are provenance-exempt — omitting it produces a healthy-looking service that refuses every
+call RagCore makes to it.
 
 ### 3. Switch the certificate in APIM
 

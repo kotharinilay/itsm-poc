@@ -144,11 +144,24 @@
       /api/workload/v1/integrations reaches the Integrations backend, and that prefix is exactly the
       set of operations this role governs.
 
+      A PREFIX MATCH, NOT A SUBSTRING ONE, and the difference is not pedantry. An earlier version of
+      this check used Contains("/integrations"), which also matches a RagCore route that merely has
+      the word in it - /api/workload/v1/work-items/{id}/integration-status would have demanded the
+      Integrations role to reach a backend that is not the Integrations Service. That direction
+      fails closed, so it would not have shown up as a security finding; it would have shown up as a
+      RagCore route mysteriously returning 403 for a correctly-credentialled caller, which is harder
+      to attribute and therefore likelier to be "fixed" by deleting the check.
+
+      The leading slash is trimmed before comparing so the match does not depend on whether APIM
+      reports Path with one - a detail that differs by configuration and would turn this check into
+      a no-op if it changed. A check that silently stops matching is the failure mode that matters
+      here: it would let any workload caller reach the connectors.
+
       403 rather than 401: the caller authenticated fine. It simply holds no role this surface
       accepts, which is an authorization outcome and must not read as a credential problem.
     -->
     <choose>
-      <when condition="@(context.Request.Url.Path.Contains("/integrations"))">
+      <when condition="@(context.Request.Url.Path.TrimStart('/').StartsWith("api/workload/v1/integrations", StringComparison.OrdinalIgnoreCase))">
         <choose>
           <when condition="@(!((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("roles", "").Split(',').Select(r => r.Trim()).Contains("{{integrations-app-role}}"))">
             <return-response>

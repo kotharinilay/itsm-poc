@@ -84,6 +84,7 @@ expect_comparator_rejects() {
 
 CUSTOMER="build/contracts/ragcore/customer.v1.openapi.json"
 STAFF="build/contracts/dotnet/staff.v1.openapi.json"
+INTEGRATIONS="build/contracts/integrations/workload.v1.openapi.json"
 
 echo "Planting violations the validator must reject:"
 
@@ -121,6 +122,26 @@ document["components"]["schemas"]["ConsentRequest"]["properties"]["tenantId"] = 
 expect_validator_rejects "a roles field in a request body" \
   "$(plant authority_roles "$CUSTOMER" customer '
 document["components"]["schemas"]["ConsentRequest"]["properties"]["roles"] = {"type": "array"}
+')"
+
+# THE SAME RULE, ON THE INTEGRATIONS DOCUMENT. Planted against a THIRD deployable's artifact
+# deliberately: every case above uses RagCore's or the monolith's, so none of them exercises this
+# document's shape - a workload-audience document whose schemas are named differently.
+#
+# To be precise about what this does and does not prove: it plants into a throwaway copy, so it
+# shows the RULE applies to this document, not that CI walks build/contracts/integrations. What
+# catches the tree being dropped from the walk is the "every committed document is publishable"
+# assertion at the end of this script, plus the staleness diff in contracts.yml.
+#
+# The rule is also load-bearing here in a way it is not elsewhere. This surface is the synchronous
+# seam RagCore calls, and `FR-INTEG-018` says the organisation is recovered from the durable object
+# an opaque identifier names — NEVER from the request. A `tenantId` accepted on this body would let
+# the caller choose whose data is touched, which is the one thing the whole boundary exists to stop.
+expect_validator_rejects "a tenant field on the Integrations request body" \
+  "$(plant integrations_authority "$INTEGRATIONS" workload '
+document["components"]["schemas"]["CaseOperationRequest"]["properties"]["tenantId"] = {
+    "type": "string"
+}
 ')"
 
 # RFC 9457. Two ways to get it wrong: publish the error at the wrong media type, or publish no

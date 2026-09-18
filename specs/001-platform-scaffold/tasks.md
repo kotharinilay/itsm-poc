@@ -850,7 +850,57 @@ reference connector. Configuration review does not substitute for traversal.
 
 ### Wiring the two communication paths
 
-- [ ] T298 [US6] Provision `synthia-integration-commands` and `synthia-integration-results` as **separate queues**, with role assignments granting RagCore send-on-commands and listen-on-results, and the Integrations Service listen-on-commands and send-on-results — **and nothing more**. `synthia-triggers` is **not** reused: mixing lifecycles makes dead-letter triage ambiguous — Boundary: messaging | Validates: Spec §FR-INTEG-013, Contracts §triggers
+- [X] T298 [US6] Provision `synthia-integration-commands` and `synthia-integration-results` as **separate queues**, with role assignments granting RagCore send-on-commands and listen-on-results, and the Integrations Service listen-on-commands and send-on-results — **and nothing more**. `synthia-triggers` is **not** reused: mixing lifecycles makes dead-letter triage ambiguous — Boundary: messaging | Validates: Spec §FR-INTEG-013, Contracts §triggers
+- [X] T323 [US6] Write the APIM routing and direct-route proofs in `integrations/tests/security/test_apim_routing.py` — asserted from the committed registry: the gateway fronts this service on the workload audience, its path is strictly longer than RagCore's so the most specific prefix wins, the role check is a **prefix match rather than a substring one**, and **exactly one API points at this backend and it is not client-facing**. Complements the runtime refusal in `test_boundary.py`: that half would pass on a deployment where APIM never routed here, and this half would pass on a service that accepted anything — Boundary: gateway | Validates: Spec §FR-INTEG-011, §FR-INTEG-012, §13.4
+
+> **Slice checkpoint — contracts and the infrastructure boundary (2026-09-18).** Delivered **T298**
+> and **T323**, and made **T274** true rather than merely marked.
+>
+> **T274 was marked complete while the pipeline it describes did not exist.** Its text says the
+> Integrations CI covers "contract emission through all five gates". In fact
+> `.github/workflows/contracts.yml` emitted from RagCore and .NET only: nothing generated, validated,
+> diffed or staleness-checked `build/contracts/integrations/`. The committed artifact was real and
+> correct, but no gate would have caught it drifting. All six documents now pass through one
+> validator and one comparator. **Recording this rather than quietly fixing it** — a task marked done
+> on work that was not done is the failure mode a task list exists to prevent, and the same mistake
+> is worth looking for in T271–T273.
+>
+> **The emitter had a defect that CI would have hidden.** It took a bare positional argument, so the
+> `--out <dir>` invocation every other emitter uses wrote a file literally named `--out` and left the
+> document unwritten. Wired into the pipeline as it was, the comparison would have diffed a
+> directory against itself and passed unconditionally — the exact failure the pipeline exists to
+> prevent, one level up. The CLI now matches RagCore's exactly, with `--out` `required`.
+>
+> **The APIM role check was a substring match.** `Contains("/integrations")` would also fire on a
+> RagCore route merely containing the word, demanding the Integrations role to reach a backend that
+> is not this service. That direction fails closed, so it would never have surfaced as a security
+> finding — it would have surfaced as a RagCore route returning 403 to a correctly-credentialled
+> caller, which is harder to attribute and likelier to be "fixed" by deleting the check. It is now a
+> prefix match, and T323 asserts it stays one.
+>
+> **Four role assignments, each one direction on one queue** (`build/infra/messaging/queues.json`).
+> RagCore cannot publish a result; the Integrations Service cannot dispatch work to itself. The
+> asymmetry is the control: a compromised orchestrator that could publish `integration.completed`
+> could fabricate a successful outcome for work that never ran — and pairing that forgery with the
+> database write it would also need is already denied by revision 0022's column-scoped grant.
+>
+> **Queues were declared only inside role scopes before this.** A queue that exists only as a role
+> scope is a queue nobody provisions: the assignment deploys cleanly against a namespace with no
+> such queue, and the publisher then fails at first use with what reads as an authorization problem.
+>
+> **Gates.** All six contracts publishable; guard prover green including a new plant against the
+> Integrations document; `check-edge-path.sh` green; `check-boundaries.sh` green. The routing guards
+> were **proven by mutation** — a substring role check, a removed role check, a shortened route path
+> and a planted client-facing route to the connectors were each caught, with a clean restore.
+>
+> **What is configuration and not yet proof.** Everything here is committed configuration read by
+> structural tests. It holds in CI without an Azure subscription, which is the point, but no
+> assertion here observes a deployed APIM refusing a direct call. **T320** (mutation-proving
+> `verify-edge-guard.sh` for the third deployable) and **T311** (attempting the bypass against a
+> deployment) remain the proofs that close that gap, and neither is claimed.
+>
+> **Also still open**: T282, T283 (the `integration_job` grant test — still the top item), T304–T322.
+
 - [X] T299 [US6] Implement the transactional outbox and result publisher in `integrations/src/integrations/messaging/` — **the service runs its own outbox**; a result row is durable before publication — Boundary: messaging | Validates: Constitution §Idempotency and messaging
 - [X] T300 [US6] Implement the command consumer in `integrations/workers/command_consumer.py` — reads `jobId` from the message, loads the job row, **recovers the organisation from that row and from nothing else**, re-checks via T287, executes via T294, writes the execution record, updates the four result columns, publishes the result — Boundary: messaging | Validates: Spec §FR-INTEG-014, §FR-INTEG-018
 - [X] T301 [US6] Implement retry and dead-letter behaviour in `integrations/src/integrations/messaging/deadletter.py` — bounded backoff inside the remaining window for pre-execution transient failure; **no retry of a side-effecting operation**; a message outliving its validity window dead-letters rather than executing; **a dead-lettered message carrying authorized work surfaces as a governance failure** in the approved-but-not-executed list with an alert, and recovery is fresh authorization, never replay — Boundary: resilience | Validates: Spec §FR-INTEG-027, Constitution §Idempotency and messaging

@@ -20,7 +20,10 @@
     "",
     "ONE DOCUMENT PER AUDIENCE PER DEPLOYABLE, AND NEVER A MERGED ONE. A merged document would let a",
     "customer-facing client discover the staff and workload surfaces, which is why the emission tasks",
-    "produce five documents rather than one."
+    "produce six documents rather than one — three deployables, and the workload audience served by",
+    "two of them (ADR-0007). The compatibility gate therefore diffs per DEPLOYABLE, not per audience:",
+    "merging the two workload documents would let a breaking change in one service be masked by the",
+    "other's shape."
   ],
 
   "policyVersion": "1.0.0",

@@ -78,9 +78,12 @@
         "  - NO model or Foundry access, and no AI Gateway route. It does no reasoning",
         "    (FR-INTEG-007), and a model client here would be a second, ungoverned egress outside",
         "    the gateway's metering, budgets and content safety.",
-        "  - NO Service Bus role YET. The command and result queues arrive with the asynchronous",
-        "    seam; granting a role for a queue that does not exist would be a standing permission",
-        "    nobody could exercise or audit.",
+        "  - NO Service Bus role on `synthia-triggers`. That queue carries approval and consent",
+        "    triggers, which move work past a human decision. This service makes no such decision",
+        "    and must not be able to forge one.",
+        "  - NO Service Bus SENDER role on the command queue, and no RECEIVER on the results queue.",
+        "    It consumes commands and publishes results, never the reverse: a service that could",
+        "    dispatch work to itself would be executing without a job row RagCore wrote.",
         "",
         "ITS DATABASE RIGHTS ARE NOT HERE. PostgreSQL authorization is a GRANT, applied by migration",
         "0021 to the `synthia_integrations` principal: write on the `integration` schema it owns,",
@@ -106,6 +109,18 @@
           "role": "Monitoring Metrics Publisher",
           "scope": "application-insights",
           "why": "Entra-authenticated telemetry ingestion, so no instrumentation key is held. Reports under its OWN service name, so it is a distinct telemetry source while the platform's single correlation identifier still spans the journey (FR-DEMO-028)."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Receiver",
+          "scope": "queue:synthia-integration-commands",
+          "why": "Consumes commands. Receive only, and scoped to the queue: a namespace-scoped role would reach the approval triggers. Declared with the queue in build/infra/messaging/queues.json."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Sender",
+          "scope": "queue:synthia-integration-results",
+          "why": "Publishes outcomes through its own transactional outbox. Send only, on the results queue alone."
         },
         {
           "resource": "containerregistry",
@@ -170,6 +185,18 @@
           "role": "Azure Service Bus Data Receiver",
           "scope": "queue:synthia-triggers",
           "why": "The workers consume them. Same queue; Data Owner is deliberately not used."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Sender",
+          "scope": "queue:synthia-integration-commands",
+          "why": "Dispatches authorized work to the Integrations Service. Send only: it must not consume its own commands."
+        },
+        {
+          "resource": "servicebus",
+          "role": "Azure Service Bus Data Receiver",
+          "scope": "queue:synthia-integration-results",
+          "why": "Consumes outcomes and resumes the graph. Receive ONLY, and the absence of Sender here is a control: RagCore must not be able to fabricate a successful outcome for work that never ran."
         },
         {
           "resource": "signalr",

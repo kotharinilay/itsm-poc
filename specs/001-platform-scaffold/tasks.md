@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/001-platform-scaffold/`
 
-**Prerequisites**: [plan.md](./plan.md) (14 stages), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), constitution v3.1.0
+**Prerequisites**: [plan.md](./plan.md) (17 stages), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), constitution v3.2.0
 
 **Tests**: REQUIRED. The constitution mandates fifteen test categories and makes them a merge gate.
 
@@ -20,6 +20,18 @@ under *Withdrawn 2026-09-16*. No completed task was reopened. The four execution
 catalogue data and are classified deterministically in Phase 12; two of the four are no longer
 *exercised*, and `FR-DEMO-018` makes the unexercised gate **fail closed** rather than permit by
 default.
+
+**Revised 2026-09-18 — the Integrations Service boundary.** `Synthia-Platform-Specification.md` §21.6
+and [ADR-0007](../../docs/adr/0007-integration-service-boundary.md) make Integrations a **separately
+deployed Python service parallel to RagCore**. Three phases are added — **15 (foundation), 16
+(connector migration), 17 (golden path C)** — and they run **after Phase 13 and before Phase 14**.
+Phase and task numbers are append-only and never reused, so ordering is stated rather than inferred
+from the integer.
+
+**No completed task was reopened and no task ID was reused.** Phase 9 is *relocated, not retired*: its
+tasks stay `[X]` because they were done and the code they produced is being moved rather than rebuilt.
+The old→new traceability is in *Relocated 2026-09-18*. Six of its tasks do **not** move — model egress
+is reasoning, not integration.
 
 ## Format: `[ID] [P?] [Story] Description — Boundary: … | Validates: …`
 
@@ -252,6 +264,13 @@ host that actually renders something, and record the two boundaries the desktop 
 ## Phase 9: Integration adapter scaffold *(Stage 9)*
 
 **Goal**: Every external system behind a port, with no provider type reaching inward.
+
+> **Relocated, not retired — 2026-09-18.** These tasks are complete and **stay `[X]`**. ADR-0007 moves
+> most of what they produced out of RagCore into the Integrations Service; Phase 16 covers the move,
+> and §Relocated 2026-09-18 carries the task-by-task traceability. The paths in the descriptions below
+> are the **original** locations and are stale by design — they record where the work was done, which
+> is what a completed task is for. `T127`, `T128`, `T138`, `T223`, `T225` and `T225a` are **not**
+> relocated: model egress is reasoning, and the identity registry is platform-wide.
 
 - [X] T127 Configure the AI Gateway in `build/infra/ai-gateway/` as the sole model egress — provider routing, provider-normalised token metering per organisation, budgets and throttles, semantic cache, bidirectional content safety — Boundary: model egress | Validates: Constitution §Model access
 - [X] T128 Implement the model adapter in `ragcore/src/ragcore/integrations/model/` behind the port from T027, routed exclusively through the AI Gateway — Boundary: model | Validates: Spec §FR-OPS-007
@@ -645,6 +664,161 @@ met.**
 
 ---
 
+## Phase 15: Integrations Service foundation *(Stage 15)*
+
+**Goal**: A third deployable that starts, is reachable only through APIM, proves its own identity and
+configuration, and emits its own contract — **carrying no connector yet**.
+
+**Runs after Phase 13 and before Phase 14.** Task and stage numbers are append-only and never reused,
+so ordering is stated rather than inferred from the integer.
+
+- [ ] T257 Create the Python project in `integrations/pyproject.toml` with a committed `integrations/uv.lock` — PEP 621, `requires-python = ">=3.12"`, Ruff selection `E, F, B, I, UP, S, PTH, SIM, ASYNC, DTZ, N` with the formatter authoritative, and strict type checking. **A separate project from `ragcore/`: separate lockfile, separate virtual environment, and neither imports the other** — Boundary: repository | Validates: Constitution §Python baseline, Plan §Structure Decision
+- [ ] T258 Create the package skeleton under `integrations/src/integrations/` — `api/{workload,middleware}/`, `application/`, `domain/`, `policy/`, `catalogue/`, `credentials/`, `connectors/`, `mcp/`, `execution/`, `messaging/`, `persistence/`, `observability/`, `config/`, `egress/`, plus `integrations/workers/` and `integrations/tests/`. **`domain/` imports nothing outside the standard library** — Boundary: layering | Validates: Plan §Project Structure
+- [ ] T259 [P] Implement typed configuration in `integrations/src/integrations/config/settings.py` using Pydantic Settings — every secret exposed as a `*_secret_name` field holding a **name, never a value**, with **startup validation that fails the process** rather than degrading — Boundary: configuration | Validates: Spec §FR-INTEG-017, Constitution §Configuration
+- [ ] T260 [P] Implement structured logging and OpenTelemetry in `integrations/src/integrations/observability/` — constant message templates, traces and metrics exported, **no secret, token, credential or cross-organisation value in any log or span** — Boundary: observability | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+- [ ] T261 [P] Implement correlation middleware in `integrations/src/integrations/api/middleware/correlation.py` — accept `X-Correlation-Id` only when well formed, generate when missing or invalid, echo on every response, bind to the logging scope and the OpenTelemetry context. **W3C Trace Context; a custom propagation header MUST NOT replace it** — Boundary: observability | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+- [ ] T262 [P] Implement RFC 9457 problem responses in `integrations/src/integrations/api/middleware/problems.py` — `application/problem+json` with `type`, `title`, `status`, `detail`, `instance`, `correlationId`; **internal exception detail never reaches a client** — Boundary: errors | Validates: Contracts §integrations-api, Constitution §Validation and errors
+- [ ] T263 Implement gateway provenance and identity-contract middleware in `integrations/src/integrations/api/middleware/{provenance,identity}.py` — provenance validated **before** identity against a required certificate-hash allow-list that **fails the process at start when empty**; the service **consumes only the closed `X-Idp-*` contract and MUST NOT parse a token**; a request carrying a caller-supplied contract is **refused, not sanitised** — Boundary: identity | Validates: Spec §FR-INTEG-015, Constitution P-I
+- [ ] T264 [P] Implement health endpoints in `integrations/src/integrations/api/health.py` — `/health/live` process-only with no dependency checks; `/health/ready` covering the durable store, the message transport and the secret store. **Readiness MUST NOT depend on any external customer system** — Boundary: operations | Validates: Spec §FR-INTEG-026, Constitution §Health
+- [ ] T265 Implement the composition root in `integrations/src/integrations/config/composition.py` — builds every adapter and binds it to the port it implements; FastAPI `Depends` resolves from it and constructs nothing itself — Boundary: composition | Validates: Constitution §Dependency injection, Plan §Composition roots
+- [ ] T266 [P] Implement typed outbound HTTP in `integrations/src/integrations/egress/http.py` — pooled client lifetime, a shared resilience policy distinguishing transient from non-transient failure, and an **explicit timeout on every outbound call**. `HttpClient`-equivalent ad-hoc clients MUST NOT be constructed — Boundary: egress | Validates: Spec §FR-INTEG-027, Constitution §Resilience
+- [ ] T267 [P] Implement persistence bootstrap in `integrations/src/integrations/persistence/engine.py` — async engine over the `integration` schema, plus read-only accessors for published `vw_*_v1` views. **No write path to any `platform` base table exists** — Boundary: persistence | Validates: Spec §FR-INTEG-018, Constitution P-V
+- [ ] T268 Implement OpenAPI emission in `integrations/scripts/emit_contracts.py`, producing `build/contracts/integrations/workload.v1.openapi.json` from the **running service** with sorted keys and bare line feeds so two emissions are byte-identical — Boundary: contracts | Validates: Spec §FR-INTEG-025, §FR-DEMO-013
+- [ ] T269 Create `build/docker/integrations.Dockerfile` — multi-stage, non-root, shell-less where possible, **base image pinned by digest**, read-only root filesystem preferred, no package manager in the production image — Boundary: containers | Validates: Constitution §Containers
+- [ ] T270 [P] Create `build/docker/containerapps/integrations.yaml` — internal ingress, HTTP health probes bound to T264, explicit resource limits, 25-second drain, secrets surfaced as **references** never as environment variables holding values — Boundary: containers | Validates: Constitution §Containers, Spec §FR-DEMO-012
+- [ ] T271 Add the Integrations managed identity to `build/infra/identity/managed-identities.json` and **remove RagCore's Key Vault role for connector secrets** — the role is withdrawn, not duplicated. Doing this in Stage 15 rather than Stage 16 is deliberate: nothing can come to depend on it in the meantime — Boundary: identity | Validates: Spec §FR-INTEG-016, §FR-DEMO-026
+- [ ] T272 Add the `integrations` backend and the `/api/workload/v1/integrations/...` API entry to `build/infra/apim/apis.json` — resolved by the **longest-matching-path** rule already proven by `/views`, sharing `workload.v1.xml`, with the same mutual-TLS backend credential and its recorded exemption — Boundary: gateway | Validates: Contracts §integrations-api, Spec §FR-INTEG-011
+- [ ] T273 Require a **distinct application role** for the Integrations audience in `build/infra/apim/workload.v1.xml`, so a generic workload-audience caller cannot drive connectors merely by being one — Boundary: identity | Validates: Spec §FR-INTEG-011, Constitution P-II
+- [ ] T274 Add the Integrations CI pipeline in `.github/workflows/` — lint, format, strict type check, tests, contract emission through all five gates, image build. **A third pipeline, not a branch of RagCore's** — Boundary: CI | Validates: Constitution §Quality gate
+- [ ] T275 Extend `build/scripts/check-boundaries.sh` to **three** deployables — asserting `ragcore ↛ integrations` and `integrations ↛ ragcore` as imports, that no shared Python package exists between them, and that the monolith references neither — Boundary: layering | Validates: Plan §Dependency direction, Constitution P-V
+- [ ] T276 [P] Write architecture tests in `integrations/tests/architecture/` asserting `domain/` imports only the standard library, no module outside `config/composition.py` instantiates a concrete adapter, and **no import of `ragcore` exists anywhere** — Boundary: layering | Validates: Constitution §Required test categories
+
+**Checkpoint**: The service starts, fails fast on invalid configuration, answers both health endpoints, is reachable **only** through APIM, and emits a contract passing all five gates. It contains no connector.
+
+---
+
+## Phase 16: Connector migration out of RagCore *(Stage 16)*
+
+**Goal**: Move every external-system path into the Integrations Service, and **prove RagCore can no
+longer reach one**.
+
+**The relocated modules are moves, not rewrites** — see §Relocated 2026-09-18 for the old→new
+traceability. Their original tasks stay `[X]`; these tasks cover the relocation and what it changes.
+
+- [ ] T277 Create the `integration` schema and the `integration_job` table in `ragcore/migrations/versions/` — one Alembic project, two schemas, one gated job. `integration_job` carries `job_id` PK, `work_item_id`, `operation_id`, `tenant_id` not null, `catalogue_id` text not null, `catalogue_version` int not null, `parameters` jsonb not null, `status` enum (`created`, `dispatched`, `completed`, `failed`, `expired`), `expires_at` inheriting the work item's window, and `version` — Boundary: persistence | Validates: Data-model §Integration job, ADR-0003
+- [ ] T278 Add the four result columns to `integration_job` — `result_status` enum (`executed`, `failed`), `result_verification` enum (`server_confirmed`, `client_attested`, `contradicted`), `result_execution_id` uuid null, `result_recorded_at` timestamptz null — and **a column-scoped `GRANT` giving the Integrations principal `UPDATE` on those four columns and nothing else**. This is the first migration to review as DDL rather than prose — Boundary: security | Validates: Spec §FR-INTEG-020, Constitution P-VIII
+- [ ] T279 [P] Create the `integration` schema tables — `connector` (`connector_id` PK, `kind` enum `native`/`mcp`, `base_endpoint` not null, `is_reference_fixture` bool not null), `connector_binding` (composite PK `catalogue_id`+`catalogue_version`, `connector_id` FK, `operation_path`, `signing_profile` **a Key Vault reference, never a value**, `idempotency_policy` enum), `execution_record`, plus the service's own outbox — Boundary: persistence | Validates: Data-model §Connector registry
+- [ ] T280 [P] Create the `execution_record` table with `unique(idempotency_key)` — **that uniqueness is idempotency boundary 2** — plus `job_id`, `tenant_id`, `connector_id`, `catalogue_id`, `catalogue_version`, `external_reference` null, `outcome` enum (`succeeded`, `failed`, `refused_unentitled`, `refused_unregistered`, `refused_window`, `unreachable`), `normalized_result` jsonb null, `correlation_id` not null. Append-only: a second attempt is a second row — Boundary: persistence | Validates: Data-model §Execution record, Spec §FR-INTEG-022
+- [ ] T281 Create the Integrations database principal in `ragcore/migrations/versions/` — write on `integration`, read on published views, **no grant on any `platform` base table** and no grant on any non-result column of `integration_job` — Boundary: security | Validates: Spec §FR-INTEG-018, ADR-0007
+- [ ] T282 Publish a versioned view exposing the operation instruction for the Integrations Service to read, added to `ragcore/src/ragcore/persistence/views.py` and recorded in `contracts/read-views.md` as a **third reader** of a contract written for the monolith alone — Boundary: read contract | Validates: ADR-0003, ADR-0007
+- [ ] T283 Write a grant test in `integrations/tests/security/test_job_grants.py` asserting an attempted write to `catalogue_id`, `catalogue_version`, `parameters` or `tenant_id` on `integration_job` is refused **by PostgreSQL, not by application code** — an executing service able to rewrite its own instruction could run an operation governance never authorized — Boundary: security | Validates: Spec §FR-INTEG-020, Constitution P-VIII
+- [ ] T284 Relocate per-organisation credential resolution to `integrations/src/integrations/credentials/` **with its port declaration** — ports belong to the consuming module, and the consumer is now this service. One path from an entitlement row to a usable secret; a missing reference is a refusal, never a fallback — Boundary: credentials | Validates: Spec §FR-INTEG-017, Constitution P-V
+- [ ] T285 [P] Implement catalogue and entitlement reads in `integrations/src/integrations/catalogue/` over the published views — resolving capabilities **per organisation**, with no global capability set — Boundary: Tool Execution | Validates: Spec §FR-INTEG-002, §FR-INTEG-004
+- [ ] T286 [P] Implement the connector registry in `integrations/src/integrations/catalogue/registry.py` — resolving a catalogue identifier and version to its connector, endpoint, signing profile and idempotency policy. **The destination comes from here and never from parameters, model output or retrieved content** — Boundary: Tool Execution | Validates: Spec §FR-INTEG-003, §FR-EXT-018
+- [ ] T287 Implement the execution-time re-check in `integrations/src/integrations/policy/` — organisation active, work authorized and uncancelled and inside its window, organisation entitled, capability registered, **catalogue version matching what was authorized**, capability reached past the gate. **It assigns no treatment and performs no role intersection**; prior catalogue retrieval is not standing permission — Boundary: policy | Validates: Spec §FR-INTEG-019, §FR-INTEG-008, Constitution P-III
+- [ ] T288 [P] Relocate the ServiceNow adapter to `integrations/src/integrations/connectors/servicenow/` — idempotent write-backs, queue-and-replay on outage, tenant stamping on every record. Behaviour unchanged from T129 — Boundary: Integration—ServiceNow | Validates: Spec §FR-EXT-004, §FR-EXT-007
+- [ ] T289 [P] Relocate the Microsoft Graph adapter to `integrations/src/integrations/connectors/graph/` — token caching, throttling compliance and retry inside the adapter. Behaviour unchanged from T130 — Boundary: Integration—Graph | Validates: Spec §FR-EXT-008
+- [ ] T290 [P] Relocate the OneLogin adapter to `integrations/src/integrations/connectors/onelogin/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
+- [ ] T291 [P] Relocate the Duo adapter to `integrations/src/integrations/connectors/duo/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
+- [ ] T292 Relocate the MCP client to `integrations/src/integrations/mcp/client.py` — **the `discover`/`invoke` type separation must survive the move intact**, because it is what enforces "discovery is not entitlement" rather than a convenience. There is no overload taking an advertised tool — Boundary: Tool Execution | Validates: Spec §FR-EXT-014, §FR-INTEG-005
+- [ ] T293 [P] Relocate boundary contract validation to `integrations/src/integrations/execution/normalization.py` — provider output size-checked and contract-checked at the boundary, **treated as data**: never an instruction, destination, identity, organisation or source of authority. Malformed, oversized or off-contract output is rejected rather than passed inward — Boundary: integration | Validates: Spec §FR-INTEG-023, §FR-EXT-017, §FR-EXT-021
+- [ ] T294 Implement the execution leg in `integrations/src/integrations/execution/executor.py` — derives the idempotency key from organisation, work item and operation (**derived, never random**), invokes the connector, records the attempt. **It refuses to run without a `PROCEED` re-derived from durable state**; a serialised gate outcome is a model-free but still *asserted* authority and MUST NOT be accepted — Boundary: execution | Validates: Spec §FR-INTEG-019, §FR-INTEG-021, Constitution P-I
+- [ ] T295 Split RagCore's execution leg in `ragcore/src/ragcore/execution/executor.py` — invocation and verification move to the Integrations Service; **`ExecutionReport.may_report_resolution` stays in RagCore**. A service that both acted and judged its own success would report an attestation as a confirmation — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-009, Constitution P-III
+- [ ] T296 **Remove** `ragcore/src/ragcore/integrations/` **except `model/`**, together with its connector settings and secret references in `ragcore/src/ragcore/config/` and its connector dependencies in `ragcore/pyproject.toml` and `uv.lock`. `integrations/model/` **stays**: model egress and content safety are reasoning, not integration — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-016, ADR-0007
+- [ ] T297 Write an architecture test in `ragcore/tests/architecture/test_no_connector_in_ragcore.py` asserting **no adapter, connector, MCP client or external-provider client remains in RagCore**, and that no module outside `integrations/model/` holds an external endpoint — Boundary: layering | Validates: Spec §FR-DEMO-021, §FR-EXT-011
+
+**Checkpoint**: RagCore holds no connector code and no connector credential. Every relocated adapter passes its suite in its new home. The column-scoped grant refuses a write to a non-result column.
+
+---
+
+## Phase 17: Golden path C — the Integrations boundary proven *(Stage 17)*
+
+**Goal**: Prove the boundary rather than describe it — spec `FR-DEMO-020`–`FR-DEMO-028`, measured by
+`SC-DEMO-015`–`SC-DEMO-023`.
+
+**Every flow is driven through the real deployed path** (`FR-DEMO-019`) and acts only on the inert
+reference connector. Configuration review does not substitute for traversal.
+
+### Wiring the two communication paths
+
+- [ ] T298 [US6] Provision `synthia-integration-commands` and `synthia-integration-results` as **separate queues**, with role assignments granting RagCore send-on-commands and listen-on-results, and the Integrations Service listen-on-commands and send-on-results — **and nothing more**. `synthia-triggers` is **not** reused: mixing lifecycles makes dead-letter triage ambiguous — Boundary: messaging | Validates: Spec §FR-INTEG-013, Contracts §triggers
+- [ ] T299 [US6] Implement the transactional outbox and result publisher in `integrations/src/integrations/messaging/` — **the service runs its own outbox**; a result row is durable before publication — Boundary: messaging | Validates: Constitution §Idempotency and messaging
+- [ ] T300 [US6] Implement the command consumer in `integrations/workers/command_consumer.py` — reads `jobId` from the message, loads the job row, **recovers the organisation from that row and from nothing else**, re-checks via T287, executes via T294, writes the execution record, updates the four result columns, publishes the result — Boundary: messaging | Validates: Spec §FR-INTEG-014, §FR-INTEG-018
+- [ ] T301 [US6] Implement retry and dead-letter behaviour in `integrations/src/integrations/messaging/deadletter.py` — bounded backoff inside the remaining window for pre-execution transient failure; **no retry of a side-effecting operation**; a message outliving its validity window dead-letters rather than executing; **a dead-lettered message carrying authorized work surfaces as a governance failure** in the approved-but-not-executed list with an alert, and recovery is fresh authorization, never replay — Boundary: resilience | Validates: Spec §FR-INTEG-027, Constitution §Idempotency and messaging
+- [ ] T302 [US6] Implement job dispatch in RagCore — write the `integration_job` row **in the same transaction as the state change**, with its outbox row, then publish `integration.execute` carrying `jobId`, `correlationId` and `kind` and **nothing else** — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-014, Contracts §triggers
+- [ ] T303 [US6] Implement the result consumer in `ragcore/workers/` — consume `integration.completed` / `integration.failed`, read the outcome from durable state, update `operation`'s conclusion, resume the graph. **A failure result MUST NOT cause a re-dispatch** — Boundary: Agent/RagCore | Validates: Spec §FR-EXEC-006, §FR-INTEG-027
+
+### The synchronous path and the reference fixture
+
+- [ ] T304 [US6] Implement the inert reference connector in `integrations/src/integrations/connectors/reference/` plus its deployed stub endpoint — **reachable only from the Integrations Service**, producing no real effect, excluded from production configuration, and **never counted as any of UC-01 through UC-12** — Boundary: fixtures | Validates: Spec §FR-DEMO-020, §FR-DEMO-014, Constitution P-IX
+- [ ] T305 [US6] Implement `GET /api/workload/v1/integrations/catalogue` in `integrations/src/integrations/api/workload/catalogue.py` — takes an opaque `sessionId` or `workItemId` and **never an organisation**; returns `entitled` and `available` as **separate fields** so entitled-but-unreachable is distinguishable from not-entitled; returns **no treatment, no accepted roles and no risk tier** — Boundary: Tool Execution | Validates: Spec §FR-INTEG-011, §FR-EXT-022, Contracts §integrations-api
+- [ ] T306 [US6] Implement `POST /api/workload/v1/integrations/case-operations` for the inert case-like operation, bound to an opaque identifier — Boundary: Integration—ServiceNow | Validates: Spec §FR-INTEG-012, Contracts §integrations-api
+
+### Observability, audit and isolation
+
+- [ ] T307 [US6] Emit durable audit for every invocation — the actor chain recording who requested, who approved, **the Integrations principal as the executing principal**, by what means, against which organisation, with what result. **One audit store; audit does not fork** — Boundary: Audit | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+- [ ] T308 [US6] [P] Emit connector-invocation metrics — attempts, outcomes and duration per connector — in `integrations/src/integrations/observability/metrics.py` — Boundary: observability | Validates: Spec §FR-DEMO-028
+- [ ] T309 [US6] [P] Write a trace-continuity test in `integrations/tests/integration/test_correlation_across_seam.py` following **one** correlation identifier across the gateway hop, both queues and all three deployables — Boundary: observability | Validates: Spec §FR-DEMO-027, §SC-DEMO-021
+- [ ] T310 [US6] [P] Write tenant-isolation tests in `integrations/tests/isolation/` asserting no catalogue read, execution or execution-record query returns another organisation's data, and that **no code path can omit the organisation filter** — Boundary: isolation | Validates: Spec §FR-INTEG-018, Constitution P-IV
+
+### The eight acceptance proofs
+
+- [ ] T311 [US6] Write the bypass proof in `ragcore/tests/security/test_no_external_reach.py` — **all three observations required**: a direct connection from RagCore to the reference connector fails at the network layer; a connector-credential resolution from RagCore fails at Key Vault; and T297's architecture check passes. **Attempting it is the point** — an absence assertion passes equally where the path exists and simply has no caller yet — Boundary: security | Validates: Spec §FR-DEMO-021, §SC-DEMO-015
+- [ ] T312 [US6] Write the synchronous-path proof in `integrations/tests/e2e/test_sync_via_apim.py` — the catalogue read and the inert case operation succeed through the deployed edge, and **fail** by the service's internal address and **fail** when carrying a well-formed but self-supplied identity contract — Boundary: gateway | Validates: Spec §FR-DEMO-022, §SC-DEMO-016
+- [ ] T313 [US6] Write the asynchronous-execution proof in `integrations/tests/e2e/test_async_execution.py` — asserting the command on the queue carries `jobId`, `correlationId` and `kind` and **0 other fields**, and that the capability and parameters were read from the job row — Boundary: messaging | Validates: Spec §FR-DEMO-023, §SC-DEMO-017
+- [ ] T314 [US6] Write the duplicate-delivery proofs as **two independent tests** — the atomic claim absorbing a duplicate resume trigger in RagCore, and the derived key absorbing a redelivered command in the Integrations Service, each asserting exactly **1** external effect. **Each test must fail when its own boundary alone is removed.** A single end-to-end test passes whenever either mechanism holds and would stay green on the day one silently broke — Boundary: idempotency | Validates: Spec §FR-DEMO-024, §SC-DEMO-018
+- [ ] T315 [US6] Write the untrusted-payload proofs as **two assertions** in `integrations/tests/security/test_payload_organisation.py` — a command carrying an out-of-contract organisation field is **refused and dead-lettered with an alert, never processed**; and separately, a valid command whose payload asserts a *conflicting* organisation produces an effect bound to the organisation on the durable record — Boundary: identity | Validates: Spec §FR-DEMO-025, §SC-DEMO-019
+- [ ] T316 [US6] Write the credential-reachability proof in `ragcore/tests/security/test_no_connector_secrets.py` — RagCore's identity resolves **0** connector secrets, and a scan of its source, configuration, environment and image finds **0** — Boundary: secrets | Validates: Spec §FR-DEMO-026, §SC-DEMO-020
+- [ ] T317 [US6] Write the result-correlation proof in `integrations/tests/e2e/test_result_correlation.py` — a returned result is matched to the work item that originated it, via the `jobId` and the derived key — Boundary: messaging | Validates: Spec §FR-DEMO-027, §SC-DEMO-021
+- [ ] T318 [US6] Write the independent-observability proof in `integrations/tests/observability/test_independent_telemetry.py` — the service is a distinct telemetry source, emits metrics for 100% of connector calls, and its execution records answer *what was attempted, against which connector, with what outcome and how long* **without reading RagCore's telemetry** — Boundary: observability | Validates: Spec §FR-DEMO-028, §SC-DEMO-022
+- [ ] T319 [US6] Write the degradation proof in `integrations/tests/e2e/test_degraded_mode.py` — with the Integrations Service stopped, conversation, retrieval and guidance still succeed, and a capability requiring an external effect falls back to manual resolution or escalation **visibly**; **0** are reported to a user as completed — Boundary: resilience | Validates: Spec §FR-INTEG-028, §SC-DEMO-023
+
+### Extending the existing edge guard
+
+- [ ] T320 [US6] Extend `build/scripts/check-edge-path.sh` and `build/scripts/verify-edge-guard.sh` to the **third deployable** — the RagCore → Integrations edge is exactly the shape a bypass takes, and this is the check that currently proves APIM is the trust boundary. **A gate nobody has seen fail is a gate whose failure mode is silence**: plant each violation class and assert the guard rejects it — Boundary: gateway | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a, §SC-DEMO-003b
+
+### Documentation synchronisation
+
+- [ ] T321 [P] Synchronise documentation with what was built — `README.md` and `build/scripts/check-boundaries.sh` both still assert the deployables meet at *"exactly two places"*; `contracts/read-views.md` must record its third reader; `docs/adr/0005` paths are RagCore-relative and stale; `quickstart.md` V20–V28 must match the delivered flows — Boundary: documentation | Validates: Constitution P-X
+- [ ] T322 [P] Record the two ADR-0007 residuals once settled — which system-of-record operations are synchronous (settled in Phase 15, before contract freeze) and the job-row result columns with their `GRANT` (settled in T278) — updating `docs/adr/0007-integration-service-boundary.md` §Unresolved — Boundary: documentation | Validates: Constitution P-X
+
+**Checkpoint — the architecture acceptance gate**: all ten flows pass against a deployed environment; RagCore reaches no external system and holds no connector credential; every message carries three fields; both idempotency boundaries are independently load-bearing; one correlation identifier spans three deployables.
+
+---
+
+## Relocated 2026-09-18 — the Integrations Service boundary
+
+**These tasks stay `[X]`. They were completed, and the code they produced is being moved rather than
+rebuilt.** Reopening them would misrepresent what was built; the relocation is new work with new IDs.
+**No task ID is reused, here or anywhere.**
+
+| Completed task | Produced | Relocated by | Now lives in |
+|---|---|---|---|
+| T129 | ServiceNow adapter | **T288** | `integrations/connectors/servicenow/` |
+| T130 | Microsoft Graph adapter | **T289** | `integrations/connectors/graph/` |
+| T131 | MCP client boundary | **T292** | `integrations/mcp/` |
+| T132 | OneLogin and Duo adapters | **T290**, **T291** | `integrations/connectors/{onelogin,duo}/` |
+| T133 | Typed HTTP clients, resilience, timeouts | **T266** | `integrations/egress/` |
+| T134 | Boundary contract validation | **T293** | `integrations/execution/normalization.py` |
+| T135 | Entitled-but-unreachable distinction | **T294** | `integrations/execution/` |
+| T136 | Adapter tests | **T288**–**T292** | `integrations/tests/` |
+| T137 | No-provider-leak test | **T276**, **T297** | Both trees |
+| T224 | Key Vault credential-reference resolution | **T284** | `integrations/credentials/` — RagCore keeps its own for platform secrets |
+
+**Not relocated, and deliberately so:**
+
+| Completed task | Produced | Why it stays in RagCore |
+|---|---|---|
+| T127, T128 | AI Gateway configuration, model adapter | **Model egress is reasoning, not integration.** The Integrations Service has no model access and reaches no AI Gateway |
+| T138 | No-direct-model-call test | Guards `integrations/model/`, which stays |
+| T223 | Azure AI Search boundary | Retrieval is RagCore's |
+| T225, T225a | Shared Azure credential chain, identity registry | Platform-wide. **T271 removes RagCore's connector-secret role from the registry rather than removing the registry** |
+
+**Nothing is retired by this change.** The 2026-09-16 withdrawal retired T193–T218 for a different
+reason — a deferred demonstration — and those IDs remain permanently unavailable.
+
+---
+
 ## Withdrawn 2026-09-16 — approval and consent workflow tasks
 
 **Withdrawn from the scaffold, not from the platform.** These task IDs are **permanently retired and
@@ -698,10 +872,50 @@ Phase 1 (tooling)
                                                      └─> Phase 11 (test foundation)
                                                            └─> Phase 12 (golden path A)
                                                                  └─> Phase 13 (golden path B)
+                                                                       └─> Phase 15 (Integrations foundation)
+                                                                             └─> Phase 16 (connector migration)
+                                                                                   └─> Phase 17 (golden path C)
+                                                                                         └─> Phase 14 (use cases, gated)
 
 Phase 10 (edge: T226-T230a) ═════════════════════════════════════╝
-  provisioned edge gates Phase 13 ACCEPTANCE, not its implementation
+  provisioned edge gates Phase 13 AND Phase 17 ACCEPTANCE, not their implementation
 ```
+
+**Execution order is `1 … 13 → 15 → 16 → 17 → 14`.** Phase and task numbers are append-only and never
+reused, so the order is stated rather than inferred from the integer.
+
+**Phase 15 needs only Phases 1–2, 7 and 10** — tooling and boundary checks, PostgreSQL, and the
+observability and container baseline. It is **independent of Phases 3–6 and 8**, so it can start as
+soon as Phase 10 is done rather than waiting for Phase 13.
+
+### The two communication paths, as task dependencies
+
+```text
+SYNCHRONOUS — RagCore → APIM → Integrations
+  T272 (APIM backend + routing)
+    └─> T273 (distinct app role)
+          └─> T305 (catalogue endpoint) ──┐
+          └─> T306 (case-operations)    ──┴─> T312 (proof: succeeds via edge,
+                                                     fails direct and fails on a
+                                                     self-supplied identity contract)
+
+ASYNCHRONOUS — RagCore → Service Bus → Integrations → Service Bus → RagCore
+  T277/T278 (integration_job + column-scoped grant)
+    └─> T298 (two queues + role assignments)
+          ├─> T302 (RagCore writes the job, publishes jobId only)
+          │     └─> T300 (Integrations consumes, recovers org from the row, re-checks, executes)
+          │           └─> T299 (Integrations outbox publishes the result)
+          │                 └─> T303 (RagCore consumes the result; never re-dispatches)
+          └─> T301 (retry / dead-letter posture)
+
+NEGATIVE — RagCore MUST NEVER reach an external system
+  T271 (Key Vault role REMOVED from RagCore)  ─┐
+  T296 (connector code removed from RagCore)  ─┼─> T311 (bypass attempted, observed to fail)
+  T297 (architecture test)                    ─┘   T316 (0 connector secrets resolvable)
+```
+
+**T271 is deliberately in Phase 15, not Phase 16.** Withdrawing RagCore's connector-secret role
+*before* the connectors move means nothing can quietly come to depend on it in the interval.
 
 ### Critical path inside the scaffold
 
@@ -726,6 +940,27 @@ which is exactly why this is stated rather than assumed. **Start the edge provis
 checkpointer it suspends only in memory, so no suspension survives a restart and neither
 `STAFF_APPROVAL` nor `END_USER_APPROVAL` can be proven durable.
 
+### Critical path through Phases 15–17 *(added 2026-09-18)*
+
+```text
+T257 (project) → T258 (skeleton) → T259 (settings) → T265 (composition root)
+                                                       → T268 (contract emission)
+T269 (Dockerfile) → T270 (container app) → T272 (APIM) → T274 (CI)
+T277 → T278 (job table + COLUMN-SCOPED GRANT) → T281 (principal) → T283 (grant test)
+                    └─> T298 (queues) → T302 → T300 → T299 → T303   (the async round trip)
+T284 (credentials) → T285 (catalogue) → T286 (registry) → T287 (policy re-check) → T294 (executor)
+T271 (role removed) → T296 (code removed) → T297 (arch test) → T311 (bypass proof)
+```
+
+**T278 is the single most load-bearing task in the three phases.** The column-scoped grant is what
+stops the Integrations Service rewriting the instruction it was given; without it, `FR-INTEG-020` and
+`FR-DEMO-025` are unprovable, because the protection lives at the database permission boundary rather
+than in application code. It is also the task whose exact column list ADR-0007 leaves unresolved, so
+**it is blocked on that decision** and should be scheduled first for that reason.
+
+**T287 blocks every execution task.** Nothing may invoke a connector before the execution-time
+re-check exists, or the first thing the scaffold proves is an ungoverned call.
+
 ### Parallel opportunities
 
 - Phase 1: T002–T006, T008–T012, T014–T016, T018–T021 run in parallel
@@ -740,6 +975,19 @@ checkpointer it suspends only in memory, so no suspension survives a restart and
   edge tasks T226–T230a. T248 depends on Phase 8. The cross-cutting proofs T254–T256 depend on all
   three flows. T208–T211 and T216 are parallel throughout and depend on nothing in this phase
   are sequential, then T204–T206 are parallel and T207 is last
+- **Phase 15**: T259–T262, T264, T266, T267 are parallel once T258 lands. T269/T270 (containers),
+  T271/T272/T273 (Azure and gateway) and T274 (CI) are three independent tracks. T275 and T276
+  (guards) are parallel and depend only on T258
+- **Phase 16**: T279 and T280 are parallel with each other and with T277/T278. The five connector
+  relocations **T288–T292 are fully parallel** — each is a self-contained move of an existing adapter.
+  T284–T287 are sequential (credentials → catalogue → registry → policy). T296 and T297 must follow
+  every relocation, or the architecture test fails on code that has simply not moved yet
+- **Phase 17**: the eight acceptance proofs T311–T318 are **parallel with one another** once the
+  wiring (T298–T306) lands, because each observes a different property. T319 (degradation) needs the
+  service stoppable, so it runs last. T321/T322 (documentation) are parallel with everything
+
+**The widest parallel front is Phase 16's connector relocations.** Five adapters, five independent
+moves, no shared state between them — and each has an existing test suite that travels with it.
 
 ---
 

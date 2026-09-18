@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
-from ragcore.integrations.model.egress import ModelEgressError
+from ragcore.model.egress import ModelEgressError
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.application.ports import ModelPort
@@ -152,7 +152,7 @@ class SafetyVerdict:
 class ContentBlockedError(ModelEgressError):
     """Content safety refused to let this text cross.
 
-    A :class:`~ragcore.integrations.model.egress.ModelEgressError` subclass so the agent loop
+    A :class:`~ragcore.model.egress.ModelEgressError` subclass so the agent loop
     handles it beside a budget refusal and a gateway outage, without learning a fourth exception
     shape — and so it reaches a caller as a platform condition rather than as a provider exception.
 
@@ -200,7 +200,7 @@ class SafeModel:
 
     Attributes:
         inner: The model access being wrapped — in practice
-            :class:`~ragcore.integrations.model.adapter.GatewayModelAdapter`, so screening sits
+            :class:`~ragcore.model.adapter.GatewayModelAdapter`, so screening sits
             outside the gateway call and a blocked prompt is never sent, never metered and never
             generated from.
         safety: The screening service.

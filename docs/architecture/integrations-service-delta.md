@@ -231,7 +231,7 @@ design.
 ### 3.4 Explicitly stays in RagCore
 
 `graph/` (all of it) · `governance/gate.py` decision routing and interrupt selection ·
-`execution/claim.py` (idempotency boundary 1) · `integrations/model/*` (AI Gateway, model egress,
+`execution/claim.py` (idempotency boundary 1) · `model/*` (AI Gateway, model egress,
 content safety — this is reasoning, not integration, and the requested scope does not include it) ·
 `retrieval/` · `notifications/` · `application/audit.py` · `ingestion/` · all approval, consent and
 resume logic.

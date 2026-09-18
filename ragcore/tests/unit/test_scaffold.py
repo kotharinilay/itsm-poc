@@ -124,7 +124,7 @@ class TestTheScaffoldBindsNoAdapter:
         branch. There is deliberately no third option, so no configuration exists in which
         application code bypasses the gateway.
         """
-        from ragcore.integrations.model.local import SERVED_BY
+        from ragcore.model.local import SERVED_BY
 
         container = build_container(_settings())
 

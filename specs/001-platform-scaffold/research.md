@@ -292,7 +292,7 @@ The AI Gateway is explicitly **not** an identity boundary (§13.5). A call that 
 service still traverses APIM and is authorized there and at the service.
 
 **Consequence**: the model adapter lives behind an application port in
-`ragcore/src/ragcore/integrations/model/`, and an architecture test asserts no provider SDK import or
+`ragcore/src/ragcore/model/`, and an architecture test asserts no provider SDK import or
 provider endpoint exists outside it. Content safety is applied at this boundary — inbound before the
 model, outbound before a response returns (§35.5) — which is also layer 2 of the scope guardrail
 (§16.3).

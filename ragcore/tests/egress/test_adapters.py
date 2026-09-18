@@ -1,7 +1,7 @@
 """Every Stage 9 adapter, against a fake honouring its contract.
 
 **The adapter under test is always the production one.** The substitution happens at the transport
-(:func:`tests.support.integrations.transport_returning`), so the resilience policy, the timeout
+(:func:`tests.support.transport.transport_returning`), so the resilience policy, the timeout
 rule, the token acquisition and the boundary validation are all the shipping code. Only the far side
 is fake — which is the most that can be arranged in a build with no AI Gateway, no AI Search index
 and no ServiceNow instance.
@@ -29,18 +29,18 @@ from ragcore.egress.http import (
 )
 from ragcore.egress.validation import BoundaryValidationError
 from ragcore.execution.availability import CapabilityAvailability, availability_of
-from ragcore.integrations.model.adapter import GatewayModelAdapter
-from ragcore.integrations.model.egress import (
+from ragcore.model.adapter import GatewayModelAdapter
+from ragcore.model.egress import (
     ModelBudgetExceededError,
     ModelEgressError,
     ModelPurpose,
     ModelRequest,
 )
-from ragcore.integrations.model.gateway import AiGatewayEgress, GatewayNotConfiguredError
-from ragcore.integrations.model.local import SERVED_BY, LocalDevelopmentEgress
+from ragcore.model.gateway import AiGatewayEgress, GatewayNotConfiguredError
+from ragcore.model.local import SERVED_BY, LocalDevelopmentEgress
 from ragcore.retrieval.search import AzureAiSearchRetrieval, RetrievalNotConfiguredError
 from tests.support.fakes import admitted_tenant
-from tests.support.integrations import (
+from tests.support.transport import (
     FakeCredential,
     FakeModelEgress,
     json_response,

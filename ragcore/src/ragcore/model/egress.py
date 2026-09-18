@@ -2,7 +2,7 @@
 
 Every model call passes through a single brokering point and no component reaches a provider
 directly (spec FR-OPS-007). That rule needs somewhere to be true, and this module is it: a
-:class:`ModelEgressPort` is what :class:`~ragcore.integrations.model.adapter.GatewayModelAdapter`
+:class:`ModelEgressPort` is what :class:`~ragcore.model.adapter.GatewayModelAdapter`
 holds, and the only implementations are the AI Gateway client and the local development seam. There
 is no third, and a provider SDK cannot satisfy this protocol without first being written to look
 like a gateway — which is a code review, not an accident.
@@ -125,8 +125,8 @@ class ModelResponse:
 class ModelEgressPort(Protocol):
     """The seam every model call crosses.
 
-    Implemented by :class:`~ragcore.integrations.model.gateway.AiGatewayEgress` in every deployed
-    environment and by :class:`~ragcore.integrations.model.local.LocalDevelopmentEgress` on a
+    Implemented by :class:`~ragcore.model.gateway.AiGatewayEgress` in every deployed
+    environment and by :class:`~ragcore.model.local.LocalDevelopmentEgress` on a
     developer machine. **Both are gateways in the sense that matters**: neither the agent loop nor
     any other caller can tell them apart, so there is no configuration in which application code
     reaches a provider by a different route.

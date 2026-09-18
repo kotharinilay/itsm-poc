@@ -92,7 +92,7 @@ class TestDomainPurity:
             "ragcore.application",
             "ragcore.api",
             "ragcore.persistence",
-            "ragcore.integrations",
+            "ragcore.model",
             "ragcore.egress",
             "ragcore.platform_clients",
             "ragcore.graph",

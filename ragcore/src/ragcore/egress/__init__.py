@@ -8,7 +8,7 @@ and the rule that provider output is checked before it is believed.
 **What legitimately remains outbound in RagCore is a short and closed list**, and every item is a
 *platform* destination rather than a customer system:
 
-* the AI Gateway (:mod:`ragcore.integrations.model`), because reasoning is RagCore's;
+* the AI Gateway (:mod:`ragcore.model`), because reasoning is RagCore's;
 * Azure AI Search (:mod:`ragcore.retrieval.search`), because the derived index is RagCore's;
 * the Integrations Service itself (:mod:`ragcore.platform_clients.integrations`), through APIM.
 

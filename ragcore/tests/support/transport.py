@@ -145,13 +145,13 @@ def json_response(payload: Any, status: int = 200) -> httpx.Response:
 class FakeModelEgress:
     """A gateway seam that records what crossed it.
 
-    Satisfies :class:`~ragcore.integrations.model.egress.ModelEgressPort`. Used to assert what the
+    Satisfies :class:`~ragcore.model.egress.ModelEgressPort`. Used to assert what the
     *adapter* sends — that the organisation is the one from trusted context, that the purpose is
     the right one, and that no model name was invented along the way.
     """
 
     def __init__(self, *, text: str = "a proposal", embedding: tuple[float, ...] = (0.1, 0.2)):
-        from ragcore.integrations.model.egress import ModelRequest
+        from ragcore.model.egress import ModelRequest
 
         self.sent: list[ModelRequest] = []
         self._text = text
@@ -159,7 +159,7 @@ class FakeModelEgress:
 
     async def send(self, request: Any) -> Any:
         """Record the request and answer it."""
-        from ragcore.integrations.model.egress import ModelPurpose, ModelResponse
+        from ragcore.model.egress import ModelPurpose, ModelResponse
 
         self.sent.append(request)
 

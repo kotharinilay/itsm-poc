@@ -45,10 +45,10 @@ from ragcore.egress.http import HttpClientFactory, ResilientHttpCaller
 from ragcore.graph.dependencies import GraphDependencies
 from ragcore.infrastructure.cache import NullCache, RedisTransientCache, TransientCachePort
 from ragcore.infrastructure.clock import SystemClock
-from ragcore.integrations.model.adapter import GatewayModelAdapter
-from ragcore.integrations.model.egress import ModelEgressPort
-from ragcore.integrations.model.gateway import AiGatewayEgress
-from ragcore.integrations.model.local import LocalDevelopmentEgress
+from ragcore.model.adapter import GatewayModelAdapter
+from ragcore.model.egress import ModelEgressPort
+from ragcore.model.gateway import AiGatewayEgress
+from ragcore.model.local import LocalDevelopmentEgress
 from ragcore.persistence.engine import UnitOfWork, create_engine, create_session_factory
 from ragcore.persistence.repositories import (
     ApprovalRepository,
@@ -316,8 +316,8 @@ def _model_egress(settings: Settings, caller: ResilientHttpCaller) -> ModelEgres
 
     Two outcomes, and there is deliberately no third:
 
-    * A gateway is configured — :class:`~ragcore.integrations.model.gateway.AiGatewayEgress`.
-    * No gateway is configured — :class:`~ragcore.integrations.model.local.LocalDevelopmentEgress`,
+    * A gateway is configured — :class:`~ragcore.model.gateway.AiGatewayEgress`.
+    * No gateway is configured — :class:`~ragcore.model.local.LocalDevelopmentEgress`,
       which calls no model and refuses to be constructed outside local development.
 
     **A provider client is not among the options**, here or anywhere. RagCore holds no Foundry role

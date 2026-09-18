@@ -11,8 +11,8 @@ still leaves a direct provider call impossible.
 | # | Where | What it establishes |
 |---|---|---|
 | 1 | `build/infra/identity/managed-identities.json` | `id-synthia-ragcore` holds **no Foundry role**. A direct call fails to authenticate even if the code existed. |
-| 2 | `ragcore/src/ragcore/integrations/model/egress.py` | `ModelEgressPort` is the only shape a model call takes. Its implementations are the gateway client and the local seam. |
-| 3 | `ragcore/tests/architecture/test_no_direct_model_call.py` | No provider SDK, endpoint or deployment name appears outside `integrations/model/`. |
+| 2 | `ragcore/src/ragcore/model/egress.py` | `ModelEgressPort` is the only shape a model call takes. Its implementations are the gateway client and the local seam. |
+| 3 | `ragcore/tests/architecture/test_no_direct_model_call.py` | No provider SDK, endpoint or deployment name appears outside `model/`. |
 | 4 | `ragcore/src/ragcore/config/settings.py` | `ModelGatewaySettings` has no `provider`, no `api_key` and no `model_endpoint` field. |
 
 ## What lives here and why it is not in the application
@@ -25,7 +25,7 @@ still leaves a direct provider call impossible.
 | Semantic cache | `FR-OPS-010` | A cache the application owned would be a second place a response could come from, unattributably. |
 | Bidirectional content safety | `FR-EXT-021` | A check in the agent loop is one a new call site forgets. |
 
-The application supplies exactly two things (`integrations/model/gateway.py`):
+The application supplies exactly two things (`model/gateway.py`):
 `X-Synthia-Organisation`, which every policy counts against, and `X-Correlation-Id`, which joins a
 metered token to a user-visible outcome. It supplies **no model name, no deployment and no
 provider**.
@@ -53,7 +53,7 @@ provider**.
 ## Local development
 
 A developer without a gateway does **not** get a provider client behind an environment branch. They
-get `ragcore/src/ragcore/integrations/model/local.py` — `LocalDevelopmentEgress`, which implements
+get `ragcore/src/ragcore/model/local.py` — `LocalDevelopmentEgress`, which implements
 the same seam and **calls no model at all**.
 
 ```text

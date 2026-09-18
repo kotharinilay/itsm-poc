@@ -33,7 +33,7 @@ from ragcore.egress.http import (
 )
 from ragcore.egress.validation import require_object, require_text
 from ragcore.infrastructure.azure_credentials import azure_credential
-from ragcore.integrations.model.egress import (
+from ragcore.model.egress import (
     ModelBudgetExceededError,
     ModelEgressError,
     ModelPurpose,
@@ -73,7 +73,7 @@ class GatewayNotConfiguredError(ModelEgressError):
 class AiGatewayEgress:
     """Sends model calls to the AI Gateway as this process's managed identity.
 
-    Satisfies :class:`~ragcore.integrations.model.egress.ModelEgressPort`.
+    Satisfies :class:`~ragcore.model.egress.ModelEgressPort`.
 
     **This class knows no provider.** It has no model name, no deployment name, no provider base
     URL and no branch on any of them. What it posts is a purpose, an organisation and some text;

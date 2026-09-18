@@ -24,8 +24,8 @@
     "statement": "RagCore -> AI Gateway -> model provider. No component reaches a model provider directly (FR-OPS-007, constitution §Model access).",
     "enforcedBy": [
       "build/infra/identity/managed-identities.json — id-synthia-ragcore holds no Foundry role",
-      "ragcore/src/ragcore/integrations/model/egress.py — ModelEgressPort is the only shape a call takes",
-      "ragcore/tests/architecture/test_no_direct_model_call.py — no provider SDK or endpoint outside integrations/model/",
+      "ragcore/src/ragcore/model/egress.py — ModelEgressPort is the only shape a call takes",
+      "ragcore/tests/architecture/test_no_direct_model_call.py — no provider SDK or endpoint outside model/",
       "ragcore/src/ragcore/config/settings.py — ModelGatewaySettings has no provider, key or model-endpoint field"
     ]
   },

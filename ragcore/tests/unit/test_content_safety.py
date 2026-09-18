@@ -19,7 +19,7 @@ import pytest
 
 from ragcore.domain.identifiers import CorrelationId
 from ragcore.domain.tenancy import TenantContext
-from ragcore.integrations.model.safety import (
+from ragcore.model.safety import (
     ContentBlockedError,
     SafeModel,
     SafetyCategory,
@@ -153,7 +153,7 @@ class TestTheDecisionIsLoggedAndTheContentIsNot:
     async def test_the_decision_carries_the_correlation_identifier(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        with caplog.at_level(logging.INFO, logger="ragcore.integrations.model.safety"):
+        with caplog.at_level(logging.INFO, logger="ragcore.model.safety"):
             await SafeModel(_Model(), _Safety()).complete(
                 admitted_tenant(), DISTINCTIVE_TEXT, CORRELATION
             )
@@ -168,7 +168,7 @@ class TestTheDecisionIsLoggedAndTheContentIsNot:
     ) -> None:
         """A safety log that quoted the offending text would be a durable copy of exactly the
         material the check exists to stop, in the store with the widest read access."""
-        with caplog.at_level(logging.INFO, logger="ragcore.integrations.model.safety"):
+        with caplog.at_level(logging.INFO, logger="ragcore.model.safety"):
             await SafeModel(_Model(completion=DISTINCTIVE_TEXT), _Safety()).complete(
                 admitted_tenant(), DISTINCTIVE_TEXT, CORRELATION
             )

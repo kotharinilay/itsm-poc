@@ -395,7 +395,7 @@ synthia/
   enforcement where nothing guards it.
 
 **The service is NOT RagCore's package renamed.** It carries no `graph/`, no `retrieval/`, no
-`integrations/model/`, and no tool-selection reasoning. Model egress and content safety stay in
+`model/`, and no tool-selection reasoning. Model egress and content safety stay in
 RagCore: that is reasoning, not integration.
 
 ### Dependency direction
@@ -900,7 +900,7 @@ provider type appears in `domain/` or `application/`; entitlement tests assertin
 advertised capability is not callable.
 
 **Validation gates.** The no-leak test passes. No direct provider access exists outside
-`integrations/model/`. No `HttpClient` is constructed manually.
+`model/`. No `HttpClient` is constructed manually.
 
 **Non-goals.** No real tenant credentials. No use-case operations.
 
@@ -1285,7 +1285,7 @@ discovery ports become *remote* on the RagCore side and *implemented* on the Int
 *asserted* authority, which Principle I forbids. The connector registry is new. Queue-and-replay on
 system-of-record outage moves with its durability story.
 
-**Stays in RagCore, deliberately.** `integrations/model/` — the AI Gateway client, model egress and
+**Stays in RagCore, deliberately.** `model/` — the AI Gateway client, model egress and
 content safety. That is reasoning, not integration, and the Integrations Service has no model access.
 
 **Removed from RagCore.** The `integrations/` package except `model/`; the connector settings and

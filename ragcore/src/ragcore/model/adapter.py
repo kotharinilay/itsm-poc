@@ -4,7 +4,7 @@ Satisfies :class:`~ragcore.application.ports.ModelPort`, which the agent loop, r
 ingestion all hold. Everything above this line speaks
 :class:`~ragcore.domain.tenancy.TenantContext` and
 :class:`~ragcore.domain.identifiers.CorrelationId`; everything below speaks
-:class:`~ragcore.integrations.model.egress.ModelRequest`. Neither vocabulary crosses, which is what
+:class:`~ragcore.model.egress.ModelRequest`. Neither vocabulary crosses, which is what
 keeps a provider swap from reaching the agent loop (spec FR-OPS-009).
 
 **The adapter is a translation, not a policy.** It applies no budget, no cache, no routing and no
@@ -25,12 +25,12 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from ragcore.egress.validation import as_data
-from ragcore.integrations.model.egress import ModelPurpose, ModelRequest
+from ragcore.model.egress import ModelPurpose, ModelRequest
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.domain.identifiers import CorrelationId
     from ragcore.domain.tenancy import TenantContext
-    from ragcore.integrations.model.egress import ModelEgressPort
+    from ragcore.model.egress import ModelEgressPort
 
 
 class GatewayModelAdapter:

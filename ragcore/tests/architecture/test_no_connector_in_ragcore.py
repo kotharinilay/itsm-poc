@@ -31,7 +31,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[2] / "src" / "ragcore"
 
 # The one subtree that may hold outbound model code. Reasoning is RagCore's; integration is not.
-MODEL_PACKAGE = SRC / "integrations" / "model"
+MODEL_PACKAGE = SRC / "model"
 
 # Client libraries whose only purpose is to talk to a customer system. `azure` is deliberately NOT
 # here: RagCore legitimately uses Azure SDKs for its own platform resources — Service Bus, Key Vault
@@ -192,7 +192,7 @@ def test_the_permitted_model_subtree_is_the_only_exemption() -> None:
     exemption is what stops the guard from quietly shrinking.
     """
     assert MODEL_PACKAGE.is_dir()
-    assert MODEL_PACKAGE.relative_to(SRC).as_posix() == "integrations/model"
+    assert MODEL_PACKAGE.relative_to(SRC).as_posix() == "model"
 
     # And the thing it is exempt FOR is a gateway, not a connector.
     gateway = (MODEL_PACKAGE / "gateway.py").read_text(encoding="utf-8")

@@ -10,7 +10,7 @@ configuration and configuration differs per environment. The single-egress rule 
 everywhere except the environment where the code was written.
 
 The safe one is this: a second implementation of
-:class:`~ragcore.integrations.model.egress.ModelEgressPort` that **is not a model client at all**.
+:class:`~ragcore.model.egress.ModelEgressPort` that **is not a model client at all**.
 It reaches no provider, holds no endpoint and needs no credential. Application code cannot tell it
 from the gateway, which is the point — there is no configuration in which a caller bypasses the
 seam, because there is nothing on the other side of the seam to bypass it to.
@@ -33,7 +33,7 @@ import hashlib
 import logging
 from typing import Final
 
-from ragcore.integrations.model.egress import (
+from ragcore.model.egress import (
     ModelEgressError,
     ModelPurpose,
     ModelRequest,
@@ -63,7 +63,7 @@ PLACEHOLDER_COMPLETION: Final = (
 class LocalDevelopmentEgress:
     """A gateway-shaped stand-in for a developer machine. **It calls no model.**
 
-    Satisfies :class:`~ragcore.integrations.model.egress.ModelEgressPort`, and satisfying it is the
+    Satisfies :class:`~ragcore.model.egress.ModelEgressPort`, and satisfying it is the
     entire contribution: application code, the agent loop and every adapter continue to hold a
     :class:`~ragcore.application.ports.ModelPort` backed by an egress, so no code path exists that
     would reach a provider when the gateway is absent.

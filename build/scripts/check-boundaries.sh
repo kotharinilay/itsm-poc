@@ -184,7 +184,7 @@ check "RagCore declares a connector client dependency" \
 # A customer system's ADDRESS anywhere in RagCore. Knowing where a system lives permits nothing on
 # its own, but it is the one thing a direct call cannot be written without.
 #
-# `integrations/model/` remains the one permitted egress - the AI Gateway - and it is untouched
+# `model/` remains the one permitted egress - the AI Gateway - and it is untouched
 # because these patterns name CUSTOMER systems rather than excluding a path. An exclusion is what
 # somebody widens; a positive list of customer hosts is not.
 #

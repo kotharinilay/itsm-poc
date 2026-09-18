@@ -134,7 +134,13 @@ class TestNoProviderPackageReachesInward:
     @pytest.mark.parametrize("layer", ["domain", "application"])
     def test_the_layer_does_not_import_the_adapters(self, layer: str) -> None:
         """Dependency direction points inward. An adapter implements a port; a port names none."""
-        outward = ("ragcore.integrations", "ragcore.retrieval", "ragcore.persistence")
+        outward = (
+            "ragcore.model",
+            "ragcore.egress",
+            "ragcore.retrieval",
+            "ragcore.persistence",
+            "ragcore.platform_clients",
+        )
         violations: list[str] = []
 
         for module in _modules(SRC / layer):
@@ -188,8 +194,8 @@ class TestTheAdaptersAreWhereTheProviderDetailLives:
             # What remains below is every boundary RagCore still legitimately owns, and the list is
             # now short enough to read as a claim: two model paths, one search index, one shared
             # transport, one validation rule, one sibling-service client. **No customer system.**
-            "integrations/model/gateway.py",
-            "integrations/model/local.py",
+            "model/gateway.py",
+            "model/local.py",
             "egress/http.py",
             "egress/validation.py",
             "platform_clients/integrations.py",

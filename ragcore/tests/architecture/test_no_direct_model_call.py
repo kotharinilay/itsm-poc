@@ -7,17 +7,17 @@ places, and this file is the third:
 1. **Identity.** ``id-synthia-ragcore`` holds no Foundry role at all
    (``build/infra/identity/managed-identities.json``), so a direct provider call would fail to
    authenticate even if the code existed.
-2. **Type.** :class:`~ragcore.integrations.model.egress.ModelEgressPort` is the only shape a model
+2. **Type.** :class:`~ragcore.model.egress.ModelEgressPort` is the only shape a model
    call takes, and its implementations are the gateway client and the local development seam.
 3. **This file.** No provider SDK, endpoint or deployment name appears anywhere in the tree.
 4. **Configuration.** ``ModelGatewaySettings`` has no ``provider``, ``api_key`` or
    ``model_endpoint`` field.
 
 **The scope here is stricter than the task's wording, deliberately.** T138 asks that no module
-outside ``integrations/model/`` hold a provider endpoint. What is asserted below is that **no
+outside ``model/`` hold a provider endpoint. What is asserted below is that **no
 module holds one at all**, including the gateway client — because the gateway client does not need
 one either. It posts to the gateway, and the gateway knows the providers
-(``build/infra/ai-gateway/providers.json``). A provider endpoint inside ``integrations/model/``
+(``build/infra/ai-gateway/providers.json``). A provider endpoint inside ``model/``
 would be a direct call wearing the right directory name.
 
 **Checked against the AST and against string literals, never against raw file text.** This module,
@@ -164,7 +164,7 @@ class TestNoProviderReachedDirectly:
         )
 
     def test_no_module_holds_a_provider_endpoint(self) -> None:
-        """**Including ``integrations/model/``.** The gateway client posts to the gateway; the
+        """**Including ``model/``.** The gateway client posts to the gateway; the
         gateway knows the providers."""
         offenders: list[str] = []
 
@@ -206,7 +206,7 @@ class TestTheEgressSeamIsTheOnlyShape:
     def test_the_model_port_is_satisfied_only_by_the_gateway_adapter(self) -> None:
         """``ModelPort`` is held by the graph; ``GatewayModelAdapter`` is the one implementation,
         and it holds an egress rather than a client."""
-        from ragcore.integrations.model.adapter import GatewayModelAdapter
+        from ragcore.model.adapter import GatewayModelAdapter
 
         implementations = {
             node.name
@@ -236,7 +236,7 @@ class TestTheEgressSeamIsTheOnlyShape:
         arrangement exists to prevent."""
         implementations = {
             node.name
-            for path in sorted((SRC / "integrations" / "model").rglob("*.py"))
+            for path in sorted((SRC / "model").rglob("*.py"))
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
             if isinstance(node, ast.ClassDef)
             and any(

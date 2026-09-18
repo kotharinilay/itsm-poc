@@ -132,14 +132,14 @@ expect_fail "a model provider SDK imported in RagCore" py_arch
 rm -f ragcore/src/ragcore/__planted_model.py
 
 # --- 8: a provider endpoint inside the model package -----------------------
-# Deliberately planted INSIDE integrations/model/, which is where a direct call would be least
+# Deliberately planted INSIDE model/, which is where a direct call would be least
 # conspicuous: the directory name is right, so only the guard notices. The gateway client needs no
 # provider endpoint either - it posts to the gateway, and the gateway knows the providers.
 printf 'ENDPOINT = "https://contoso.openai.azure.com"\n' \
-  > ragcore/src/ragcore/integrations/model/__planted_endpoint.py
-restore+=("RM:ragcore/src/ragcore/integrations/model/__planted_endpoint.py")
-expect_fail "a provider endpoint inside integrations/model/" py_arch
-rm -f ragcore/src/ragcore/integrations/model/__planted_endpoint.py
+  > ragcore/src/ragcore/model/__planted_endpoint.py
+restore+=("RM:ragcore/src/ragcore/model/__planted_endpoint.py")
+expect_fail "a provider endpoint inside model/" py_arch
+rm -f ragcore/src/ragcore/model/__planted_endpoint.py
 
 # --- 9: a provider's vocabulary reaches the application layer --------------
 # The half that imports nothing and couples just as firmly: no import to spot, and the word

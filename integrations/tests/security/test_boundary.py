@@ -32,6 +32,21 @@ _ACCEPTED_HASH = "a" * 64
 _SRC = Path(__file__).resolve().parents[2] / "src" / "integrations"
 
 
+class _UnreachableCatalogue:
+    """Every method raises.
+
+    These tests are about the **provenance and identity boundary**, which runs before any endpoint.
+    A catalogue that raised if reached proves the refusal happened at the boundary rather than
+    somewhere deeper — a benign stub would let a routing change pass these tests silently.
+    """
+
+    def __getattr__(self, name: str) -> object:
+        raise AssertionError(
+            f"{name} was reached. These tests assert the request is refused before any endpoint "
+            "runs, so reaching the catalogue means the boundary did not hold."
+        )
+
+
 def _client() -> TestClient:
     """A client whose app trusts exactly one certificate hash."""
     container = Container(
@@ -43,6 +58,10 @@ def _client() -> TestClient:
         ),
         readiness=ReadinessRegistry(),
         connector_metrics=ConnectorMetrics(),
+        catalogue=_UnreachableCatalogue(),  # type: ignore[arg-type]
+        tenants=_UnreachableCatalogue(),  # type: ignore[arg-type]
+        access_policy=_UnreachableCatalogue(),  # type: ignore[arg-type]
+        servicenow=None,
     )
     return TestClient(create_app(container), raise_server_exceptions=False)
 

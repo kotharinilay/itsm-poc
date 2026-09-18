@@ -7,12 +7,16 @@ this one instantiates a concrete adapter — which is what makes the rule checka
 remembered.
 
 **Ports belong to the consuming module** (Principle V), so they are declared where they are used —
-`application/` for application-level ports, `credentials/` for the credential port whose consumer is
-an adapter. This module only *binds* them.
+`application/ports.py` for application-level ports, `credentials/` for the credential port whose
+consumer is an adapter. This module only *binds* them.
 
 **Startup validates and then fails.** Configuration binds once here; an invalid value raises out of
 application startup and stops the process. A service that started in a state it cannot be secure in
 has already lost, and lost invisibly.
+
+**Optional bindings are `None`, never a stub.** Where a dependency is unconfigured — no DSN in a
+unit test, no vault in local development — the container holds `None` and the API answers 503.
+Constitution Principle IX: a fallback is explicit and visible, and stubbing a success is prohibited.
 """
 
 from __future__ import annotations
@@ -21,12 +25,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from integrations.api.health import ReadinessRegistry
+from integrations.catalogue.registry import ConnectorRegistry
+from integrations.catalogue.repository import CatalogueRepository, TenantResolver
 from integrations.config.settings import IntegrationsSettings, settings
+from integrations.connectors.servicenow.adapter import ServiceNowAdapter
+from integrations.credentials.resolver import TenantCredentialResolver
+from integrations.egress.http import ResilientCaller
 from integrations.observability.logging import configure_logging
 from integrations.observability.telemetry import ConnectorMetrics, configure_telemetry
+from integrations.persistence.engine import Database, ReadinessProbeAdapter, build_engine
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
-    pass
+    from integrations.credentials.resolver import SecretResolverPort
+    from integrations.policy.checks import AccessPolicy
 
 __all__ = ["Container", "build_container"]
 
@@ -37,20 +48,33 @@ class Container:
 
     Attributes:
         settings: Validated configuration.
-        readiness: The platform-dependency probes this process waits on. **Probes are registered by
-            the subsystem that owns them** as each lands — the durable store, the message transport
-            and the secret store. An empty registry means "nothing to wait for", which is the
-            honest state for a process that has not yet bound any of them.
+        readiness: The **platform** dependency probes this process waits on. Never an external
+            customer system.
         connector_metrics: Attempts, outcomes and duration, on this service's own meter.
+        catalogue: The tenant-resolved capability set, over published views.
+        tenants: Organisation recovery from a durable platform object — the only way this service
+            learns an organisation on the synchronous path.
+        access_policy: The execution-time re-check.
+        servicenow: The system-of-record connector, or ``None`` when unconfigured. `None` is
+            answered as 503, never stubbed.
     """
 
     settings: IntegrationsSettings
     readiness: ReadinessRegistry
     connector_metrics: ConnectorMetrics
+    catalogue: CatalogueRepository
+    tenants: TenantResolver
+    access_policy: AccessPolicy
+    servicenow: ServiceNowAdapter | None
 
 
-def build_container() -> Container:
-    """Bind configuration, observability and the readiness registry.
+def build_container(secrets: SecretResolverPort | None = None) -> Container:
+    """Bind configuration, observability, persistence, policy and connectors.
+
+    Args:
+        secrets: The Key Vault resolver. Supplied by tests; in a deployed environment it is
+            constructed from the vault URL and the managed identity. ``None`` leaves the
+            system-of-record connector unbound, which the API reports as 503 rather than stubbing.
 
     Returns:
         The container.
@@ -58,16 +82,45 @@ def build_container() -> Container:
     Raises:
         pydantic.ValidationError: When configuration is invalid. **Deliberately uncaught** — it
             propagates out of startup and stops the process. In particular an empty gateway
-            certificate allow-list fails here, because an allow-list that fails open cannot be
-            distinguished at request time from one that is simply permissive.
+            certificate allow-list fails here: a service with one refuses every request while its
+            health probes keep reporting healthy, so failing the rollout is the visible outcome.
     """
+    # Imported here rather than at module scope to keep the import graph acyclic: policy consumes
+    # ports that the catalogue modules implement, and a top-level import would make this module and
+    # the policy module mutually reachable at import time.
+    from integrations.policy.checks import AccessPolicy
+
     resolved = settings()
 
     configure_logging(resolved.observability)
     configure_telemetry(resolved.observability)
 
+    engine = build_engine(resolved.persistence)
+    database = Database(engine, resolved.persistence)
+
+    catalogue = CatalogueRepository(database)
+    tenants = TenantResolver(database)
+    registry = ConnectorRegistry(database)
+    access_policy = AccessPolicy(catalogue, registry)
+
+    readiness = ReadinessRegistry()
+    if resolved.persistence.dsn:
+        # Registered only when a store is actually configured. A probe against an unconfigured DSN
+        # would fail forever and hold every replica out of rotation, which is a worse failure than
+        # the missing configuration it was reporting.
+        readiness.register(ReadinessProbeAdapter(database))
+
+    servicenow: ServiceNowAdapter | None = None
+    if secrets is not None:
+        credentials = TenantCredentialResolver(database, secrets)
+        servicenow = ServiceNowAdapter(ResilientCaller(ResilientCaller.build_client()), credentials)
+
     return Container(
         settings=resolved,
-        readiness=ReadinessRegistry(),
+        readiness=readiness,
         connector_metrics=ConnectorMetrics(),
+        catalogue=catalogue,
+        tenants=tenants,
+        access_policy=access_policy,
+        servicenow=servicenow,
     )

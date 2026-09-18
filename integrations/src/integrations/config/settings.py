@@ -71,18 +71,24 @@ class EdgeTrustSettings(_Base):
         """Refuse to start with no accepted certificate.
 
         Raises:
-            ValueError: When the allow-list is empty. **This is deliberate and is not a
-                convenience check.** An empty allow-list cannot be distinguished at request time
-                from "every certificate is acceptable", so a service that started with one would
-                accept a forged identity contract from anywhere and report itself healthy while
-                doing it. Failing at startup converts a silent security hole into a loud
-                deployment error.
+            ValueError: When the allow-list is empty. Two reasons, and **neither is "it would fail
+                open"** — :mod:`integrations.api.middleware.provenance` fails *closed* on an empty
+                set, refusing everything:
+
+                1. **A silent total outage becomes a loud deployment failure.** Health probes are
+                   exempt from provenance, so a service with an empty allow-list refuses every
+                   request while every replica reports healthy. Failing here means the rollout
+                   fails visibly instead of going green and dead.
+                2. **The fail-open refactor has nowhere to start.** The tempting fix when this
+                   bites in local development is `if self._accepted and presented not in ...`,
+                   which reads as "only enforce when configured" and genuinely is fail-open.
+                   Making the empty set unconstructable removes that option.
         """
         if not value:
             raise ValueError(
                 "at least one gateway certificate thumbprint is required. An empty allow-list "
-                "fails open — it accepts any caller's identity contract — so the process refuses "
-                "to start rather than serve in a state it cannot be secure in."
+                "refuses every request while health probes keep reporting healthy, so the process "
+                "refuses to start rather than roll out green and serving nothing."
             )
         return value
 

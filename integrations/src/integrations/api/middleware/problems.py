@@ -20,18 +20,30 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from integrations.api.middleware.correlation import current_correlation_id
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Awaitable, Callable
 
-    from starlette.requests import Request
-    from starlette.responses import Response
-
-__all__ = ["PROBLEM_MEDIA_TYPE", "ProblemJSONResponse", "ProblemMiddleware", "problem"]
+__all__ = [
+    "PROBLEM_MEDIA_TYPE",
+    "UNIVERSAL_PROBLEM_STATUSES",
+    "ProblemDetails",
+    "ProblemJSONResponse",
+    "ProblemMiddleware",
+    "install_exception_handlers",
+    "problem",
+    "problem_responses",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -115,3 +127,119 @@ class ProblemMiddleware(BaseHTTPMiddleware):
                 kind="internal-error",
                 instance=request.url.path,
             )
+
+
+class ProblemDetails(BaseModel):
+    """The RFC 9457 body, declared so it appears in every emitted document.
+
+    **The document has to say what an error looks like, or the contract is only half emitted.**
+    This module already returns this shape at runtime; without a model the generator falls back to
+    FastAPI's own `HTTPValidationError`, and the published contract then describes an error body
+    this service never sends.
+
+    Mirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared
+    (Principle VI), because one error contract across the platform is what lets a client parse one
+    shape rather than two.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    title: str
+    status: int
+    detail: str
+    instance: str
+    correlation_id: str = Field(
+        alias="correlationId",
+        description=(
+            "The one addition to RFC 9457. It is what lets a caller quoting an error be followed "
+            "across the gateway hop and both queues."
+        ),
+    )
+
+
+_TITLES: Final[dict[int, str]] = {
+    400: "Invalid request",
+    401: "Unauthenticated",
+    403: "Not authorized",
+    404: "Not found",
+    422: "Invalid request",
+    500: "Internal error",
+    502: "Capability unavailable",
+    503: "Capability unavailable",
+}
+"""The stable ``title`` for each status this service publishes. One title per type URI."""
+
+UNIVERSAL_PROBLEM_STATUSES: Final[tuple[int, ...]] = (401, 403, 404, 422, 500)
+"""Declared on every operation, because every operation can produce each of them.
+
+401 and 403 come from the provenance and identity middleware before routing; 404 is how an object
+belonging to another organisation is reported; 422 is a body that did not match; 500 is the
+catch-all handler.
+"""
+
+
+def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI `responses` entries declaring the error contract for each status.
+
+    Args:
+        statuses: The statuses to declare.
+
+    Returns:
+        A mapping ready to pass as `responses=` to a router or route decorator.
+
+    Raises:
+        ValueError: When a status has no declared title. Rejected rather than published with an
+            invented one — a title is part of the contract a client branches on.
+    """
+    unknown = [s for s in statuses if s not in _TITLES]
+    if unknown:
+        raise ValueError(f"no declared problem title for status(es) {unknown}")
+
+    return {
+        status: {
+            "description": _TITLES[status],
+            "content": {PROBLEM_MEDIA_TYPE: {"schema": ProblemDetails.model_json_schema()}},
+        }
+        for status in statuses
+    }
+
+
+def install_exception_handlers(app: FastAPI) -> None:
+    """Reshape framework-raised errors into the platform's one error contract.
+
+    **Without this, a 422 is published as `application/json` carrying FastAPI's own
+    `HTTPValidationError`** — a second error shape a client would have to parse, which
+    `build/scripts/openapi_validate.py` refuses as unpublishable and rightly so.
+
+    Args:
+        app: The application.
+    """
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation(request: Request, exc: Exception) -> Response:
+        """A malformed body or an unknown field. **Never silently ignored.**
+
+        An organisation supplied as `tenantId` lands here, because the request models forbid extra
+        fields — refused rather than dropped, so a caller cannot believe it was honoured.
+        """
+        del exc
+        return problem(
+            status=422,
+            title=_TITLES[422],
+            detail="The request did not match the contract for this endpoint.",
+            kind="invalid-request",
+            instance=request.url.path,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(request: Request, exc: Exception) -> Response:
+        """Framework-raised statuses, reshaped into problem details."""
+        status = exc.status_code if isinstance(exc, StarletteHTTPException) else 500
+        return problem(
+            status=status,
+            title=_TITLES.get(status, "Request failed"),
+            detail=str(getattr(exc, "detail", "")),
+            kind=f"http-{status}",
+            instance=request.url.path,
+        )

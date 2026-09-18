@@ -136,6 +136,11 @@ addopts = [
     "-ra",
 ]
 markers = [
+    # Deliberately NOT "treatment comes from the catalogue" as in RagCore's suite. This service
+    # assigns no treatment and performs no role intersection (FR-INTEG-008); what it governs is the
+    # re-verification of FACTS at the point of effect. The marker names that narrower job so a
+    # reader does not assume the treatment decision moved.
+    "governance: proves an access or policy FACT is re-verified at execution time",
     "integration: requires a real collaborator (database, messaging) via Testcontainers",
     "isolation: proves no path returns another organisation's data",
     "idempotency: proves at-least-once delivery produces exactly one effect",

@@ -59,8 +59,6 @@ from ragcore.integrations.model.adapter import GatewayModelAdapter
 from ragcore.integrations.model.egress import ModelEgressPort
 from ragcore.integrations.model.gateway import AiGatewayEgress
 from ragcore.integrations.model.local import LocalDevelopmentEgress
-from ragcore.integrations.servicenow.adapter import ServiceNowAdapter
-from ragcore.integrations.servicenow.queue import InMemoryCaseWriteQueue
 from ragcore.persistence.engine import UnitOfWork, create_engine, create_session_factory
 from ragcore.persistence.repositories import (
     ApprovalRepository,
@@ -266,17 +264,19 @@ def build_container(settings: Settings | None = None) -> Container:
         cache=(
             RedisTransientCache(resolved.cache) if resolved.cache.is_configured else NullCache()
         ),
-        case_system=(
-            ServiceNowAdapter(
-                resolved.integrations,
-                caller,
-                credentials,
-                InMemoryCaseWriteQueue(),
-                clock,
-            )
-            if resolved.integrations.servicenow_instance_url
-            else None
-        ),
+        # THE DIRECT SERVICENOW PATH IS GONE (ADR-0007, spec §22.1). RagCore no longer calls the
+        # system of record: it calls the Integrations Service, through APIM, and that service owns
+        # every connector, every credential and every egress path.
+        #
+        # `None` rather than a stand-in, and deliberately so. The `CaseSystemPort` binding that used
+        # to hold `ServiceNowAdapter` has no in-process implementation any more and must not gain
+        # one — an adapter here would be exactly the direct path the boundary removes. Case
+        # operations go through `ragcore.platform_clients.integrations.IntegrationsClient`, which
+        # is bound separately below because it is a **platform service client**, not a connector.
+        #
+        # A silently discarded case write would read as a committed one, so a caller that finds
+        # this `None` escalates rather than proceeding.
+        case_system=None,
         # Still `None`, and still honestly so: notifications have no transport until Stage 8 binds
         # one here. A default that quietly dropped them would let the platform appear to work while
         # no boundary was real.

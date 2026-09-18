@@ -157,6 +157,32 @@ check "Integrations configures an HTTP client targeting RagCore" \
 check "Integrations declares a model or graph dependency" \
   '^[[:space:]]*"?(langgraph|openai|azure-ai-[a-z]+|anthropic)' integrations '*.toml'
 
+# ------------------------------- RagCore reaches NO external system (ADR-0007, spec 22.1, 23.1)
+# The connectors moved. What must not come back is a module in RagCore that talks to a customer
+# system directly - the blast radius that motivated the split is an orchestrator compromise
+# yielding every organisation's connector credentials.
+#
+# THIS LIST WIDENS AS EACH CONNECTOR RELOCATES, AND IT IS DELIBERATELY NOT COMPLETE YET.
+#
+# ServiceNow has moved (this slice). Microsoft Graph, the MCP client, OneLogin and Duo have not -
+# they relocate in the remaining Phase 16 tasks. Listing them here now would fail the build on work
+# that has not been scheduled yet, and a guard that fails for work-in-progress is a guard somebody
+# comments out. Each relocation adds its name below in the same change that removes its code.
+#
+# Anchored on IMPORT and on a MODULE PATH rather than on the vendor's name in prose: RagCore
+# legitimately names ServiceNow throughout its documentation, its ports and its tests, and a guard
+# that flagged those is a guard somebody disables.
+check "RagCore imports the removed ServiceNow connector" \
+  '^[[:space:]]*(from|import)[[:space:]]+ragcore\.integrations\.servicenow' \
+  ragcore '*.py'
+
+# A ServiceNow base address anywhere in RagCore. `integrations/model/` remains the one permitted
+# egress - the AI Gateway - and it is untouched by naming the connector rather than excluding a path,
+# because an exclusion is what somebody widens.
+check "RagCore configures a ServiceNow endpoint" \
+  '(instance_url|base_?[Uu]rl|BaseAddress).{0,60}service-?now' \
+  ragcore '*.py' '*.toml' '*.json'
+
 # ------------------------------------------- the monolith owns no schema (ADR-0001, ADR-0003)
 #
 # Scoped to dotnet/src, and that is the same deferral this script already makes for RagCore prose

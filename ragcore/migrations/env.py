@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from ragcore.persistence.autogenerate import include_name, include_object
 from ragcore.persistence.base import PLATFORM_SCHEMA, metadata
-from ragcore.persistence.views import ALL_VIEWS
+from ragcore.persistence.views import ALL_VIEWS, INTEGRATION_READ_VIEWS
 
 # Importing the models is what populates the metadata. Without it autogenerate compares the live
 # database against an empty MetaData and proposes dropping every table in it.
@@ -57,7 +57,20 @@ target_metadata = metadata
 # hand-written, deliberate, and not modelled here. Without this restriction autogenerate proposes
 # dropping the immutability guard and every grant, which is a revision that would quietly undo the
 # two structural controls in the schema.
-register_entities(list(ALL_VIEWS), schemas=[PLATFORM_SCHEMA], entity_types=[PGView])
+# BOTH view tuples are registered, and they are two tuples for a reason that is about GRANTS rather
+# than about autogenerate. `ALL_VIEWS` is the monolith's read contract; `INTEGRATION_READ_VIEWS` is
+# the Integrations Service's, and one of the latter carries credential REFERENCES that the monolith
+# must never be granted (ADR-0007). Keeping them apart is what stops the monolith gaining sight of
+# one by being added to a grant loop.
+#
+# Registration here is a different question from creation: revision 0018 creates `ALL_VIEWS` and
+# revision 0021 creates `INTEGRATION_READ_VIEWS`, but autogenerate must know about EVERY declared
+# view or it proposes dropping the ones it can see and does not recognise.
+register_entities(
+    [*ALL_VIEWS, *INTEGRATION_READ_VIEWS],
+    schemas=[PLATFORM_SCHEMA],
+    entity_types=[PGView],
+)
 
 DSN_ENV_VAR = "SYNTHIA_DB_DSN"
 """The one place a connection string enters this process. Resolved from Key Vault by the job."""

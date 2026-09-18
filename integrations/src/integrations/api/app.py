@@ -32,8 +32,9 @@ from fastapi import FastAPI
 from integrations.api.health import build_health_router
 from integrations.api.middleware.correlation import CorrelationMiddleware
 from integrations.api.middleware.identity import IdentityMiddleware
-from integrations.api.middleware.problems import ProblemMiddleware
+from integrations.api.middleware.problems import ProblemMiddleware, install_exception_handlers
 from integrations.api.middleware.provenance import ProvenanceMiddleware
+from integrations.api.workload.routes import build_workload_router
 from integrations.config.composition import build_container
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
@@ -62,7 +63,10 @@ def create_app(container: Container | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Synthia Integrations API",
-        version="1.0.0",
+        # `v1`, matching the URI segment, NOT an assembly version. The published version is the one
+        # a client is pinned to; an assembly version moves on a patch release that changes no route,
+        # which would tell every client their contract had changed when it had not.
+        version="v1",
         description=_DESCRIPTION,
         # One document per audience per deployable; never merged with RagCore's.
         openapi_url="/api/workload/v1/integrations/openapi.json",
@@ -70,6 +74,10 @@ def create_app(container: Container | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.container = resolved
+
+    # Before the routers, so a framework-raised 422 is already the platform's one error contract by
+    # the time the document is generated from the routes.
+    install_exception_handlers(app)
 
     # Registered in reverse of execution order — Starlette wraps each around the previous, so the
     # LAST registered runs FIRST. Reading bottom-up gives the constitution's order.
@@ -79,5 +87,6 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.add_middleware(ProblemMiddleware)
 
     app.include_router(build_health_router(resolved.readiness))
+    app.include_router(build_workload_router(resolved))
 
     return app

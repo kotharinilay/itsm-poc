@@ -125,6 +125,44 @@
       different meters, deliberately not merged: model spend and request volume fail for different
       reasons and at different rates.
     -->
+    <!--
+      THE INTEGRATIONS SURFACE NEEDS ITS OWN APPLICATION ROLE (ADR-0007, spec FR-INTEG-011).
+
+      Placed here rather than in a second policy file because identity is derived per AUDIENCE, not
+      per deployable - a caller is the workload principal whichever backend answers it, and two
+      policies would be two places for the derivation to drift. What differs is not the identity but
+      the AUTHORIZATION, and this is where that difference belongs.
+
+      WHY A DISTINCT ROLE AT ALL. The generic workload role exists so a service can reach the
+      execution leg. The Integrations Service is the only component holding per-organisation
+      connector credentials and the only one with an egress path to a customer system, so
+      "can reach a platform service" MUST NOT imply "can drive connectors". Without this check, any
+      component that ever legitimately held the workload role could invoke any entitled capability
+      against any customer system - which is the blast radius the whole boundary exists to shrink.
+
+      Matched on the PATH PREFIX because the routing rule is longest-matching-path: everything under
+      /api/workload/v1/integrations reaches the Integrations backend, and that prefix is exactly the
+      set of operations this role governs.
+
+      403 rather than 401: the caller authenticated fine. It simply holds no role this surface
+      accepts, which is an authorization outcome and must not read as a credential problem.
+    -->
+    <choose>
+      <when condition="@(context.Request.Url.Path.Contains("/integrations"))">
+        <choose>
+          <when condition="@(!((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("roles", "").Split(',').Select(r => r.Trim()).Contains("{{integrations-app-role}}"))">
+            <return-response>
+              <set-status code="403" reason="Forbidden" />
+              <set-header name="Content-Type" exists-action="override">
+                <value>application/problem+json</value>
+              </set-header>
+              <set-body>@("{\"type\":\"https://synthia.synoptek.com/problems/forbidden\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"This surface requires the Integrations application role.\"}")</set-body>
+            </return-response>
+          </when>
+        </choose>
+      </when>
+    </choose>
+
     <rate-limit-by-key
         calls="{{workload-calls-per-minute}}"
         renewal-period="60"

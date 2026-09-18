@@ -1,0 +1,1015 @@
+{
+  "components": {
+    "schemas": {
+      "CapabilityModel": {
+        "additionalProperties": false,
+        "description": "One capability as a caller may see it.\n\n**No treatment, no accepted roles, no risk tier, no endpoint.** Treatment is deterministic\ngovernance's decision in RagCore; returning it would invite a caller to read it and decide. The\nendpoint is execution detail and would be an egress hint.",
+        "properties": {
+          "available": {
+            "description": "Whether its system is reachable. Separate from `entitled` on purpose: entitled but unreachable and not entitled need different operator actions, and neither may be presented to a user as a failure of their request.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "catalogueId": {
+            "title": "Catalogueid",
+            "type": "string"
+          },
+          "catalogueVersion": {
+            "title": "Catalogueversion",
+            "type": "integer"
+          },
+          "entitled": {
+            "description": "Whether this organisation may use the capability.",
+            "title": "Entitled",
+            "type": "boolean"
+          },
+          "isReferenceFixture": {
+            "description": "True for an inert scaffold fixture. Never product capability.",
+            "title": "Isreferencefixture",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalogueId",
+          "catalogueVersion",
+          "kind",
+          "entitled",
+          "available",
+          "isReferenceFixture"
+        ],
+        "title": "CapabilityModel",
+        "type": "object"
+      },
+      "CaseOperationRequest": {
+        "additionalProperties": false,
+        "description": "A synchronous system-of-record operation.\n\n**No `tenantId`.** The organisation is recovered from the durable object `sessionId` names.",
+        "properties": {
+          "catalogueId": {
+            "title": "Catalogueid",
+            "type": "string"
+          },
+          "catalogueVersion": {
+            "title": "Catalogueversion",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "description": "The DERIVED key, supplied by the caller that owns the authority record. Derived, never random, so a repeat of the same logical action is recognised as a repeat.",
+            "minLength": 8,
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "title": "Sessionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "catalogueId",
+          "catalogueVersion",
+          "idempotencyKey"
+        ],
+        "title": "CaseOperationRequest",
+        "type": "object"
+      },
+      "CaseOperationResponse": {
+        "additionalProperties": false,
+        "description": "What the system of record returned, normalized.",
+        "properties": {
+          "externalReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Externalreference"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "succeeded",
+          "externalReference",
+          "payload"
+        ],
+        "title": "CaseOperationResponse",
+        "type": "object"
+      },
+      "CatalogueResponse": {
+        "additionalProperties": false,
+        "description": "The capability set for one organisation.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CatalogueResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The Synthia Integrations Service. Owns the tool catalogue, the connector registry and all traffic to external systems. Reached only by RagCore, on the workload audience, through APIM.",
+    "title": "Synthia Integrations API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/workload/v1/integrations/case-operations": {
+      "post": {
+        "description": "Perform a synchronous system-of-record operation.\n\nThe **full execution-time re-check runs here** even though the caller has already gated the\noperation (`FR-INTEG-019`). Prior retrieval is not standing permission, and an entitlement\nrevoked between proposal and execution is ordinary rather than exceptional.",
+        "operationId": "create_case_api_workload_v1_integrations_case_operations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOperationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          }
+        },
+        "summary": "Create Case",
+        "tags": [
+          "workload"
+        ]
+      }
+    },
+    "/api/workload/v1/integrations/catalogue": {
+      "get": {
+        "description": "The capability set entitled to the organisation the identifier names.\n\nExactly one of `sessionId` or `workItemId` is required. Both or neither is a 400 rather than\na precedence rule: a caller supplying both has two different ideas about which organisation\nthis is, and silently preferring one would resolve that disagreement invisibly.",
+        "operationId": "read_catalogue_api_workload_v1_integrations_catalogue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sessionId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sessionid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workItemId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workitemid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The RFC 9457 body, declared so it appears in every emitted document.\n\n**The document has to say what an error looks like, or the contract is only half emitted.**\nThis module already returns this shape at runtime; without a model the generator falls back to\nFastAPI's own `HTTPValidationError`, and the published contract then describes an error body\nthis service never sends.\n\nMirrors RagCore's `ProblemDetails` field for field — duplicated rather than shared\n(Principle VI), because one error contract across the platform is what lets a client parse one\nshape rather than two.",
+                  "properties": {
+                    "correlationId": {
+                      "description": "The one addition to RFC 9457. It is what lets a caller quoting an error be followed across the gateway hop and both queues.",
+                      "title": "Correlationid",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "title": "Detail",
+                      "type": "string"
+                    },
+                    "instance": {
+                      "title": "Instance",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "type": {
+                      "title": "Type",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "correlationId"
+                  ],
+                  "title": "ProblemDetails",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          }
+        },
+        "summary": "Read Catalogue",
+        "tags": [
+          "workload"
+        ]
+      }
+    }
+  }
+}

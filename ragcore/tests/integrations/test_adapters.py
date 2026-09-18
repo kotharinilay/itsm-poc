@@ -15,14 +15,12 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from ragcore.config.settings import IntegrationSettings, ModelGatewaySettings, RetrievalSettings
 from ragcore.domain.identifiers import CorrelationId, IdempotencyKey, OperationIdentity, PrincipalId
 from ragcore.execution.availability import CapabilityAvailability, availability_of
 from ragcore.integrations.credentials import (
-    CredentialNotEntitledError,
     TenantCredentialResolver,
 )
 from ragcore.integrations.graph.adapter import GRAPH_SCOPE, MicrosoftGraphAdapter
@@ -44,11 +42,9 @@ from ragcore.integrations.model.egress import (
 )
 from ragcore.integrations.model.gateway import AiGatewayEgress, GatewayNotConfiguredError
 from ragcore.integrations.model.local import SERVED_BY, LocalDevelopmentEgress
-from ragcore.integrations.servicenow.adapter import IDEMPOTENCY_HEADER, ServiceNowAdapter
-from ragcore.integrations.servicenow.queue import InMemoryCaseWriteQueue
 from ragcore.integrations.validation import BoundaryValidationError
 from ragcore.retrieval.search import AzureAiSearchRetrieval, RetrievalNotConfiguredError
-from tests.support.fakes import FakeClock, admitted_tenant
+from tests.support.fakes import admitted_tenant
 from tests.support.integrations import (
     FakeCredential,
     FakeCredentialReferenceStore,
@@ -397,104 +393,6 @@ class TestRetrievalIsTenantFiltered:
             await AzureAiSearchRetrieval(
                 RetrievalSettings(), ResilientHttpCaller(HttpClientFactory()), FakeCredential()
             ).search(admitted_tenant(), "printer", 5)
-
-
-# ---------------------------------------------------------------------------
-# ServiceNow — idempotent write-back, queue and replay
-# ---------------------------------------------------------------------------
-
-
-def _servicenow(
-    transport: httpx.AsyncBaseTransport, queue: InMemoryCaseWriteQueue
-) -> tuple[ServiceNowAdapter, FakeCredentialReferenceStore]:
-    resolver, store = _credentials()
-    adapter = ServiceNowAdapter(
-        INTEGRATIONS,
-        ResilientHttpCaller(
-            HttpClientFactory(transport=transport), retry=RetryPolicy(max_attempts=1)
-        ),
-        resolver,
-        queue,
-        FakeClock(),
-    )
-    return adapter, store
-
-
-class TestTheSystemOfRecordBoundary:
-    """One owning boundary, idempotent writes, and an outage that loses nothing."""
-
-    async def test_a_write_carries_the_idempotency_key_it_was_given(self) -> None:
-        """A retried write MUST NOT double-post (spec FR-EXT-004), and a key generated inside the
-        adapter would be a new key on every attempt."""
-        tenant = admitted_tenant()
-        transport, recorder = transport_returning(lambda _: json_response({"result": "ok"}))
-        adapter, store = _servicenow(transport, InMemoryCaseWriteQueue())
-        store.bind(tenant, "servicenow", "itsm-credential-name")
-
-        receipt = await adapter.record_progress(
-            tenant,
-            "CASE-1",
-            {"state": "triaged"},
-            IdempotencyKey("key-1"),
-            CorrelationId("corr-1"),
-        )
-
-        assert receipt.committed and not receipt.queued
-        assert recorder.header(IDEMPOTENCY_HEADER) == "key-1"
-
-    async def test_an_outage_queues_the_write_and_does_not_report_success(self) -> None:
-        """Three obligations at once: the loop continues, the write survives, and the session does
-        not resolve (spec FR-EXT-007)."""
-        tenant = admitted_tenant()
-        transport, _ = transport_returning(lambda _: json_response({}, status=503))
-        queue = InMemoryCaseWriteQueue()
-        adapter, store = _servicenow(transport, queue)
-        store.bind(tenant, "servicenow", "itsm-credential-name")
-
-        receipt = await adapter.record_progress(
-            tenant, "CASE-1", {"state": "triaged"}, IdempotencyKey("key-1"), CorrelationId("c")
-        )
-
-        assert receipt.queued and not receipt.committed
-        assert await adapter.uncommitted_writes(tenant) == 1
-
-    async def test_a_queued_write_keeps_its_original_idempotency_key(self) -> None:
-        """A regenerated key would make the replay a second write."""
-        tenant = admitted_tenant()
-        transport, _ = transport_returning(lambda _: json_response({}, status=503))
-        queue = InMemoryCaseWriteQueue()
-        adapter, store = _servicenow(transport, queue)
-        store.bind(tenant, "servicenow", "itsm-credential-name")
-
-        await adapter.record_progress(
-            tenant, "CASE-1", {"a": "b"}, IdempotencyKey("key-1"), CorrelationId("c")
-        )
-
-        assert [write.idempotency_key for write in await queue.drain()] == [IdempotencyKey("key-1")]
-
-    async def test_an_organisation_without_a_credential_is_refused_not_queued(self) -> None:
-        """A write that could never be authorized is not waiting on an outage, and queueing it would
-        hide a configuration defect behind a retry that never succeeds."""
-        transport, _ = transport_returning(lambda _: json_response({"result": "ok"}))
-        adapter, _store = _servicenow(transport, InMemoryCaseWriteQueue())
-
-        with pytest.raises(CredentialNotEntitledError):
-            await adapter.record_progress(
-                admitted_tenant(), "CASE-1", {}, IdempotencyKey("k"), CorrelationId("c")
-            )
-
-    async def test_one_organisations_credential_is_never_used_for_another(self) -> None:
-        """Credentials are held per organisation and per system (spec FR-EXT-016)."""
-        entitled = admitted_tenant()
-        other = admitted_tenant()
-        transport, _ = transport_returning(lambda _: json_response({"result": "ok"}))
-        adapter, store = _servicenow(transport, InMemoryCaseWriteQueue())
-        store.bind(entitled, "servicenow", "itsm-credential-name")
-
-        with pytest.raises(CredentialNotEntitledError):
-            await adapter.record_progress(
-                other, "CASE-1", {}, IdempotencyKey("k"), CorrelationId("c")
-            )
 
 
 # ---------------------------------------------------------------------------

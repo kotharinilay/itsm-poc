@@ -431,4 +431,78 @@ ALL_VIEWS: Final[tuple[PGView, ...]] = (
 The migration creates them in this order and drops them in reverse. Ordered rather than sorted:
 PostgreSQL records a dependency when one view selects from another, and although none does today,
 an alphabetical list would make the first one that did fail on downgrade rather than on review.
+
+**This tuple is the MONOLITH's read contract and is closed to it.** The Integrations Service reads a
+second, disjoint set — :data:`INTEGRATION_READ_VIEWS` below — and the two are separate tuples rather
+than one list with a grant table, because the thing that must never happen is the monolith gaining
+sight of a credential reference by being added to a loop.
+"""
+
+# ---------------------------------------------------------------------------------------------
+# The Integrations Service's read contract (ADR-0007). A SECOND consumer of the view mechanism.
+# ---------------------------------------------------------------------------------------------
+
+TENANT_ENTITLEMENT_V1: Final = PGView(
+    schema=PLATFORM_SCHEMA,
+    signature="vw_tenant_entitlement_v1",
+    definition="""
+    SELECT
+        e.tenant_id,
+        e.catalogue_id,
+        e.enabled
+    FROM platform.tenant_entitlement AS e
+    """,
+)
+"""Which capabilities an organisation may use. **`credential_reference` is deliberately absent.**
+
+`tenant_entitlement` was previously unpublished altogether, for a stated reason: it carries
+``credential_reference``, and rule 2 (no secret material on a published view) beats rule 1 (publish
+what a consumer needs) where they meet. That reasoning is unchanged — what changed is that the
+access check and the credential lookup turn out to be **two different questions with two different
+answerers**, and separating them lets the first be published without the second.
+
+This view answers only *may this organisation use this capability*. It is the access check
+(spec FR-INTEG-004, FR-EXT-015), and it discloses nothing: a tenant identifier and a catalogue
+identifier the caller already holds, plus a boolean.
+"""
+
+CONNECTOR_CREDENTIAL_REF_V1: Final = PGView(
+    schema=PLATFORM_SCHEMA,
+    signature="vw_connector_credential_ref_v1",
+    definition="""
+    SELECT
+        e.tenant_id,
+        e.catalogue_id,
+        e.credential_reference
+    FROM platform.tenant_entitlement AS e
+    WHERE e.enabled IS TRUE
+      AND e.credential_reference IS NOT NULL
+    """,
+)
+"""The Key Vault secret **name** for a capability. **Granted to Integrations alone.**
+
+**A reference is not a secret, and that is the whole reason this view can exist.** The value lives
+in Key Vault and resolves through managed identity at the point of use; this column holds a name.
+Holding the name grants nothing without the vault role — and the Integrations Service is the only
+principal that has it.
+
+**The monolith is not granted this view**, and that is the enforcement of the original decision
+rather than a reversal of it. The reason `tenant_entitlement` stayed unpublished was that the
+monolith must not see credential references; the Integrations Service is precisely the component
+that must. A view the read side cannot select from keeps both facts true at once.
+
+``WHERE enabled IS TRUE`` is not an optimisation. A disabled entitlement's credential reference has
+no legitimate reader: resolving it would be resolving a secret for a capability the organisation may
+not use, which is the shape of the leak this platform's entitlement model exists to prevent.
+"""
+
+INTEGRATION_READ_VIEWS: Final[tuple[PGView, ...]] = (
+    TENANT_ENTITLEMENT_V1,
+    CONNECTOR_CREDENTIAL_REF_V1,
+)
+"""The Integrations Service's read contract. Created by revision ``0021``, granted only to it.
+
+Deliberately **not** appended to :data:`ALL_VIEWS`: that tuple is iterated by revision ``0018``,
+which has already run, so adding to it would make a fresh database create these twice and an
+existing one never create them at all.
 """

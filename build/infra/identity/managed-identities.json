@@ -60,6 +60,62 @@
       ]
     },
     {
+      "name": "id-synthia-integrations",
+      "type": "UserAssigned",
+      "usedBy": "build/docker/containerapps/integrations.yaml",
+      "$comment": [
+        "THE ONLY IDENTITY THAT CAN READ A CONNECTOR CREDENTIAL, and the only one with an egress",
+        "path to a customer system (ADR-0007, spec 21.6). Everything below follows from that.",
+        "",
+        "WHAT IT HOLDS THAT NOTHING ELSE DOES: `secret:synthia-connector-*`. Per organisation, per",
+        "system, resolved at the point of use and never written back. This scope was WITHDRAWN from",
+        "id-synthia-ragcore in the same change rather than duplicated here - duplicating it would",
+        "have left the orchestrator able to read them and made the split cosmetic.",
+        "",
+        "WHAT IT DELIBERATELY DOES NOT HOLD, each absence being a control:",
+        "  - NO SignalR role. Notification is RagCore's leaf; this service notifies nobody.",
+        "  - NO AI Search role. It retrieves nothing.",
+        "  - NO model or Foundry access, and no AI Gateway route. It does no reasoning",
+        "    (FR-INTEG-007), and a model client here would be a second, ungoverned egress outside",
+        "    the gateway's metering, budgets and content safety.",
+        "  - NO Service Bus role YET. The command and result queues arrive with the asynchronous",
+        "    seam; granting a role for a queue that does not exist would be a standing permission",
+        "    nobody could exercise or audit.",
+        "",
+        "ITS DATABASE RIGHTS ARE NOT HERE. PostgreSQL authorization is a GRANT, applied by migration",
+        "0021 to the `synthia_integrations` principal: write on the `integration` schema it owns,",
+        "SELECT on exactly two published views, and no base-table access at all. Recorded there",
+        "rather than here because the database enforces it, and a role assignment in this file",
+        "would read as though Azure did."
+      ],
+      "roleAssignments": [
+        {
+          "resource": "keyvault",
+          "role": "Key Vault Secrets User",
+          "scope": "secret:synthia-integrations-*",
+          "why": "Resolves its own platform secret references - the database DSN, the Application Insights connection string - at revision start."
+        },
+        {
+          "resource": "keyvault",
+          "role": "Key Vault Secrets User",
+          "scope": "secret:synthia-connector-*",
+          "why": "Resolves per-organisation, per-system CONNECTOR credentials at the point of use. THE ONLY IDENTITY WITH THIS SCOPE; withdrawn from RagCore rather than shared with it."
+        },
+        {
+          "resource": "monitor",
+          "role": "Monitoring Metrics Publisher",
+          "scope": "application-insights",
+          "why": "Entra-authenticated telemetry ingestion, so no instrumentation key is held. Reports under its OWN service name, so it is a distinct telemetry source while the platform's single correlation identifier still spans the journey (FR-DEMO-028)."
+        },
+        {
+          "resource": "containerregistry",
+          "role": "AcrPull",
+          "scope": "registry",
+          "why": "Pulls its own digest-pinned image. Read-only, and on the registry alone."
+        }
+      ]
+    },
+    {
       "name": "id-synthia-ragcore",
       "type": "UserAssigned",
       "usedBy": "build/docker/containerapps/ragcore.yaml",
@@ -81,8 +137,27 @@
         {
           "resource": "keyvault",
           "role": "Key Vault Secrets User",
-          "scope": "vault",
-          "why": "Resolves secret references, including the database DSN, at revision start."
+          "scope": "secret:synthia-ragcore-*",
+          "why": "Resolves ITS OWN platform secret references - the database DSN, the SignalR endpoint, the Application Insights connection string - at revision start.",
+          "$comment": [
+            "NARROWED FROM VAULT-WIDE TO A PREFIX ON 2026-09-18 (ADR-0007, spec FR-INTEG-016).",
+            "",
+            "THIS NARROWING IS THE CONTROL, NOT A TIDY-UP. While this was `scope: vault`, RagCore",
+            "could read every secret in the vault - including every organisation's CONNECTOR",
+            "credentials for ServiceNow, Graph, OneLogin and Duo. RagCore is the component that",
+            "processes untrusted model output, retrieved content and chat text by design, so that",
+            "made an orchestrator compromise a credential breach for every customer system. It is",
+            "the specific risk 18.2 and 35.2 record as accepted, and this is the half of it that",
+            "ADR-0007 discharges.",
+            "",
+            "THE ROLE IS WITHDRAWN, NOT DUPLICATED. Connector secrets are named",
+            "`synthia-connector-*` and are outside this prefix, so no assignment here reaches them.",
+            "id-synthia-integrations below holds that scope and is the only identity that does.",
+            "",
+            "SC-DEMO-020 measures this by ATTEMPTING the resolution from RagCore and observing Key",
+            "Vault refuse - not by reading this file. A scope asserted in configuration and never",
+            "exercised is a scope that can be silently wrong."
+          ]
         },
         {
           "resource": "servicebus",

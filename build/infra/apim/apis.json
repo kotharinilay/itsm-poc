@@ -66,6 +66,37 @@
       }
     },
     {
+      "id": "integrations",
+      "name": "Integrations Service",
+      "urlSetting": "{{integrations-backend-url}}",
+      "containerApp": "build/docker/containerapps/integrations.yaml",
+      "credentials": {
+        "type": "client-certificate",
+        "certificateId": "{{gateway-client-certificate-id}}",
+        "$comment": [
+          "THE SAME CERTIFICATE AND THE SAME RECORDED EXEMPTION as the other two backends. One",
+          "certificate rather than three: each backend validates the hash of the certificate APIM",
+          "presents, and three would triple the rotation surface for no gain - no backend needs to",
+          "tell APIM apart from APIM.",
+          "",
+          "ROTATION ORDER IS THE CONTROL AND NOW SPANS THREE BACKENDS. Widen the allow-list on",
+          "every backend BEFORE repointing APIM (docs/runbooks/rotate-gateway-certificate.md). The",
+          "reverse order is a total outage on whichever backend was missed - and because health",
+          "probes are exempt from provenance, that backend stays green while serving nothing."
+        ]
+      },
+      "$comment": [
+        "THE ONLY BACKEND THAT IS NOT CLIENT-FACING. No client calls it: only RagCore does, on the",
+        "workload audience, app-only, through APIM like any other caller (ADR-0007, spec 21.6).",
+        "",
+        "It is also the only backend with an egress path to a customer system and the only holder of",
+        "the Key Vault role for connector credentials. Its ingress is internal-only for the same",
+        "reason as the others, but the consequence of getting that wrong is larger here: external",
+        "ingress would be a public route to the component holding every organisation's connector",
+        "secrets."
+      ]
+    },
+    {
       "id": "monolith",
       "name": ".NET read monolith",
       "urlSetting": "{{monolith-backend-url}}",
@@ -201,6 +232,42 @@
         "through APIM like any other caller, because a direct pod-to-pod route MUST NOT exist",
         "(contracts README rule 4)."
       ]
+    },
+    {
+      "id": "workload-v1-integrations",
+      "displayName": "Synthia Integrations API v1",
+      "audience": "workload",
+      "path": "api/workload/v1/integrations",
+      "protocols": ["https"],
+      "backend": "integrations",
+      "policy": "build/infra/apim/workload.v1.xml",
+      "openApi": {
+        "source": "build/contracts/integrations/workload.v1.openapi.json",
+        "generatedBy": "FastAPI, from the Pydantic models on each route",
+        "emittedBy": "integrations/scripts/emit_contracts.py",
+        "handWritten": false
+      },
+      "subscriptionRequired": false,
+      "$comment": [
+        "THE LONGEST MATCHING PATH WINS, and that is the whole routing rule for this pair:",
+        "/api/workload/v1/integrations/... reaches the Integrations Service and everything else",
+        "under /api/workload/v1 reaches RagCore. APIM resolves the most specific prefix first, so",
+        "the two APIs coexist under one prefix with no ordering flag to get wrong. This is the same",
+        "idiom already proven by /api/customer/v1/views.",
+        "",
+        "SAME POLICY FILE AS THE API ABOVE, deliberately. Identity is derived per AUDIENCE, not per",
+        "deployable: a caller is the workload principal whichever backend answers it. Two policies",
+        "here would be two places for the derivation to drift.",
+        "",
+        "TWO DEPLOYABLES NOW EMIT A WORKLOAD DOCUMENT, and each emits its own. The rule is one",
+        "document per audience PER DEPLOYABLE (contracts README rule 5), so the compatibility gate",
+        "diffs per deployable rather than per audience. A merged document would let a",
+        "customer-facing client discover this surface.",
+        "",
+        "REQUIRES A DISTINCT APPLICATION ROLE (workload.v1.xml). The generic workload role does not",
+        "grant access here: a component holding it must not be able to drive connectors merely by",
+        "being a workload caller."
+      ]
     }
   ],
 
@@ -270,6 +337,8 @@
     ],
     "ragcore-backend-url": { "source": "deployment", "why": "The internal ingress address of the RagCore container app." },
     "monolith-backend-url": { "source": "deployment", "why": "The internal ingress address of the monolith container app." },
+    "integrations-backend-url": { "source": "deployment", "why": "The internal ingress address of the Integrations Service container app." },
+    "integrations-app-role": { "source": "deployment", "why": "The application role a caller must hold to reach the Integrations API. DISTINCT from the generic workload role, so holding that role alone does not grant connector access." },
     "gateway-client-certificate-id": { "source": "deployment", "why": "The APIM certificate ENTITY that points at the Key Vault certificate. Not the certificate, and not its thumbprint." },
     "customer-calls-per-minute": { "source": "deployment", "why": "Per-organisation request rate, customer audience." },
     "customer-calls-per-day": { "source": "deployment", "why": "Per-organisation daily request quota, customer audience." },

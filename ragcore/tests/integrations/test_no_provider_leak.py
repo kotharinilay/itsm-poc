@@ -179,7 +179,11 @@ class TestTheAdaptersAreWhereTheProviderDetailLives:
         [
             "integrations/model/gateway.py",
             "integrations/model/local.py",
-            "integrations/servicenow/adapter.py",
+            # `integrations/servicenow/adapter.py` was HERE and has RELOCATED to the Integrations
+            # Service (ADR-0007, plan Stage 16). Its absence is now the property that matters:
+            # `build/scripts/check-boundaries.sh` fails the build if RagCore imports it back, and
+            # the adapter's own tests moved with it. The remaining connectors relocate in the
+            # following tasks and are removed from this list as each one does.
             "integrations/graph/adapter.py",
             "integrations/mcp/client.py",
             "integrations/onelogin/adapter.py",

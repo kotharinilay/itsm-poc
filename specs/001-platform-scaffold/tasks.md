@@ -734,7 +734,7 @@ traceability. Their original tasks stay `[X]`; these tasks cover the relocation 
 - [X] T280 [P] Create the `execution_record` table with `unique(idempotency_key)` — **that uniqueness is idempotency boundary 2** — plus `job_id`, `tenant_id`, `connector_id`, `catalogue_id`, `catalogue_version`, `external_reference` null, `outcome` enum (`succeeded`, `failed`, `refused_unentitled`, `refused_unregistered`, `refused_window`, `unreachable`), `normalized_result` jsonb null, `correlation_id` not null. Append-only: a second attempt is a second row — Boundary: persistence | Validates: Data-model §Execution record, Spec §FR-INTEG-022
 - [X] T281 Create the Integrations database principal in `ragcore/migrations/versions/` — write on `integration`, read on published views, **no grant on any `platform` base table** and no grant on any non-result column of `integration_job` — Boundary: security | Validates: Spec §FR-INTEG-018, ADR-0007
 - [ ] T282 Publish a versioned view exposing the operation instruction for the Integrations Service to read, added to `ragcore/src/ragcore/persistence/views.py` and recorded in `contracts/read-views.md` as a **third reader** of a contract written for the monolith alone — Boundary: read contract | Validates: ADR-0003, ADR-0007
-- [ ] T283 Write a grant test in `integrations/tests/security/test_job_grants.py` asserting an attempted write to `catalogue_id`, `catalogue_version`, `parameters` or `tenant_id` on `integration_job` is refused **by PostgreSQL, not by application code** — an executing service able to rewrite its own instruction could run an operation governance never authorized — Boundary: security | Validates: Spec §FR-INTEG-020, Constitution P-VIII
+- [X] T283 Write a grant test in `integrations/tests/security/test_job_grants.py` asserting an attempted write to `catalogue_id`, `catalogue_version`, `parameters` or `tenant_id` on `integration_job` is refused **by PostgreSQL, not by application code** — an executing service able to rewrite its own instruction could run an operation governance never authorized — Boundary: security | Validates: Spec §FR-INTEG-020, Constitution P-VIII
 - [X] T284 Relocate per-organisation credential resolution to `integrations/src/integrations/credentials/` **with its port declaration** — ports belong to the consuming module, and the consumer is now this service. One path from an entitlement row to a usable secret; a missing reference is a refusal, never a fallback — Boundary: credentials | Validates: Spec §FR-INTEG-017, Constitution P-V
 - [X] T285 [P] Implement catalogue and entitlement reads in `integrations/src/integrations/catalogue/` over the published views — resolving capabilities **per organisation**, with no global capability set — Boundary: Tool Execution | Validates: Spec §FR-INTEG-002, §FR-INTEG-004
 - [X] T286 [P] Implement the connector registry in `integrations/src/integrations/catalogue/registry.py` — resolving a catalogue identifier and version to its connector, endpoint, signing profile and idempotency policy. **The destination comes from here and never from parameters, model output or retrieved content** — Boundary: Tool Execution | Validates: Spec §FR-INTEG-003, §FR-EXT-018
@@ -854,6 +854,69 @@ reference connector. Configuration review does not substitute for traversal.
 - [X] T323 [US6] Write the APIM routing and direct-route proofs in `integrations/tests/security/test_apim_routing.py` — asserted from the committed registry: the gateway fronts this service on the workload audience, its path is strictly longer than RagCore's so the most specific prefix wins, the role check is a **prefix match rather than a substring one**, and **exactly one API points at this backend and it is not client-facing**. Complements the runtime refusal in `test_boundary.py`: that half would pass on a deployment where APIM never routed here, and this half would pass on a service that accepted anything — Boundary: gateway | Validates: Spec §FR-INTEG-011, §FR-INTEG-012, §13.4
 - [ ] T324 [US6] Wire the worker **processes** and their container definitions — Service Bus receive loops with lock renewal, settlement and graceful drain for `integrations/workers/command_consumer.py` and `ragcore/workers/integration_result_worker.py`, plus the five pre-existing RagCore workers (`outbox_dispatch`, `resume_worker`, `expiry_sweep`, `retention_sweep`, `ingestion_run`), each with a container app that actually runs it. **All seven `main()` functions currently raise `NotImplementedError` by design** and no manifest runs any of them, so nothing consumes any queue in a deployment. This is a **pre-existing platform-wide gap**, not an Integrations one — Boundary: messaging | Validates: Spec §FR-INTEG-013, §FR-EXEC-006, Constitution §Idempotency and messaging
 - [X] T325 [US6] Write the **third** Azure identity enforcer in `integrations/tests/security/test_azure_identity.py` — reads `build/policy/azure-identity.json` rather than restating it, scans `integrations/src` and `integrations/workers` for application-owned credential types, connection-string tokens, DSN passwords and settings fields naming a secret value, and asserts the four resources this service must **never** reach leave no trace in its source. Extend RagCore's parity class from two enforcers to three — Boundary: security | Validates: Spec §FR-INTEG-017, §FR-EXT-016, Constitution P-VIII
+- [ ] T326 [US6] Add the migration granting the Integrations principal `INSERT` on `platform.audit_event`, **and only INSERT** — it appends the executing-principal record and must not read, amend or delete another actor's entry. **T307 is blocked on this and no task named it** until the analysis found it (X8): the principal holds no grant on the audit table, so `FR-INTEG-024`'s "one audit store, with the Integrations principal as the executing principal" has no path to satisfy. `test_integration_grants.py` currently asserts the refusal, so closing this must change that test deliberately — Boundary: Audit | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+
+> **Remediation — X5, the unexercised grants (2026-09-18).** Delivered **T283**, the item that had
+> been top of this list since the asynchronous seam landed. **T326** is new and records the
+> prerequisite X8 exposed.
+>
+> **No test anywhere referenced `synthia_integrations`.** The grants in migrations 0021–0023 were
+> written, applied and described in three documents as the control behind `FR-INTEG-020` — but
+> nothing had ever attempted a forbidden write and observed it refused. The claim rested on reading
+> DDL. `ragcore/tests/security/test_integration_grants.py` now makes it, in **30 tests against a
+> real PostgreSQL**.
+>
+> **`SET ROLE`, not a second connection**, because migration 0021 creates the role `NOLOGIN` — it
+> authenticates as a managed identity, so there is no password to connect with and nothing in the
+> repository could hold one. `test_set_role_actually_drops_privilege` proves the mechanism before
+> anything relies on it: a `SET ROLE` that silently failed would run every refusal assertion as the
+> owner, and an absence assertion would then pass while nothing was restricted.
+>
+> **Two real defects in my own test, both found by running it rather than reading it:**
+>
+> | Symptom | Cause |
+> |---|---|
+> | All 24 refusal tests failed | Asserted on `type(error.orig).__name__ == "InsufficientPrivilege"`. SQLAlchemy's asyncpg dialect reports a privilege refusal, a missing table and a wrong column as the **same** `ProgrammingError`. Now matches SQLSTATE `42501`. |
+> | The audit test failed on `42703` | My `INSERT` named `audit_event_id`; the column is `audit_id`. **The SQLSTATE check is what refused to let it pass** — on the class-name check it would have "passed" because the column did not exist, reporting the grant as enforced while checking nothing. |
+>
+> The second is the more important of the two: it is the exact failure mode this task existed to
+> remove, reproduced inside the fix for it.
+>
+> **Proven by widening the grant**, which is the only proof that counts for a refusal:
+>
+> | Planted in the migration | Result |
+> |---|---|
+> | `GRANT UPDATE` widened from four columns to the whole row | **5 failed** |
+> | `INSERT, DELETE` added on `integration_job` | **2 failed** |
+> | `GRANT SELECT ON ALL TABLES IN SCHEMA platform` | **7 failed** |
+> | `CREATE` added on the `integration` schema | **1 failed** |
+>
+> Clean restore to 30 passing. The mixed-column case matters most: nobody writes
+> `SET catalogue_id = ...` alone — the realistic shape is a legitimate result write with one extra
+> column smuggled alongside, and column privileges reject the statement **whole**, so the permitted
+> part does not land either.
+>
+> **T283 named `integrations/tests/security/test_job_grants.py`; this is in RagCore's suite
+> instead.** Recording the deviation rather than making it quietly. These grants are DDL created by
+> RagCore's migrations, and RagCore owns every migration (ADR-0003, one Alembic chain). Applying
+> them from the Integrations suite means that suite reaching into `ragcore/` for `alembic.ini` and
+> the revision files — the cross-tree test coupling rejected for T325 one commit earlier. Without
+> it the test would **skip**, and a skipping grant test is precisely the unexercised control T283
+> exists to remove. If the path matters more than the coupling, the file moves and the Integrations
+> suite gains an Alembic dependency; that is a deliberate trade, not an oversight.
+>
+> **The audit gap is now asserted rather than merely noted.** A test records that the principal
+> **cannot** write `platform.audit_event`, written explicitly as a *known gap* and not as a
+> satisfied requirement — so closing **T326** has to change that test on purpose.
+>
+> **Gates.** RagCore **1289 passed** (was 1259; +30). Ruff, format and `mypy --strict` clean.
+>
+> **Still open from the analysis**: **X7** (`build/policy/edge-trust.json` and
+> `build/infra/monitoring/gateway-certificate-expiry.json` still instruct "BOTH deployables" for
+> certificate rotation — three backends share that certificate, and a backend missed stays green
+> while refusing every request, because health probes are provenance-exempt), **X8** (now T326),
+> **X9**, **X11**, **X12**.
+
 
 > **Remediation — X6, the unscanned credential surface (2026-09-18).** Delivered **T325**.
 >

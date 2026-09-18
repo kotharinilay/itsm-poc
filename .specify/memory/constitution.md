@@ -42,6 +42,30 @@ Amended in this pass, four statements that had become false and one that had bec
   5. Compliance review — the forbidden-dependency list named only "between the two deployables".
      Now names the graph's actual prohibitions, including the reverse call from Integrations to
      RagCore and any RagCore path to an external system or connector credential.
+  6. Principle III — "RagCore owns ... the verification workflow" would have put the verification
+     CALL back in the orchestrator, which is external access Principle V removes from it. The
+     workflow is now explicitly split: the call belongs to the Integrations Service, the CONCLUSION
+     to RagCore. Tool selection is also named explicitly as RagCore's, so the Integrations Service's
+     non-responsibility for it has a positive counterpart somewhere.
+  7. Engineering Standards, Health — "/health/ready covers database and critical dependency
+     readiness" was ambiguous about whether an external customer system counts, and a reasonable
+     implementer could have included one. Readiness is now scoped to PLATFORM dependencies, with an
+     explicit prohibition: an external system's outage is an operational condition, never an unready
+     replica. Without this, one customer's ServiceNow outage could scale the platform to zero.
+
+  8. Engineering Standards, Idempotency and messaging — the section said what at-least-once delivery
+     obliges a consumer to do, and nothing about what happens to a message that CANNOT be processed.
+     Dead-lettering was governed only by the platform specification. Now stated here as an
+     engineering rule: dead-lettering is an operational handoff and never a retry; an
+     out-of-contract field is refused rather than sanitised; and a dead-lettered message carrying
+     authorized work is a GOVERNANCE failure that must surface to humans, because silently expired
+     authority is authority nobody knows was spent.
+
+Amendments 6, 7 and 8 were found by auditing the amended text against the Integrations Service
+requirement set (spec FR-INTEG-001 through FR-INTEG-028) rather than by the reviewer pass that found
+1 through 5. Amendments 6 and 7 clarify where a responsibility already sat under ADR-0007 and add no
+rule. Amendment 8 does add a rule, which is squarely MINOR under the versioning policy ("materially
+expanded guidance"); it relaxes nothing and contradicts nothing previously stated.
 
 Migration path for work in flight: none required at the code level by THIS document. Work completed
 under 3.1.0 remains valid; the integrations package relocates under ADR-0007 and plan Stage 16,
@@ -191,8 +215,16 @@ decidable, testable, and cannot accidentally grant a capability nobody assigned.
 **The model proposes. Deterministic governance authorizes.**
 
 RagCore owns orchestration, the state graph, retrieval coordination, planning, governance evaluation,
-approval suspension and resume, model interaction, execution proposal and the verification workflow.
-**RagCore is not the final authorization authority.**
+approval suspension and resume, model interaction, execution proposal, tool selection, and the
+**conclusion** of the verification workflow. **RagCore is not the final authorization authority.**
+
+**The verification workflow is split, and the split is the control.** The verification *call* is a
+call to an external system and therefore belongs to the Integrations Service (Principle V), which
+reports what it observed as `server_confirmed`, `client_attested` or `contradicted`. Whether the
+platform may tell a user the issue is resolved is RagCore's conclusion and RagCore's alone. A service
+that both acted and judged its own success would be reporting an attestation as a confirmation, which
+is exactly what `client_attested` exists to prevent — and putting the verification call back in
+RagCore would give the orchestrator the external access Principle V removes from it.
 
 Execution treatment is exactly one of `AUTO`, `END_USER_APPROVAL`, `STAFF_APPROVAL`, `NOT_ALLOWED`,
 assigned by deterministic policy from the canonical operation catalogue. The model MUST NEVER choose,
@@ -516,7 +548,13 @@ authorization.
 echo it in responses; bind it to the logging scope and the OpenTelemetry context.
 
 **Health.** `/health/live` is process-only with no dependency checks. `/health/ready` covers database
-and critical dependency readiness. `/health/startup` where useful.
+and critical **platform** dependency readiness — the durable store, the message transport, the secret
+store. `/health/startup` where useful.
+
+**Readiness MUST NOT depend on an external customer system.** A ServiceNow, Graph or MCP-server
+outage is an operational condition to be reported and degraded around, never an unready replica: a
+readiness probe that failed on it would remove capacity at precisely the moment the fallback path
+needs it, and would turn one customer's outage into a platform-wide one.
 
 **Resilience.** `IHttpClientFactory` with typed clients and `DelegatingHandler` chains, using standard
 `Http.Resilience`/Polly v8 capabilities applied consistently. `HttpClient` MUST NOT be instantiated
@@ -541,6 +579,15 @@ atomic claim on the work item stays with the authority record in RagCore; the de
 the external system belongs to the Integrations Service. Neither substitutes for the other, and a test
 that cannot say which boundary absorbed a duplicate is not evidence that either works — it passes
 whenever one of them does.
+
+**Dead-lettering is an operational handoff, never a retry.** A message that cannot be processed within
+its validity window dead-letters rather than executing; a dead-lettered message MUST NOT be replayed
+automatically, and recovery is fresh authorization rather than redelivery. **A message carrying a
+field its contract does not permit is refused and dead-lettered, not sanitised** — stripping the field
+and continuing returns success to whoever sent it and leaves the attempt indistinguishable from an
+ordinary message. Where a dead-lettered message carried work a human had authorized, this is a
+**governance failure and not merely an operational one**: it surfaces to humans as approved-but-not-
+executed, with an alert, because silently expired authority is authority nobody knows was spent.
 
 **Concurrency.** Distributed locking MUST NOT be an architectural primitive. Use optimistic concurrency
 and atomic database claims; asynchronous jobs for singleton or background processing; state transitions

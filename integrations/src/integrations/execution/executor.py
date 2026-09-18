@@ -47,6 +47,7 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
 
     from integrations.application.ports import ConnectorInvocationPort
     from integrations.observability.telemetry import ConnectorMetrics
+    from integrations.persistence.audit import AuditWriter
     from integrations.persistence.engine import Database
     from integrations.persistence.executions import ExecutionRepository
     from integrations.persistence.jobs import JobInstruction, JobRepository
@@ -94,18 +95,23 @@ class ExecutionLeg:
         jobs: JobRepository,
         policy: AccessPolicy,
         executions: ExecutionRepository,
+        audit: AuditWriter,
         invoker: ConnectorInvocationPort,
         metrics: ConnectorMetrics,
     ) -> None:
         """Bind the leg.
 
         Args:
-            database: The transaction the three writes share. Injected rather than reached through
-                a repository, so the unit of work is visible at the composition root instead of
-                being an implementation detail two collaborators happen to agree on.
+            database: The transaction the four writes share. Injected rather than reached
+                through a repository, so the unit of work is visible at the composition root
+                instead of being an implementation detail two collaborators happen to agree on.
             jobs: Where the instruction, organisation and authority come from.
             policy: The execution-time re-check.
             executions: Durable records and the result outbox.
+            audit: The governance record, appended to the **one** audit store. A separate
+                collaborator from `executions` because the two answer different questions and are
+                retained on different schedules — merging them would force one retention policy
+                and one access grant onto both.
             invoker: The connector invocation port — the MCP client or a native adapter. A **port**,
                 not a union, because this module must not know the difference: a branch on connector
                 kind here would be a second dispatch point competing with the registry.
@@ -115,6 +121,7 @@ class ExecutionLeg:
         self._jobs = jobs
         self._policy = policy
         self._executions = executions
+        self._audit = audit
         self._invoker = invoker
         self._metrics = metrics
 
@@ -253,11 +260,17 @@ class ExecutionLeg:
         normalized_result: object = None,
         key: str | None = None,
     ) -> ExecutionReport:
-        """Write the attempt, the result columns and the outbox row in one transaction.
+        """Write the attempt, the audit record, the result columns and the outbox row in **one**
+        transaction.
 
-        All three together or none: a result column set without an execution record would claim an
-        attempt with no evidence, and an execution record without an outbox row would leave an
-        external effect nobody ever hears about.
+        All four together or none. Each pairing matters for its own reason:
+
+        * a result column set without an execution record claims an attempt with no evidence;
+        * an execution record without an outbox row leaves an external effect nobody hears about;
+        * an **audit record that committed separately** could survive a rolled-back execution —
+          asserting in the governance store that an effect happened when it did not — or be lost
+          while the effect persisted. Neither is recoverable after the fact, which is why the audit
+          write joins this transaction rather than following it.
         """
         derived = key or derive_key(
             instruction.tenant_id, instruction.work_item_id, instruction.operation_id
@@ -291,6 +304,21 @@ class ExecutionLeg:
                 # and no second announcement.
                 await session.rollback()
                 return ExecutionReport(executed=False, outcome=None)
+
+            # THE GOVERNANCE RECORD, in the one audit store (`FR-INTEG-024`). Distinct from the
+            # execution record written above: that one says what was attempted against which
+            # connector, this one says who did it, by what means, against which organisation and
+            # with what result. Different questions, different retention, different readers.
+            #
+            # `requested_by_oid` and `approved_by_oid` are written NULL by this writer: they live on
+            # `work_item` and `approval`, which this principal cannot read and must not be granted
+            # (T327 carries the residual).
+            await self._audit.record(
+                session,
+                record,
+                work_item_id=instruction.work_item_id,
+                occurred_at=attempted_at,
+            )
 
             await self._jobs.record_result(
                 session,

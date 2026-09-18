@@ -854,7 +854,73 @@ reference connector. Configuration review does not substitute for traversal.
 - [X] T323 [US6] Write the APIM routing and direct-route proofs in `integrations/tests/security/test_apim_routing.py` — asserted from the committed registry: the gateway fronts this service on the workload audience, its path is strictly longer than RagCore's so the most specific prefix wins, the role check is a **prefix match rather than a substring one**, and **exactly one API points at this backend and it is not client-facing**. Complements the runtime refusal in `test_boundary.py`: that half would pass on a deployment where APIM never routed here, and this half would pass on a service that accepted anything — Boundary: gateway | Validates: Spec §FR-INTEG-011, §FR-INTEG-012, §13.4
 - [ ] T324 [US6] Wire the worker **processes** and their container definitions — Service Bus receive loops with lock renewal, settlement and graceful drain for `integrations/workers/command_consumer.py` and `ragcore/workers/integration_result_worker.py`, plus the five pre-existing RagCore workers (`outbox_dispatch`, `resume_worker`, `expiry_sweep`, `retention_sweep`, `ingestion_run`), each with a container app that actually runs it. **All seven `main()` functions currently raise `NotImplementedError` by design** and no manifest runs any of them, so nothing consumes any queue in a deployment. This is a **pre-existing platform-wide gap**, not an Integrations one — Boundary: messaging | Validates: Spec §FR-INTEG-013, §FR-EXEC-006, Constitution §Idempotency and messaging
 - [X] T325 [US6] Write the **third** Azure identity enforcer in `integrations/tests/security/test_azure_identity.py` — reads `build/policy/azure-identity.json` rather than restating it, scans `integrations/src` and `integrations/workers` for application-owned credential types, connection-string tokens, DSN passwords and settings fields naming a secret value, and asserts the four resources this service must **never** reach leave no trace in its source. Extend RagCore's parity class from two enforcers to three — Boundary: security | Validates: Spec §FR-INTEG-017, §FR-EXT-016, Constitution P-VIII
-- [ ] T326 [US6] Add the migration granting the Integrations principal `INSERT` on `platform.audit_event`, **and only INSERT** — it appends the executing-principal record and must not read, amend or delete another actor's entry. **T307 is blocked on this and no task named it** until the analysis found it (X8): the principal holds no grant on the audit table, so `FR-INTEG-024`'s "one audit store, with the Integrations principal as the executing principal" has no path to satisfy. `test_integration_grants.py` currently asserts the refusal, so closing this must change that test deliberately — Boundary: Audit | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+- [X] T326 [US6] Add the migration granting the Integrations principal `INSERT` on `platform.audit_event`, **and only INSERT** — it appends the executing-principal record and must not read, amend or delete another actor's entry. **T307 is blocked on this and no task named it** until the analysis found it (X8): the principal holds no grant on the audit table, so `FR-INTEG-024`'s "one audit store, with the Integrations principal as the executing principal" has no path to satisfy. `test_integration_grants.py` currently asserts the refusal, so closing this must change that test deliberately — Boundary: Audit | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+- [ ] T327 [US6] Complete the **actor chain** on the Integrations audit record — `requested_by_oid` and `approved_by_oid` are written `NULL` by `integrations/persistence/audit.py` because they live on `work_item` and `approval`, which this principal cannot read and **must not be granted**. `ActorChain` already declares both optional and treats `None` as an audit answer, but a `None` here means *unavailable to this writer* rather than *nobody approved it*, and those are different facts. Resolve by publishing a narrow per-job actor-chain view, or by having RagCore's result consumer enrich the record on consumption — **not** by granting base-table reads — Boundary: Audit | Validates: Spec §FR-INTEG-024, Constitution P-VIII
+
+> **Remediation — X8, audit had no path to satisfy (2026-09-18).** Delivered **T326**; **T327**
+> carries the residual, stated rather than left to be discovered.
+>
+> **The requirement was unsatisfiable, not merely unimplemented.** `FR-INTEG-024` asks for one audit
+> store with the Integrations principal recorded as the executing principal. The principal held no
+> grant on `platform.audit_event` at all, so T307 was blocked on a migration no task named.
+> Revision **0024** grants `INSERT` — and only `INSERT`.
+>
+> **Narrower than RagCore's own grant on this table**, deliberately. Revision 0019 gives RagCore
+> `SELECT, INSERT`; this gives `INSERT` alone. Reading audit would expose records belonging to other
+> actors and other organisations — the table carries no tenant predicate of its own, so the only
+> thing restricting such a query would be review. This is also the deployable with an egress path to
+> every customer system, so read access here has the worst blast radius on the platform. No `UPDATE`
+> and no `DELETE`: append-only has been this table's rule since revision 0013, and granting `INSERT`
+> did not weaken it.
+>
+> **The grant is exercised, not standing.** `integrations/persistence/audit.py` writes the
+> governance record, and it joins the executor's **one** transaction alongside the execution record,
+> the result columns and the outbox row. An audit record that committed separately could survive a
+> rolled-back execution — asserting in the governance store that an effect happened when it did not
+> — or be lost while the effect persisted. Neither is recoverable after the fact. Granting a
+> privilege with no writer would have repeated the anti-pattern `managed-identities.json` already
+> names: a standing permission nobody can exercise or audit.
+>
+> **Distinct from the execution record, and both are needed.** `integration.execution_record` says
+> what was attempted against which connector — an operational record in this service's schema. The
+> audit row says who did it, by what means, against which organisation, with what result — retained
+> on the audit schedule, read through `vw_audit_event_v1`. Collapsing them would force one retention
+> policy and one access grant onto two different questions.
+>
+> **The chosen trade, recorded plainly.** Three options were weighed: RagCore writing the row (no
+> grant needed, complete chain), this service writing a partial row, or publishing an actor-chain
+> view. **The partial row was chosen.** So `requested_by_oid` and `approved_by_oid` are `NULL`, and
+> the `FR-INTEG-024` clause about *who requested* and *who approved* is **not** satisfied by this
+> writer — only the *executing principal* clause is. They are **literal NULLs in the statement, not
+> bound parameters**, so no caller can supply them: a parameter that only ever receives `None` is
+> one somebody eventually fills from a source this service cannot verify. T327 resolves it, and
+> explicitly **not** by granting base-table reads.
+>
+> **A dead constant removed on the way through.** `_RETENTION_YEARS = 7` was declared and never
+> read, while the real horizon sat inline in the SQL. That is the shape where the next author edits
+> the constant, nothing happens, and the discrepancy surfaces years later as audit purged early.
+> `now() + interval` also derives the horizon from the **database's** clock rather than a process
+> clock that drifts between replicas.
+>
+> **Gates.** RagCore **1292 passed** (was 1289), Integrations **121 passed** (was 109). Ruff, format
+> and `mypy --strict` clean on both. Migration 0024 applies and reverses under
+> `test_up_down_consistency`; it creates no object, so `test_model_definitions_match_ddl` is
+> unaffected.
+>
+> **Seven mutations, seven caught**, clean restore: the grant removed entirely (the X8 state),
+> `SELECT` added, `UPDATE` added, the audit row redirected to this service's own schema,
+> `executed_by` reporting another principal, the actor chain made caller-suppliable, and a refusal
+> recording a different action from a success.
+>
+> **Noted while wiring, not fixed here**: `ExecutionLeg` has **no construction site anywhere** — not
+> in the composition root, not in a test. Same family as X1, and it is covered by **T324**, which
+> owns the worker process wiring that would build it.
+>
+> **Still open from the analysis**: **X7** (`build/policy/edge-trust.json` and
+> `build/infra/monitoring/gateway-certificate-expiry.json` still instruct "BOTH deployables" for
+> certificate rotation, where three backends share the certificate and a missed one stays green
+> while refusing every request), **X9**, **X11**, **X12**, plus T307 and T327.
+
 
 > **Remediation — X5, the unexercised grants (2026-09-18).** Delivered **T283**, the item that had
 > been top of this list since the asynchronous seam landed. **T326** is new and records the

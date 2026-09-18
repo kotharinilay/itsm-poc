@@ -30,6 +30,11 @@ would for a direct connection. :func:`test_set_role_actually_drops_privilege` pr
 before anything relies on it — a `SET ROLE` that silently failed would make every test below pass
 while checking nothing.
 
+**The audit assertion here was inverted by T326.** It used to record that the principal could
+not write `platform.audit_event` — a known gap, not a satisfied requirement. Migration 0024 grants
+`INSERT` and only `INSERT`, so the tests now assert the append is permitted while the read, the
+amendment and the deletion are all still refused.
+
 **Why this lives in RagCore's suite rather than the Integrations Service's.** T283 named
 `integrations/tests/security/test_job_grants.py`. These grants are **DDL**, created by RagCore's
 migrations, and RagCore owns every migration (ADR-0003, one Alembic chain). Applying them from the
@@ -440,27 +445,66 @@ async def test_no_base_table_in_the_platform_schema_is_readable(
     await _insufficient_privilege(engine, f"SELECT 1 FROM platform.{table} LIMIT 1")  # noqa: S608
 
 
-async def test_the_integrations_principal_cannot_write_to_the_audit_store(
+async def test_the_integrations_principal_may_append_to_the_one_audit_store(
     engine: AsyncEngine,
 ) -> None:
-    """Recorded as a **known gap**, not as a satisfied requirement.
+    """**Audit does not fork** (`FR-INTEG-024`, migration 0024, T326).
 
-    `FR-INTEG-024` requires audit to remain one store with the Integrations principal recorded as
-    the executing principal. It holds no grant on `platform.audit_event`, so there is no path by
-    which it can write one — which means T307 is not merely unimplemented, it is **blocked on a
-    grant that no task currently names** (analysis finding X8).
+    It appends to `platform.audit_event` — the platform's single audit store, the same table RagCore
+    writes — rather than to its own schema. A second audit store would mean two answers to "what
+    happened", and the reconciliation between them would be a report nobody runs.
 
-    This test asserts the *current* state so that closing X8 has to change it deliberately. It is
-    deliberately not written as though the refusal were the desired end state.
+    This assertion was **inverted** by T326. It previously recorded the refusal as a known gap: the
+    principal held no grant on this table at all, so `FR-INTEG-024` had no path to satisfy and T307
+    was blocked on a migration no task named (analysis finding X8).
     """
-    await _insufficient_privilege(
-        engine,
-        "INSERT INTO platform.audit_event ("
-        "audit_id, tenant_id, occurred_at, action, executed_by, execution_method, outcome, "
-        "correlation_id, retain_until) VALUES ("
-        "gen_random_uuid(), gen_random_uuid(), now(), 'integration.executed', "
-        "'synthia_integrations', 'workload', 'succeeded', 'c', now() + interval '7 years')",
-    )
+    async with engine.begin() as connection:
+        await connection.execute(text(f"SET LOCAL ROLE {INTEGRATIONS_ROLE}"))
+        result = await connection.execute(
+            text("""
+                INSERT INTO platform.audit_event (
+                    audit_id, tenant_id, occurred_at, action, executed_by, execution_method,
+                    outcome, correlation_id, retain_until
+                ) VALUES (
+                    gen_random_uuid(), gen_random_uuid(), now(), 'integration.executed',
+                    'synthia_integrations', 'workload', 'succeeded', 'c',
+                    now() + interval '7 years'
+                )
+            """)
+        )
+
+    assert result.rowcount == 1
+
+
+async def test_the_integrations_principal_cannot_read_the_audit_store(engine: AsyncEngine) -> None:
+    """**INSERT without SELECT, which is narrower than RagCore's own grant on this table.**
+
+    Revision 0019 gives RagCore `SELECT, INSERT`; revision 0024 gives this principal `INSERT`
+    alone. Reading audit would expose records belonging to other actors and other organisations —
+    the table carries no tenant predicate of its own, so the only thing restricting such a query
+    would be review. This service has no question that requires reading audit, and it is the
+    deployable with an egress path to every customer system, so read access here has the worst
+    blast radius on the platform.
+    """
+    await _insufficient_privilege(engine, "SELECT 1 FROM platform.audit_event LIMIT 1")
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE platform.audit_event SET outcome = 'rewritten'",
+        "DELETE FROM platform.audit_event",
+    ],
+    ids=["update", "delete"],
+)
+async def test_the_audit_store_stays_append_only(engine: AsyncEngine, statement: str) -> None:
+    """The two statements that could rewrite history, and **no principal holds either**.
+
+    Append-only has been this table's rule since revision 0013. Granting `INSERT` in 0024 did not
+    weaken it: a service that could amend its own audit record could execute an effect and then
+    describe it as something else, which is worse than not recording it at all.
+    """
+    await _insufficient_privilege(engine, statement)
 
 
 # ---------------------------------------------------------------------------

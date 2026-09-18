@@ -13,6 +13,9 @@ name: edge
 # ragcore/tests/security/test_edge_trust_policy.py. Two hand-maintained lists drift; one file and
 # three readers of it cannot.
 #
+# Gateway-to-backend certificate provenance is DEFERRED and is not checked here or anywhere else
+# (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+#
 # REQUIRED CHECK.
 on:
   push:
@@ -39,8 +42,8 @@ jobs:
       - name: Verify the guard fails correctly
         run: bash build/scripts/verify-edge-guard.sh
 
-  provenance:
-    name: backends reject spoofed identity
+  edge-trust:
+    name: edge trust policy holds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,19 +62,15 @@ jobs:
         working-directory: ragcore
         run: uv sync --all-groups --frozen
 
-      # The behavioural half, on both stacks: a complete and well-formed forged identity context,
-      # sent from the attacker's position - inside the network, addressing the container directly -
-      # is refused on provenance before any of it is parsed.
-      - name: .NET — gateway provenance
-        working-directory: dotnet
-        run: dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj --filter "FullyQualifiedName~GatewayProvenance"
-
-      - name: RagCore — gateway provenance
-        working-directory: ragcore
-        run: uv run pytest tests/security/test_gateway_provenance.py -v
-
-      # The structural half: the shared policy, the APIM policies, the Front Door definition, the
-      # ingress manifests and both enforcers all agree.
+      # THE BEHAVIOURAL HALF IS GONE, and its absence is the point rather than an oversight.
+      # It asserted that a forged identity context sent from inside the network was refused on
+      # gateway provenance. That mechanism is deferred (ADR 0008) and nothing replaced it, so the
+      # assertion is no longer true and was removed rather than weakened into something that
+      # passes. See docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md.
+      #
+      # What remains is the structural half: the shared policy, the APIM policies, the Front Door
+      # definition and the ingress manifests all agree, and APIM still deletes every inbound copy
+      # of the identity contract.
       - name: .NET — edge trust policy
         working-directory: dotnet
         run: dotnet test tests/Synthia.ArchitectureTests/Synthia.ArchitectureTests.csproj --filter "FullyQualifiedName~EdgeTrustPolicy"

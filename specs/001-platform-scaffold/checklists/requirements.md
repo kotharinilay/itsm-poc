@@ -153,6 +153,12 @@
     self-supplied gateway header contract** — the shape a real bypass takes, and the one a naive
     negative test misses.
 
+    > **Amended 2026-09-18.** SC-DEMO-003b is **DEFERRED** — see
+    > [ADR-0008](../../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+    > The self-supplied-contract case no longer fails, because the control that refused it is
+    > deferred and unreplaced. The rest of this item stands: FR-DEMO-019 and SC-DEMO-001 are
+    > unchanged, and a direct request carrying no contract must still fail.
+
 16. *The cost of that decision is recorded as a dependency rather than left to be discovered.* A
     provisioned platform environment including the edge is now the longest-lead dependency in the
     scaffold: the thirteen flows can be written and can pass against the deployables, but none can be

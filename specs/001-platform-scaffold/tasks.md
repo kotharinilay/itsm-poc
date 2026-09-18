@@ -36,6 +36,10 @@ is reasoning, not integration.
 ## Format: `[ID] [P?] [Story] Description — Boundary: … | Validates: …`
 
 - **[P]**: parallelizable — different files, no incomplete dependency
+- **[D]**: **retired — deferred by an ADR.** Not outstanding work, not a gap, and **not** completed
+  work either. The task is preserved with its original text so the history stays readable; the
+  decision that retired it is named inline. A `[D]` task must not be picked up, re-estimated or
+  re-opened without superseding that decision first
 - **[Story]**: US1–US6 from spec.md, on golden-path phases only. **US6** is *The platform proves its
   own plumbing before it carries any product* — the scaffold's own acceptance story
 - **Boundary**: the architectural boundary the task sits on or guards
@@ -351,36 +355,47 @@ Proven by `ragcore/tests/security/test_edge_topology.py` and
 
 **These tasks define committed configuration; they do not provision it.** Acceptance still requires a
 deployed environment (`FR-DEMO-019`, `SC-DEMO-001`), and T256 remains the gate. Provisioning is tracked
-separately under *Azure provisioning* below (T227a, T227b) together with the certificate issuance it
-depends on (T233e, T233f) — the longest-lead items in the scaffold, and the ones every sample flow
-passes without right up until it has to cross a boundary that does not exist.
+separately under *Azure provisioning* below (T227a, T227b) — the longest-lead items in the scaffold,
+and the ones every sample flow passes without right up until it has to cross a boundary that does not
+exist. *Amended 2026-09-18:* this no longer depends on certificate issuance (T233e, T233f); both are
+retired `[D]` by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md), and no certificate is issued or required.
 
 - [X] T226 Define the **Front Door + WAF** public edge in `build/infra/frontdoor/` — the single public entry point for all three audiences, WAF in prevention mode with a documented managed rule set, origin reaching APIM over Private Link so neither APIM nor the containers are **publicly reachable** — Boundary: edge | Validates: Spec §FR-DEMO-019, Plan §Platform Environment
 - [X] T227 Define **APIM** as the trust boundary in `build/infra/apim/` — terminates the public edge, routes `/api/{customer,staff,workload}/v1/...` to the correct deployable, and is the **only** network path to either container — Boundary: gateway | Validates: Spec §FR-DEMO-004a, Contracts §README rule 4
 - [X] T228 Implement **identity derivation at APIM** in `build/infra/apim/global.inbound.xml` (cross-cutting) and `build/infra/apim/{customer,staff,workload}.v1.xml` (one per audience) — validates the Entra token once and emits the closed `X-Idp-*` contract of **exactly five values**: `X-Idp-Tenant-Id`, `X-Idp-Principal-Id`, `X-Idp-Roles` (complete set, canonical order), `X-Idp-Credential-Class`, `X-Idp-Client-Surface`. **Audience is not a header** — it is the route prefix APIM matched, so a caller cannot promote themselves by supplying one. **Neither deployable parses a token**; both consume the contract — Boundary: identity | Validates: Constitution P-I, P-II, Spec §FR-IDENT-011, Contracts §README
 - [X] T229 Implement **trusted tenant, audience and role propagation** from the derived header contract through both deployables in `ragcore/src/ragcore/api/middleware/identity.py` and `dotnet/src/Synthia.Api/Middleware/IdentityContextMiddleware.cs`, so tenant and roles reach every layer from trusted context and from nowhere else — Boundary: identity | Validates: Spec §FR-IDENT-002, §FR-DEMO-010
-- [X] T230 Implement **rejection of client-supplied authority headers** at APIM and, as defence in depth, at both deployables — any inbound `X-Idp-*` header arriving from a client is stripped at the gateway, and a deployable receiving one that did not come from APIM refuses the request rather than trusting it — Boundary: identity | Validates: Spec §FR-IDENT-002, §SC-DEMO-003b, Constitution P-I
-- [X] T230a [P] Write a test in `ragcore/tests/security/test_gateway_provenance.py` and `dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs` asserting a request carrying a **well-formed but self-supplied** `X-Idp-*` header set is refused — the shape a real bypass takes, and the case a naive negative test misses. Refused **on provenance, before any header is parsed**, so a better-formed forgery fares no better — Boundary: identity | Validates: Spec §SC-DEMO-002, §SC-DEMO-003b, §FR-IDENT-012
+- [X] T230 Implement **rejection of client-supplied authority headers** at APIM — any inbound `X-Idp-*` header arriving from a client is stripped at the gateway, unconditionally and before validation. **Delivered and active.** *Amended 2026-09-18:* the second half of this task — "and a deployable receiving one that did not come from APIM refuses the request" — is **deferred** by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and is retired as T230a below. The gateway half stands alone and is guarded by `check-edge-path.sh` and both stacks' edge trust tests — Boundary: identity | Validates: Spec §FR-IDENT-002, Constitution P-I
+- [D] T230a [P] ~~Write a test in `ragcore/tests/security/test_gateway_provenance.py` and `dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs` asserting a request carrying a **well-formed but self-supplied** `X-Idp-*` header set is refused — the shape a real bypass takes, and the case a naive negative test misses. Refused **on provenance, before any header is parsed**, so a better-formed forgery fares no better.~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** Both test files are deleted. The behaviour they asserted is no longer true: with gateway provenance deferred and unreplaced, a well-formed self-supplied contract is **honoured**, not refused. The tests were removed rather than softened into ones that still pass — Boundary: identity | Validates: ~~Spec §SC-DEMO-002, §SC-DEMO-003b, §FR-IDENT-012~~ (§SC-DEMO-003b and §FR-IDENT-012 are themselves marked DEFERRED in `spec.md`)
 
 ### Platform resource access *(added 2026-09-16)*
 
 - [X] T231 [P] Implement the **Redis transient cache** abstraction in `ragcore/src/ragcore/infrastructure/cache.py` — reached by managed identity, **every entry carries a TTL**, and the type exposes no API that could persist an authority record or a durable decision. Redis is **transient only**; it is never a source of truth and no sample flow reads it — Boundary: cache | Validates: Constitution P-IV, Plan §Platform Environment
 - [X] T232 [P] Bind **Key Vault** to both deployables in `build/docker/containerapps/` — secrets surfaced as references resolved at the point of use, **never** as environment variables holding values, and never baked into an image — Boundary: configuration | Validates: Spec §FR-DEMO-012
-- [X] T233 Assign **managed identity and Azure RBAC** per deployable in `build/infra/identity/managed-identities.json` — one identity each, **plus one for APIM**, with data-plane role assignments named per resource. Rights come from role assignment on the resource, **not** from a credential the application holds, so they are centrally revocable and visible without reading application configuration. Sets are **deliberately unequal**: the monolith is read-only (ADR-0001) and holds no Service Bus, SignalR, AI Search or model role, so a write path added to it by mistake fails at the platform rather than succeeding quietly. PostgreSQL and Redis are recorded as **not RBAC** — database-level role and access policy respectively — because writing either as a role assignment deploys cleanly and then cannot connect — Boundary: identity | Validates: Plan §Authentication, Spec §SC-DEMO-003, ADR-0001
-- [X] T233a Grant the **APIM identity** Key Vault read in `build/infra/identity/managed-identities.json` — APIM reads the gateway client certificate as itself, so without this there is no certificate on the backend connection, ingress rejects the handshake and **every application request fails**. Guarded by `check-edge-path.sh`, because the failure lands in a different file and a different resource from everything it breaks — Boundary: identity | Validates: Spec §FR-IDENT-012, §SC-DEMO-003
+- [X] T233 Assign **managed identity and Azure RBAC** per deployable in `build/infra/identity/managed-identities.json` — one identity each, **plus one for APIM**, with data-plane role assignments named per resource. Rights come from role assignment on the resource, **not** from a credential the application holds, so they are centrally revocable and visible without reading application configuration. Sets are **deliberately unequal**: the monolith is read-only (ADR-0001) and holds no Service Bus, SignalR, AI Search or model role, so a write path added to it by mistake fails at the platform rather than succeeding quietly. PostgreSQL and Redis are recorded as **not RBAC** — database-level role and access policy respectively — because writing either as a role assignment deploys cleanly and then cannot connect. **Delivered and active; this task is deliberately NOT retired.** *Amended 2026-09-18:* the APIM identity is retained and still declared, but its one role assignment — Key Vault read, held solely to fetch the gateway client certificate — is removed with the mechanism deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) (see T233a). Every per-deployable identity and role assignment here is unaffected — Boundary: identity | Validates: Plan §Authentication, Spec §SC-DEMO-003, ADR-0001
+- [D] T233a ~~Grant the **APIM identity** Key Vault read in `build/infra/identity/managed-identities.json` — APIM reads the gateway client certificate as itself, so without this there is no certificate on the backend connection, ingress rejects the handshake and **every application request fails**. Guarded by `check-edge-path.sh`.~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** The role assignment existed solely to read the gateway client certificate; with no certificate there is nothing to read. The role, and the `check-edge-path.sh` guard for it, are removed. **The APIM identity itself is retained** under T233, which stays active — Boundary: identity | Validates: ~~Spec §FR-IDENT-012, §SC-DEMO-003~~
 
-### Gateway provenance certificate *(added 2026-09-16)*
+### Gateway provenance certificate — RETIRED *(added 2026-09-16, deferred 2026-09-18)*
 
-The application half of the APIM-to-backend hop. Network placement alone is not sufficient
-(`FR-IDENT-012`): internal ingress admits everything already inside the environment, and for a
-backend that consumes the `X-Idp-*` contract as authoritative, reachability *is* the ability to
-assert any organisation and any role.
+> **Every task in this section is `[D]`: retired, deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).**
+> They are **not outstanding scaffold work** and must not be treated as a gap, re-estimated, or
+> picked up. Their text is preserved so the history and the reasoning stay readable.
+>
+> **Nothing replaced this mechanism** — not a shared secret, an API key, a bearer header, an
+> application-generated token, nor service-tag or IP-based trust. Introducing any of those on this
+> hop requires ADR-0008 to be superseded first.
+>
+> The original rationale, which **still stands as a statement of what is owed**: the application
+> half of the APIM-to-backend hop. Network placement alone is not sufficient (`FR-IDENT-012`):
+> internal ingress admits everything already inside the environment, and for a backend that consumes
+> the `X-Idp-*` contract as authoritative, reachability *is* the ability to assert any organisation
+> and any role. **That gap is now open**, which is why `FR-IDENT-012` is marked DEFERRED in
+> `spec.md` rather than left as an unmet active requirement.
 
-- [X] T233b Enforce **gateway provenance** in both deployables — `dotnet/src/Synthia.Api/Middleware/GatewayProvenanceMiddleware.cs` and `ragcore/src/ragcore/api/middleware/provenance.py`, each running **before** identity, validating the ingress-forwarded certificate hash against a required allow-list. The request is **refused, not sanitised**: stripping the headers and continuing returns success to an attacker and leaves the attempt indistinguishable from an ordinary unauthenticated call. An empty allow-list **fails the process at start** — an unconfigured vault fails loudly, an unconfigured allow-list fails silently by accepting forged identity — Boundary: identity | Validates: Spec §FR-IDENT-012, §SC-DEMO-003b
-- [X] T233c Require the client certificate at **ingress** in `build/docker/containerapps/*.yaml` — `clientCertificateMode: require`, so ingress itself sets `X-Forwarded-Client-Cert` and a caller cannot forge it. `accept` is not sufficient: it forwards a certificate when one is offered and nothing when one is not, making an unauthenticated caller indistinguishable from a correctly configured one — Boundary: identity | Validates: Spec §FR-IDENT-012
-- [X] T233d Define **expiry alerting** in `build/infra/monitoring/gateway-certificate-expiry.json` — Key Vault lifetime action at 45 days, `CertificateNearExpiry` paging at 30 (Azure fixes this and offers no setting), `CertificateExpired` at Sev0. Expiry is the **residual risk of the pinned-version rotation strategy** and is a misleading outage: health probes are exempt from provenance, so every replica stays green while serving nothing — Boundary: operations | Validates: Spec §FR-IDENT-012
-- [ ] T233e **Issue the gateway client certificate into Key Vault** and register it as an APIM certificate entity referenced by `certificate-id` — **never by thumbprint**, which changes on rotation and makes the policy silently stop attaching a certificate at all. Pin the Key Vault version so APIM's four-hour auto-sync cannot rotate it out from under the backend allow-list unattended — Boundary: identity | Validates: Spec §FR-IDENT-012
-- [ ] T233f Set the certificate hash allow-list on both deployables — `EdgeTrust__GatewayCertificateThumbprints` and `SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS`. Rotation is an **overlap and the order is the control**: widen the allow-list on both deployables *before* repointing APIM, per `docs/runbooks/rotate-gateway-certificate.md`. The reverse order is a total outage — Boundary: identity | Validates: Spec §FR-IDENT-012
+- [D] T233b ~~Enforce **gateway provenance** in both deployables — `dotnet/src/Synthia.Api/Middleware/GatewayProvenanceMiddleware.cs` and `ragcore/src/ragcore/api/middleware/provenance.py`, each running **before** identity, validating the ingress-forwarded certificate hash against a required allow-list. The request is **refused, not sanitised**: stripping the headers and continuing returns success to an attacker and leaves the attempt indistinguishable from an ordinary unauthenticated call. An empty allow-list **fails the process at start** — an unconfigured vault fails loudly, an unconfigured allow-list fails silently by accepting forged identity~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** Its implementation is removed from the tree. — Boundary: identity | Validates: Spec §FR-IDENT-012, §SC-DEMO-003b
+- [D] T233c ~~Require the client certificate at **ingress** in `build/docker/containerapps/*.yaml` — `clientCertificateMode: require`, so ingress itself sets `X-Forwarded-Client-Cert` and a caller cannot forge it. `accept` is not sufficient: it forwards a certificate when one is offered and nothing when one is not, making an unauthenticated caller indistinguishable from a correctly configured one~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** Its implementation is removed from the tree. — Boundary: identity | Validates: Spec §FR-IDENT-012
+- [D] T233d ~~Define **expiry alerting** in `build/infra/monitoring/gateway-certificate-expiry.json` — Key Vault lifetime action at 45 days, `CertificateNearExpiry` paging at 30 (Azure fixes this and offers no setting), `CertificateExpired` at Sev0. Expiry is the **residual risk of the pinned-version rotation strategy** and is a misleading outage: health probes are exempt from provenance, so every replica stays green while serving nothing~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** Its implementation is removed from the tree. — Boundary: operations | Validates: Spec §FR-IDENT-012
+- [D] T233e ~~**Issue the gateway client certificate into Key Vault** and register it as an APIM certificate entity referenced by `certificate-id` — **never by thumbprint**, which changes on rotation and makes the policy silently stop attaching a certificate at all. Pin the Key Vault version so APIM's four-hour auto-sync cannot rotate it out from under the backend allow-list unattended~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** It was never started, and is now withdrawn rather than left open. — Boundary: identity | Validates: Spec §FR-IDENT-012
+- [D] T233f ~~Set the certificate hash allow-list on both deployables — `EdgeTrust__GatewayCertificateThumbprints` and `SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS`. Rotation is an **overlap and the order is the control**: widen the allow-list on both deployables *before* repointing APIM, per `docs/runbooks/rotate-gateway-certificate.md`. The reverse order is a total outage~~ **RETIRED 2026-09-18 — deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).** It was never started, and is now withdrawn rather than left open. — Boundary: identity | Validates: Spec §FR-IDENT-012
 
 ### Azure provisioning *(added 2026-09-16)*
 
@@ -388,7 +403,7 @@ Everything above **defines** committed configuration. Nothing above **provisions
 makes traversal of the real deployed path part of acceptance (`FR-DEMO-019`, `SC-DEMO-001`) —
 configuration review explicitly does not substitute. These are the scaffold's longest-lead items.
 
-- [ ] T227a Provision **Front Door + WAF, APIM and the Container Apps environment** in a deployed environment from `build/infra/` — including the Private Link connection from Front Door to APIM, the `front-door-id` and `gateway-client-certificate-id` named values, and the Event Grid system topic and action group backing `build/infra/monitoring/` — Boundary: platform | Validates: Spec §FR-DEMO-019, §SC-DEMO-001
+- [ ] T227a Provision **Front Door + WAF, APIM and the Container Apps environment** in a deployed environment from `build/infra/` — including the Private Link connection from Front Door to APIM and the `front-door-id` named value. *Amended 2026-09-18:* the `gateway-client-certificate-id` named value, and the Event Grid system topic and action group that backed certificate expiry alerting, are **no longer part of this task** — both belonged solely to the mechanism deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) — Boundary: platform | Validates: Spec §FR-DEMO-019, §SC-DEMO-001
 - [ ] T227b Apply the **role assignments** from `build/infra/identity/managed-identities.json`, and create the PostgreSQL database-level principals and the Redis access policy, which are **not** role assignments — Boundary: identity | Validates: Spec §SC-DEMO-003
 
 ### OpenAPI contract emission *(added 2026-09-16)*
@@ -607,15 +622,18 @@ confirm the nine Stage 13 validation gates in plan.md.
 ### Flow 4 — Service-to-service
 
 - [ ] T246 [US6] Implement `POST /api/customer/v1/sample-flows/service-hop` in `ragcore/src/ragcore/api/customer/sample_flows.py` reaching the workload boundary **through APIM**, app-only, and returning what the callee reports about the caller's identity — Boundary: service boundary | Validates: Spec §FR-DEMO-004
-- [ ] T247 [US6] Write the **bypass negative suite** in `ragcore/tests/security/test_no_direct_route.py` asserting a request presented straight to a deployable fails across every audience — including one carrying a **well-formed but self-supplied gateway header contract** — and that no pod-to-pod route is reachable — Boundary: service boundary | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a, §SC-DEMO-003b
+- [ ] T247 [US6] Write the **bypass negative suite** in `ragcore/tests/security/test_no_direct_route.py` asserting that no pod-to-pod route is reachable and that a request presented straight to a deployable **carrying no identity contract** fails across every audience. *Amended 2026-09-18:* the self-supplied-contract case is **removed from this task** — it is `SC-DEMO-003b`, deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) along with the control that made it fail. This task stays `[ ]` and active; only its deferred half is struck — Boundary: service boundary | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a
 
-> **T230a and T247 overlap deliberately, and the split is the point.** Both refuse a well-formed
-> self-supplied `X-Idp-*` set; both cite `SC-DEMO-003b`. T230a poses the attack **in process**, against
-> the real pipeline, and runs on every commit — it is fast, needs no Azure, and catches a middleware
-> regression the day it lands. T247 poses it **against the deployed topology** and catches what no
-> in-process test can: an ingress misconfigured to `accept`, a network path that should not resolve,
-> a certificate that is not actually required. Neither subsumes the other, and collapsing them would
-> either make the fast check need a deployment or let the deployed check stand in for one.
+> **The T230a/T247 overlap is gone, because T230a is gone.** *Revised 2026-09-18.*
+>
+> They used to overlap deliberately: both refused a well-formed self-supplied `X-Idp-*` set, T230a
+> **in process** against the real pipeline on every commit, T247 **against the deployed topology**
+> where it also caught an ingress misconfigured to `accept` or a certificate not actually required.
+>
+> T230a is retired `[D]` and T247's self-supplied half is struck, both by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md). What T247
+> still uniquely catches is a **network path that should not resolve** — a direct route to a
+> deployable — and that remains worth a deployed test. What neither catches any more is a forged
+> identity contract from inside the environment, because nothing refuses one.
 
 ### Flow 5 — Service Bus
 
@@ -678,7 +696,7 @@ so ordering is stated rather than inferred from the integer.
 - [X] T260 [P] Implement structured logging and OpenTelemetry in `integrations/src/integrations/observability/` — constant message templates, traces and metrics exported, **no secret, token, credential or cross-organisation value in any log or span** — Boundary: observability | Validates: Spec §FR-INTEG-024, Constitution P-VIII
 - [X] T261 [P] Implement correlation middleware in `integrations/src/integrations/api/middleware/correlation.py` — accept `X-Correlation-Id` only when well formed, generate when missing or invalid, echo on every response, bind to the logging scope and the OpenTelemetry context. **W3C Trace Context; a custom propagation header MUST NOT replace it** — Boundary: observability | Validates: Spec §FR-INTEG-024, Constitution P-VIII
 - [X] T262 [P] Implement RFC 9457 problem responses in `integrations/src/integrations/api/middleware/problems.py` — `application/problem+json` with `type`, `title`, `status`, `detail`, `instance`, `correlationId`; **internal exception detail never reaches a client** — Boundary: errors | Validates: Contracts §integrations-api, Constitution §Validation and errors
-- [X] T263 Implement gateway provenance and identity-contract middleware in `integrations/src/integrations/api/middleware/{provenance,identity}.py` — provenance validated **before** identity against a required certificate-hash allow-list that **fails the process at start when empty**; the service **consumes only the closed `X-Idp-*` contract and MUST NOT parse a token**; a request carrying a caller-supplied contract is **refused, not sanitised** — Boundary: identity | Validates: Spec §FR-INTEG-015, Constitution P-I
+- [X] T263 Implement identity-contract middleware in `integrations/src/integrations/api/middleware/identity.py` — the service **consumes only the closed `X-Idp-*` contract and MUST NOT parse a token**, and refuses a request that carries no usable contract or the wrong credential class. **Delivered and active.** *Amended 2026-09-18:* the gateway-provenance half of this task — `middleware/provenance.py`, validated before identity against a required certificate-hash allow-list that failed the process at start when empty — is **deferred** by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md). That module is deleted and nothing replaced it; the service can no longer refuse a caller-supplied contract as such. The identity half is unaffected — Boundary: identity | Validates: Spec §FR-INTEG-015, Constitution P-I
 - [X] T264 [P] Implement health endpoints in `integrations/src/integrations/api/health.py` — `/health/live` process-only with no dependency checks; `/health/ready` covering the durable store, the message transport and the secret store. **Readiness MUST NOT depend on any external customer system** — Boundary: operations | Validates: Spec §FR-INTEG-026, Constitution §Health
 - [X] T265 Implement the composition root in `integrations/src/integrations/config/composition.py` — builds every adapter and binds it to the port it implements; FastAPI `Depends` resolves from it and constructs nothing itself — Boundary: composition | Validates: Constitution §Dependency injection, Plan §Composition roots
 - [X] T266 [P] Implement typed outbound HTTP in `integrations/src/integrations/egress/http.py` — pooled client lifetime, a shared resilience policy distinguishing transient from non-transient failure, and an **explicit timeout on every outbound call**. `HttpClient`-equivalent ad-hoc clients MUST NOT be constructed — Boundary: egress | Validates: Spec §FR-INTEG-027, Constitution §Resilience
@@ -1037,6 +1055,12 @@ reference connector. Configuration review does not substitute for traversal.
 > `gateway-certificate-expiry.json` still say "BOTH deployables" in the rotation instruction, which
 > is the green-but-dead failure mode), **X8** (T307 needs an audit-table grant no task names),
 > **X9**, **X11**, **X12**.
+>
+> **X7 is CLOSED — 2026-09-18, and not by being fixed.** [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) defers the certificate
+> mechanism in full. `gateway-certificate-expiry.json` and the rotation runbook are deleted and
+> `edge-trust.json` no longer describes a certificate, so there is no rotation instruction left to
+> say "BOTH deployables" in. The earlier notes above still list X7 as open; they are dated records
+> of what was true then and are left as written. **X7 requires no work.**
 
 
 > **Remediation — the asynchronous seam, X1–X4 (2026-09-18).** A drift analysis found **four tasks
@@ -1182,7 +1206,7 @@ reference connector. Configuration review does not substitute for traversal.
 
 ### Extending the existing edge guard
 
-- [ ] T320 [US6] Extend `build/scripts/check-edge-path.sh` and `build/scripts/verify-edge-guard.sh` to the **third deployable** — the RagCore → Integrations edge is exactly the shape a bypass takes, and this is the check that currently proves APIM is the trust boundary. **A gate nobody has seen fail is a gate whose failure mode is silence**: plant each violation class and assert the guard rejects it — Boundary: gateway | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a, §SC-DEMO-003b
+- [ ] T320 [US6] Extend `build/scripts/check-edge-path.sh` and `build/scripts/verify-edge-guard.sh` to the **third deployable** — the RagCore → Integrations edge is exactly the shape a bypass takes, and this is the check that currently proves APIM is the trust boundary. **A gate nobody has seen fail is a gate whose failure mode is silence**: plant each violation class and assert the guard rejects it. *Amended 2026-09-18:* the certificate violation classes (ingress not requiring a client certificate, a certificate referenced by thumbprint, expiry alerting, the APIM Key Vault role) are **no longer part of this task** — they are deferred by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and have been removed from both scripts. The remaining classes — external ingress, inbound `X-Idp-*` not stripped, the Front Door identifier, an audience deriving no identity, a second origin, a direct internal address — are what must extend — Boundary: gateway | Validates: Spec §FR-DEMO-004a, §SC-DEMO-003a
 
 ### Documentation synchronisation
 
@@ -1369,7 +1393,8 @@ T153 → T154 → T155 (catalogue → gate → fixtures)
 **T155 is a hard prerequisite for both golden paths** — without the reference operations there is no
 operation to propose, and Phases 12–13 cannot be demonstrated.
 
-**T226–T230a are hard prerequisites for Phase 13** *(added 2026-09-16)*. Spec `FR-DEMO-019` makes edge
+**T226–T230a are hard prerequisites for Phase 13** *(added 2026-09-16; T230a retired `[D]`
+2026-09-18 by [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md), so the prerequisite is T226–T230)*. Spec `FR-DEMO-019` makes edge
 traversal part of acceptance, so no Phase 13 task can be *accepted* until Front Door, WAF and APIM are
 provisioned and APIM derives identity. Every flow will pass against the deployables long before that —
 which is exactly why this is stated rather than assumed. **Start the edge provisioning early.**

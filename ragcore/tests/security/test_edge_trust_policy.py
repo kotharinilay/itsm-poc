@@ -11,9 +11,16 @@ mattered.
 
 **Structural, not runtime.** These read source and committed configuration rather than deploying
 anything, so the rules hold in CI without an Azure subscription and a failure names the file and the
-construct rather than surfacing as a 403 in an environment somebody has to reproduce. The
-behavioural half lives in ``test_gateway_provenance.py``, which poses the attack against the real
-pipeline.
+construct rather than surfacing as a 403 in an environment somebody has to reproduce.
+
+**There is no behavioural half any more.** It lived in ``test_gateway_provenance.py`` and asserted
+that a forged identity contract sent from inside the network was refused on gateway provenance.
+That mechanism is deferred — see
+``docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md`` — and nothing replaced
+it, so the assertion stopped being true and the file was removed rather than
+softened into one that passes. What this module now guards instead is that the deferral stays
+*recorded* and stays *unreplaced* — see
+:meth:`TestEveryHopDeclaresItsControls.test_a_hop_without_an_application_control_says_so_explicitly`.
 
 **Why the infrastructure is asserted at all.** Half of this boundary lives outside the application —
 in an APIM policy, a Front Door definition, an ingress manifest — where no compiler and no unit test
@@ -24,16 +31,11 @@ deleted ``set-header``) reviews well and deploys quietly.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
 
-from ragcore.api.middleware.provenance import (
-    EXEMPT_PATH_PREFIXES,
-    FORWARDED_CLIENT_CERT_HEADER,
-)
 from ragcore.domain.principal import IDENTITY_HEADERS
 
 ROOT: Final = Path(__file__).resolve().parents[3]
@@ -72,8 +74,12 @@ def _production_sources() -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
-class TestEveryHopHasTwoIndependentControls:
-    """ "Neither control is sufficient alone" (spec 10.3) is a claim about *pairs*."""
+class TestEveryHopDeclaresItsControls:
+    """ "Neither control is sufficient alone" (spec 10.3) is a claim about *pairs*.
+
+    One hop no longer has a pair. That is recorded rather than asserted away: see
+    :meth:`test_a_hop_without_an_application_control_says_so_explicitly`.
+    """
 
     def test_the_chain_is_client_to_front_door_to_apim_to_backend(
         self, policy: dict[str, Any]
@@ -85,18 +91,39 @@ class TestEveryHopHasTwoIndependentControls:
             "apim-to-backend",
         ]
 
-    def test_every_hop_names_both_a_network_and_an_application_control(
+    def test_every_hop_names_a_network_control(self, policy: dict[str, Any]) -> None:
+        """No hop may rest on an application control alone."""
+        for hop in policy["chain"]["hops"]:
+            assert hop.get("networkControl"), f"{hop['id']} names no network control"
+
+    def test_a_hop_without_an_application_control_says_so_explicitly(
         self, policy: dict[str, Any]
     ) -> None:
         """A hop with one control is a hop resting on reachability alone.
 
-        That was the state this whole arrangement was written to fix: the backends could not
-        distinguish an APIM-stamped identity header from one a caller typed, and said so in their
-        own comments.
+        That is currently true of exactly one hop — ``apim-to-backend``, whose application control
+        is deferred (ADR 0008) — and this test exists so that it stays *exactly one* and stays
+        *declared*. A hop that quietly loses its application control, with no ``deferred`` block
+        and no ADR behind it, fails here rather than passing as though it never had one.
         """
         for hop in policy["chain"]["hops"]:
-            assert hop.get("networkControl"), f"{hop['id']} names no network control"
-            assert hop.get("applicationControl"), f"{hop['id']} names no application control"
+            if hop.get("applicationControl"):
+                continue
+
+            assert hop.get("applicationControlStatus") == "deferred", (
+                f"{hop['id']} names no application control and does not declare one deferred. "
+                "A hop silently resting on reachability alone is the failure this registry "
+                "exists to make visible."
+            )
+
+            deferred = hop.get("deferred") or {}
+            adr = deferred.get("adr")
+            assert adr, f"{hop['id']} declares a deferred control but names no ADR"
+            assert (ROOT / adr).is_file(), f"{hop['id']} names an ADR that does not exist: {adr}"
+            assert deferred.get("replacedBy") is None, (
+                f"{hop['id']} names a replacement for its deferred control. The deferral was "
+                "explicitly not a licence to introduce one; see the ADR."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -114,23 +141,6 @@ class TestTheIdentityContractIsClosed:
         assert contract["closed"] is True
         assert len(contract["headers"]) == 5
         assert sorted(contract["headers"]) == sorted(IDENTITY_HEADERS)
-
-    def test_the_provenance_header_this_service_reads_is_the_one_the_policy_names(
-        self, policy: dict[str, Any]
-    ) -> None:
-        """Two ends of one wire.
-
-        If APIM stamps a header this service does not read, every request is refused; if this
-        service reads one APIM does not stamp, nothing is checked. The second failure is silent,
-        which is why it is asserted rather than trusted.
-        """
-        assert policy["gatewayCertificate"]["forwardedAs"] == FORWARDED_CLIENT_CERT_HEADER
-
-    def test_the_exempt_paths_this_service_serves_are_the_ones_the_policy_names(
-        self, policy: dict[str, Any]
-    ) -> None:
-        """The exemption list is the softest part of the arrangement, so it is pinned hardest."""
-        assert tuple(policy["provenanceExempt"]["pathPrefixes"]) == EXEMPT_PATH_PREFIXES
 
 
 # ---------------------------------------------------------------------------
@@ -197,10 +207,12 @@ class TestTheGatewayIsConfiguredToBeTheTrustBoundary:
     def test_the_gateway_deletes_every_inbound_copy_of_the_contract(
         self, policy: dict[str, Any]
     ) -> None:
-        """The other end of the anti-spoofing control.
+        """The anti-spoofing control at the edge, and now the only one of its kind.
 
-        This service refuses a request that cannot prove provenance; APIM deletes any inbound copy
-        of the contract before validating anything. Neither is sufficient alone.
+        APIM deletes any inbound copy of the contract before validating anything, so a caller
+        arriving from the internet cannot smuggle one through the gateway. The backend-side half —
+        refusing a request that could not prove gateway provenance — is deferred (ADR 0008) and
+        was not replaced, which makes this deletion load-bearing in a way it was not before.
         """
         global_policy = APIM / "global.inbound.xml"
         assert global_policy.is_file(), f"the APIM global policy is missing: {global_policy}"
@@ -214,10 +226,6 @@ class TestTheGatewayIsConfiguredToBeTheTrustBoundary:
         assert not missing, "the APIM global policy does not delete an inbound copy of: " + str(
             missing
         )
-
-        # The forwarded certificate is the more dangerous of the two: a caller who could set it
-        # would be asserting gateway provenance itself, which every other control rests on.
-        assert f'<set-header name="{FORWARDED_CLIENT_CERT_HEADER}" exists-action="delete" />' in xml
 
     def test_the_gateway_checks_the_front_door_identifier(self) -> None:
         """The AzureFrontDoor.Backend service tag admits *every* Azure customer's Front Door.
@@ -299,126 +307,6 @@ class TestNoBackendIsReachableAroundTheGateway:
         ]
         assert not violations, f"a container app declares external ingress: {violations}"
 
-    def test_every_container_app_serving_ingress_requires_a_client_certificate(self) -> None:
-        """Internal ingress alone admits everything already inside the VNet.
-
-        ``accept`` is specifically not enough: it forwards a certificate when one is offered and
-        nothing when one is not, so an unauthenticated caller looks exactly like a correctly
-        configured one that has not been given a certificate yet.
-
-        **Scoped to apps that serve ingress.** A worker — a Service Bus consumer, a sweep — dials
-        *out* over AMQP as a managed identity and accepts no inbound request, so there is no
-        connection for a client certificate to appear on. Requiring it there would fail the first
-        correctly written worker manifest, and a rule that fires on correct code is one that gets
-        skipped.
-        """
-        violations = []
-        for manifest in self._manifests():
-            code = [
-                line.split("#", 1)[0].strip()
-                for line in manifest.read_text(encoding="utf-8").splitlines()
-            ]
-            if "ingress:" not in code:
-                continue
-            if "clientCertificateMode: require" not in code:
-                violations.append(manifest.name)
-        assert not violations, (
-            f"a container app serving ingress does not require a client certificate: {violations}"
-        )
-
-    def test_the_gateway_certificate_is_referenced_in_a_way_that_survives_rotation(self) -> None:
-        """A Key Vault certificate's thumbprint **changes** when it is rotated.
-
-        An APIM policy identifying it by thumbprint silently fails to resolve the new one — it stops
-        attaching a client certificate at all. There is no error at the gateway; it surfaces as
-        every backend call losing provenance at the same moment.
-
-        Asserted rather than reviewed because the broken spelling is the one that looks more
-        precise, and because it works perfectly until the day it does not.
-        """
-        xml = (APIM / "global.inbound.xml").read_text(encoding="utf-8")
-        assert "<authentication-certificate thumbprint=" not in xml
-        assert "<authentication-certificate certificate-id=" in xml
-
-    def test_rotation_is_deliberate_and_expiry_is_monitored(self, policy: dict[str, Any]) -> None:
-        """These two are adopted together or not at all.
-
-        Pinning the Key Vault version stops an automatic four-hour sync from rotating the
-        certificate out from under a backend allow-list that pins the leaf hash — an unattended,
-        total outage with no deployment behind it.
-
-        But pinning the version also means nothing renews the certificate on our behalf any more,
-        which turns expiry from a background concern into the residual risk of the whole design. A
-        policy declaring one without the other is declaring half a control.
-        """
-        certificate = policy["gatewayCertificate"]
-        rotation = certificate["rotation"]
-
-        assert rotation["strategy"] == "pinned-version"
-        assert rotation["automaticSyncDisabled"] is True
-
-        runbook = ROOT / rotation["runbook"]
-        assert runbook.is_file(), (
-            f"the rotation runbook is missing: {runbook}. Rotation here is a sequenced manual "
-            "release — widen the allow-list, then switch the certificate — and the order IS the "
-            "control. An unwritten sequence is one somebody performs backwards under pressure."
-        )
-
-        expiry = certificate["expiryMonitoring"]
-        assert expiry["required"] is True
-        assert expiry["alertLeadTimeDays"] >= 30
-
-    def test_expiry_monitoring_is_provisioned_and_not_merely_declared(
-        self, policy: dict[str, Any]
-    ) -> None:
-        """A policy declaring monitoring that infrastructure does not provide is worse than neither.
-
-        The declaration is what stops somebody checking. This asserts the alerting exists as
-        committed infrastructure, not as an intention.
-        """
-        expiry = policy["gatewayCertificate"]["expiryMonitoring"]
-        alerts = ROOT / expiry["definedIn"]
-        assert alerts.is_file(), f"the expiry alerting is missing: {alerts}"
-
-        alerting = json.loads(alerts.read_text(encoding="utf-8"))
-
-        event_types: list[str] = []
-        unpaged: list[str] = []
-        for subscription in alerting["eventSubscriptions"]:
-            event_types.extend(subscription["filter"]["includedEventTypes"])
-            # An alert nobody is paged by is a dashboard.
-            if not subscription["destination"]["properties"].get("actionGroups"):
-                unpaged.append(subscription["name"])
-
-        assert "Microsoft.KeyVault.CertificateNearExpiry" in event_types
-        assert "Microsoft.KeyVault.CertificateExpired" in event_types
-        assert not unpaged, f"an expiry alert reaches no action group: {unpaged}"
-
-    def test_the_paging_lead_time_is_recorded_separately_from_the_earliest_notice(
-        self, policy: dict[str, Any]
-    ) -> None:
-        """Two lead times, because Azure gives us no choice.
-
-        The certificate near-expiry event is fixed at 30 days and exposes no setting; only the
-        *key* near-expiry event is configurable. So the earliest we can be **told** is 45 days, by
-        a Key Vault lifetime action, over email — and the earliest we can be **woken** is 30.
-
-        Both are recorded because collapsing them to the friendlier number would be a lie an
-        operator plans around: email is the weaker mechanism, and one holiday period consumes the
-        whole difference. The 30-day page is the real deadline.
-        """
-        expiry = policy["gatewayCertificate"]["expiryMonitoring"]
-
-        paging = expiry["pagingLeadTimeDays"]
-        assert paging >= 30
-        assert expiry["alertLeadTimeDays"] >= paging
-
-        channels = expiry["channels"]
-        assert any(channel["pages"] for channel in channels)
-        assert any(channel["leadTimeDays"] == 0 and channel["pages"] for channel in channels), (
-            "expiry itself must page: by then it is an outage and the cause must be named at once"
-        )
-
     def test_front_door_publishes_exactly_one_origin_and_it_is_the_gateway(self) -> None:
         """A second origin would be a public route to a backend that looks, in the portal, like a
         routing entry. It is the cheapest possible bypass of the entire trust boundary.
@@ -458,58 +346,3 @@ class TestBothPlatformsEnforceTheSamePolicy:
             "the .NET enforcer does not read build/policy/edge-trust.json. Two hand-maintained "
             "lists drift, and the drift is invisible until the weaker one is the one that mattered."
         )
-
-    def test_both_deployables_enforce_provenance_in_their_own_pipeline(self) -> None:
-        """A shared policy file proves nothing if only one side acts on it.
-
-        Asserted against the middleware registration rather than the middleware's existence: a
-        module that exists but is never added to the pipeline is the exact shape of a control
-        somebody refactored out.
-        """
-        ragcore_app = (ROOT / "ragcore" / "src" / "ragcore" / "api" / "app.py").read_text(
-            encoding="utf-8"
-        )
-        assert "GatewayProvenanceMiddleware" in ragcore_app
-
-        dotnet_program = (ROOT / "dotnet" / "src" / "Synthia.Api" / "Program.cs").read_text(
-            encoding="utf-8"
-        )
-        assert "UseMiddleware<GatewayProvenanceMiddleware>()" in dotnet_program
-
-    def test_provenance_runs_before_identity_on_both_stacks(self) -> None:
-        """Order is part of the control.
-
-        The identity contract is trusted precisely and only because APIM set it, so a request that
-        did not come through APIM must be refused before any part of that contract is read.
-        Starlette applies middleware outermost-last, so on the RagCore side provenance must be
-        added *after* identity to run *before* it.
-        """
-        ragcore_app = (ROOT / "ragcore" / "src" / "ragcore" / "api" / "app.py").read_text(
-            encoding="utf-8"
-        )
-        # Matched on the registrations rather than on the names, which also appear in the imports
-        # above them — an ordering assertion that can be satisfied by an import statement asserts
-        # nothing about the pipeline.
-        registrations = re.findall(r"app\.add_middleware\(\s*([A-Za-z]+)", ragcore_app)
-        assert registrations.index("IdentityHeaderMiddleware") < registrations.index(
-            "GatewayProvenanceMiddleware"
-        ), "on Starlette, provenance must be added after identity in order to run before it"
-        assert registrations.index("GatewayProvenanceMiddleware") < registrations.index(
-            "CorrelationIdMiddleware"
-        ), "correlation must remain outermost, so even a refused request is correlatable"
-
-        dotnet_program = (ROOT / "dotnet" / "src" / "Synthia.Api" / "Program.cs").read_text(
-            encoding="utf-8"
-        )
-        assert dotnet_program.index(
-            "UseMiddleware<GatewayProvenanceMiddleware>()"
-        ) < dotnet_program.index("UseMiddleware<IdentityContextMiddleware>()"), (
-            "on ASP.NET Core, middleware runs in registration order, so provenance must be "
-            "registered before identity"
-        )
-
-    def test_both_allow_list_settings_are_declared(self, policy: dict[str, Any]) -> None:
-        """One name per stack, documented in the policy the deployment pipeline reads."""
-        settings = policy["gatewayCertificate"]["allowListSetting"]
-        assert set(settings) == {"dotnet", "ragcore"}
-        assert settings["ragcore"] == "SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS"

@@ -20,9 +20,7 @@
     "PostgreSQL authorizes at the database level, and Redis uses an access policy. Writing either as",
     "a role assignment produces a deployment that succeeds and an application that cannot connect."
   ],
-
   "policyVersion": "1.0.0",
-
   "identities": [
     {
       "name": "id-synthia-monolith",
@@ -229,28 +227,21 @@
       "type": "UserAssigned",
       "usedBy": "build/infra/apim/",
       "$comment": [
-        "THE GATEWAY'S OWN IDENTITY, and the reason this file blocks work that is already merged.",
+        "THE GATEWAY'S OWN IDENTITY.",
         "",
-        "APIM reads the gateway client certificate from Key Vault as this identity. Without the",
-        "assignment below there is no certificate on the backend connection, Container Apps ingress",
-        "rejects the handshake, and every application request fails - the edge trust boundary in",
-        "build/policy/edge-trust.json does not function at all.",
+        "It holds NO role assignment at present. The one it used to hold - Key Vault read, so APIM",
+        "could fetch the gateway client certificate it presented to the backends - existed solely",
+        "for the certificate-based gateway-to-backend provenance mechanism, which is DEFERRED",
+        "(docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).",
         "",
-        "It is an identity rather than a stored credential for the usual reason, which matters more",
-        "here than anywhere else in this file: a secret used to fetch the certificate that proves",
-        "gateway provenance would be a credential guarding the thing that guards everything else."
+        "The identity itself is retained rather than deleted: APIM is still the trust boundary and",
+        "will need an identity for the next thing it reads as itself (its custom-domain TLS",
+        "certificate, or the deferred mechanism if it returns). Re-granting Key Vault read for",
+        "gateway-to-backend provenance requires that ADR to be revisited first."
       ],
-      "roleAssignments": [
-        {
-          "resource": "keyvault",
-          "role": "Key Vault Secrets User",
-          "scope": "vault",
-          "why": "Reads the gateway client certificate. A Key Vault certificate's private material is retrieved as a secret, so this is the role that applies - Certificates Officer would also permit issuing and deleting, which APIM never does."
-        }
-      ]
+      "roleAssignments": []
     }
   ],
-
   "notRoleBased": [
     {
       "resource": "postgresql",
@@ -281,7 +272,6 @@
       ]
     }
   ],
-
   "$unassigned": [
     "DELIBERATELY ABSENT, so that a reader can tell a decision from an omission:",
     "",

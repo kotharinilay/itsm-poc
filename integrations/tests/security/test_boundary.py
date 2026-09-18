@@ -3,9 +3,13 @@
 Constitution §Coverage: every protection named as a hard failure must have a test that fails when
 the protection is removed. These cover the prohibitions this slice establishes.
 
-The gateway-provenance tests are the ones that matter most. `SC-DEMO-003b` measures the specific
-shape a real bypass takes — a request carrying a **well-formed but self-supplied** identity contract
-— and the service must refuse it rather than strip the headers and serve it.
+**The gateway-provenance tests are gone, and their absence is the finding.** They asserted that a
+request arriving without proof of having come through APIM was refused, which is what `SC-DEMO-003b`
+measured. That mechanism is deferred — see
+`docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md` — and nothing replaced it,
+so the assertion stopped being true. It was deleted rather than reworded into something that still
+passes. What remains below is the identity boundary, which is a narrower control and is tested as
+such.
 """
 
 from __future__ import annotations
@@ -20,7 +24,6 @@ from integrations.api.app import create_app
 from integrations.api.health import ReadinessRegistry
 from integrations.config.composition import Container
 from integrations.config.settings import (
-    EdgeTrustSettings,
     IntegrationsSettings,
     ObservabilitySettings,
 )
@@ -28,14 +31,13 @@ from integrations.observability.telemetry import ConnectorMetrics
 
 pytestmark = pytest.mark.security
 
-_ACCEPTED_HASH = "a" * 64
 _SRC = Path(__file__).resolve().parents[2] / "src" / "integrations"
 
 
 class _UnreachableCatalogue:
     """Every method raises.
 
-    These tests are about the **provenance and identity boundary**, which runs before any endpoint.
+    These tests are about the **identity boundary**, which runs before any endpoint.
     A catalogue that raised if reached proves the refusal happened at the boundary rather than
     somewhere deeper — a benign stub would let a routing change pass these tests silently.
     """
@@ -48,14 +50,9 @@ class _UnreachableCatalogue:
 
 
 def _client() -> TestClient:
-    """A client whose app trusts exactly one certificate hash."""
+    """A client arriving as any caller now does: with nothing proving where it came from."""
     container = Container(
-        settings=IntegrationsSettings(
-            edge_trust=EdgeTrustSettings(
-                gateway_certificate_thumbprints=frozenset({_ACCEPTED_HASH})
-            ),
-            observability=ObservabilitySettings(),
-        ),
+        settings=IntegrationsSettings(observability=ObservabilitySettings()),
         readiness=ReadinessRegistry(),
         connector_metrics=ConnectorMetrics(),
         catalogue=_UnreachableCatalogue(),  # type: ignore[arg-type]
@@ -66,47 +63,22 @@ def _client() -> TestClient:
     return TestClient(create_app(container), raise_server_exceptions=False)
 
 
-def test_empty_certificate_allow_list_fails_at_startup() -> None:
-    """An empty allow-list stops the process rather than defaulting to permissive.
+def test_a_request_carrying_no_identity_is_refused() -> None:
+    """No contract, no service. The narrowest thing still true here.
 
-    This is the asymmetry the check exists for. An unconfigured vault fails loudly at first use; an
-    unconfigured allow-list fails **silently by accepting forged identity**, because at request time
-    "trust nothing" and "trust everything" look identical when the set is empty.
-    """
-    with pytest.raises(ValueError, match="thumbprint"):
-        EdgeTrustSettings(gateway_certificate_thumbprints=frozenset())
+    **This is deliberately weaker than the test it replaces**, and the difference is the whole
+    point of ADR 0008. That test asserted a *well-formed but self-supplied* `X-Idp-*` contract was
+    refused — the shape a real bypass takes, which `SC-DEMO-003b` measured. It was refused on
+    gateway provenance, and gateway provenance is deferred with nothing in its place.
 
-
-def test_request_without_gateway_provenance_is_refused() -> None:
-    """A direct request — not through APIM — fails.
-
-    No pod-to-pod, container-to-container or internal-address route may reach this service.
+    So this service can no longer tell a self-supplied contract from an APIM-stamped one: **a
+    complete forgery sent from inside the environment is honoured.** What remains is that a caller
+    supplying no identity at all gets nothing, which is asserted below and is not a substitute.
     """
     response = _client().get("/api/workload/v1/integrations/openapi.json")
-    assert response.status_code == 403
+
+    assert response.status_code == 401
     assert response.headers["content-type"].startswith("application/problem+json")
-
-
-def test_self_supplied_identity_contract_is_refused_not_sanitised() -> None:
-    """**The shape a real bypass takes.**
-
-    A caller forging the full `X-Idp-*` contract without gateway provenance is refused. Stripping
-    the headers and serving the request would return *success* to an attacker and leave the attempt
-    indistinguishable from an ordinary unauthenticated call — so the one event worth alerting on
-    would become invisible.
-    """
-    response = _client().get(
-        "/api/workload/v1/integrations/openapi.json",
-        headers={
-            "X-Idp-Tenant-Id": "11111111-1111-1111-1111-111111111111",
-            "X-Idp-Principal-Id": "22222222-2222-2222-2222-222222222222",
-            "X-Idp-Credential-Class": "app",
-            "X-Idp-Client-Surface": "workload",
-        },
-    )
-    assert response.status_code == 403
-    body = response.json()
-    assert body["type"].endswith("gateway-provenance-required")
 
 
 def test_delegated_credential_is_refused_on_this_audience() -> None:
@@ -116,11 +88,15 @@ def test_delegated_credential_is_refused_on_this_audience() -> None:
     check. It is not redundant: a policy misconfiguration is exactly the failure that would let a
     human's authority arrive wearing a machine's shape — and appear in the audit record as a
     machine.
+
+    **This test now exercises the credential-class check for the first time.** It previously sent a
+    stale, unread header name in place of gateway provenance, so the request was refused before the
+    credential class was ever inspected and the assertion passed for the wrong reason. With
+    provenance deferred (ADR 0008), the refusal below is the one the test claims to be about.
     """
     response = _client().get(
         "/api/workload/v1/integrations/openapi.json",
         headers={
-            "X-Client-Certificate-Sha256": _ACCEPTED_HASH,
             "X-Idp-Tenant-Id": "11111111-1111-1111-1111-111111111111",
             "X-Idp-Principal-Id": "22222222-2222-2222-2222-222222222222",
             "X-Idp-Credential-Class": "delegated",
@@ -131,7 +107,7 @@ def test_delegated_credential_is_refused_on_this_audience() -> None:
 
 
 def test_health_endpoints_disclose_nothing() -> None:
-    """Probes are exempt from provenance and return an empty body.
+    """Probes are anonymous by necessity and return an empty body.
 
     They are unauthenticated by necessity — a platform probe does not traverse APIM — so they must
     disclose no identity, no dependency name and no configuration. A readiness endpoint that named

@@ -196,29 +196,42 @@ public sealed class ApimRoutingTests
     [Fact]
     public void The_gateway_reaches_this_deployable_without_a_shared_secret()
     {
-        // APIM presents a certificate it reads from Key Vault as its own managed identity. There is
-        // no key, no subscription secret and no authorization header value: a credential the
-        // application held would be one that could be exfiltrated and replayed, and this deployable
-        // holds only the public hash of what APIM presents.
+        // APIM PRESENTS NOTHING ON THIS CONNECTION. It used to present a client certificate read
+        // from Key Vault as its own managed identity, and this deployable held only the public hash
+        // of it. That mechanism is deferred
+        // (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and nothing
+        // replaced it.
+        //
+        // The test is kept, and narrowed to the half that still means something: there is no key,
+        // no subscription secret and no authorization header value on this hop. A credential the
+        // application held would be one that could be exfiltrated and replayed, which is precisely
+        // the shape the ADR refused to adopt as an interim substitute. Asserting its absence is
+        // what stops the gap being filled informally instead of decided.
         using JsonDocument registry = Registry();
         JsonElement backend = registry.RootElement.GetProperty("backends").EnumerateArray()
             .Single(entry => Text(entry, "id") == MonolithBackend);
 
-        JsonElement credentials = backend.GetProperty("credentials");
+        Assert.False(
+            backend.TryGetProperty("credentials", out JsonElement credentials),
+            "The monolith backend declares a credential. Gateway-to-backend provenance is deferred "
+            + "(ADR 0008); re-introducing one requires that decision to be revisited first.");
 
-        Assert.Equal("client-certificate", Text(credentials, "type"));
-
-        string[] forbidden =
-        [
-            "key", "apiKey", "api_key", "sharedSecret", "clientSecret", "password", "sasToken"
-        ];
-
-        foreach (string name in forbidden)
+        // Belt and braces: if a credentials block ever returns, none of these shapes is acceptable
+        // in it, whatever else the block says.
+        if (credentials.ValueKind == JsonValueKind.Object)
         {
-            Assert.False(
-                credentials.TryGetProperty(name, out _),
-                $"The monolith backend declares `{name}`. APIM authenticates to it by presenting a "
-                + "certificate read from Key Vault as a managed identity; there is no secret here.");
+            string[] forbidden =
+            [
+                "key", "apiKey", "api_key", "sharedSecret", "clientSecret", "password", "sasToken"
+            ];
+
+            foreach (string name in forbidden)
+            {
+                Assert.False(
+                    credentials.TryGetProperty(name, out _),
+                    $"The monolith backend declares `{name}`. There is no shared secret on this "
+                    + "hop, and the deferral of gateway provenance is not a licence to add one.");
+            }
         }
     }
 

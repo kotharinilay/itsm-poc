@@ -7,12 +7,18 @@
 # that arrangement that live in committed configuration rather than in code:
 #
 #   1. No container app publishes external ingress.
-#   2. Every container app requires the gateway client certificate.
-#   3. The APIM global policy deletes every inbound copy of the identity contract.
-#   4. The APIM global policy checks this platform's Front Door identifier.
-#   5. Every audience has a gateway policy that validates a token.
-#   6. Front Door publishes exactly one origin, and it is APIM.
-#   7. Neither deployable addresses the other by an internal address.
+#   2. The APIM global policy deletes every inbound copy of the identity contract.
+#   3. The APIM global policy checks this platform's Front Door identifier.
+#   4. Every audience has a gateway policy that validates a token.
+#   5. Front Door publishes exactly one origin, and it is APIM.
+#   6. Neither deployable addresses the other by an internal address.
+#
+# WHAT THIS GUARD NO LONGER CHECKS, deliberately. The apim-to-backend hop used to carry a client
+# certificate: ingress required it, APIM attached it by certificate-id, the APIM identity could
+# read it from Key Vault, and its expiry was alerted. That mechanism is DEFERRED in full - see
+# docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md - and nothing replaced
+# it. The checks that enforced it are gone rather than softened, because a guard that passes
+# vacuously is worse than no guard: it is a guard somebody has already stopped reading.
 #
 # WHY A SHELL GUARD WHEN BOTH STACKS ALREADY TEST THIS. The in-language suites are the detailed
 # enforcement and they are better at it - they parse, they read the shared policy, they pose the
@@ -86,39 +92,6 @@ else
   fail "No container app manifests were found under $MANIFESTS"
 fi
 
-# ------------------------------------------- (2) every backend demands gateway provenance
-#
-# The network control admits everything already inside the VNet. The certificate is what narrows
-# that to APIM. `accept` is specifically not enough - it forwards a certificate when one is offered
-# and nothing when one is not, so an unauthenticated caller is indistinguishable from a correctly
-# configured one that has not been given a certificate yet.
-#
-# SCOPED TO APPS THAT ACTUALLY SERVE INGRESS. A worker - the Service Bus consumers, the sweeps -
-# has no ingress block at all: it dials OUT to Service Bus over AMQP as a managed identity and
-# accepts no inbound request, so there is no connection for a client certificate to appear on.
-# Demanding the setting there would be a guard that fails the first correctly-written worker
-# manifest somebody adds, and a guard that cries wolf on correct code is one that gets bypassed.
-#
-# The condition is "declares ingress", not "is named like an API", so a worker that later grows an
-# ingress block is covered from the moment it does.
-if [ -d "$MANIFESTS" ]; then
-  missing=""
-  while IFS= read -r manifest; do
-    [ -n "$manifest" ] || continue
-    grep -qE '^[[:space:]]*ingress:[[:space:]]*$' "$manifest" || continue
-    if ! grep -qE '^[[:space:]]*clientCertificateMode:[[:space:]]*require[[:space:]]*$' "$manifest"; then
-      missing="${missing}${manifest}"$'\n'
-    fi
-  done <<EOF
-$(find "$MANIFESTS" -type f -name '*.yaml' 2>/dev/null)
-EOF
-  if [ -n "$missing" ]; then
-    fail "A container app serving ingress does not require the gateway client certificate" "$missing"
-  else
-    pass "Every container app serving ingress requires a gateway client certificate."
-  fi
-fi
-
 # --------------------------------- (3) the gateway strips every inbound copy of the contract
 #
 # The other end of the anti-spoofing control. The backend refuses a request that cannot prove
@@ -143,12 +116,6 @@ if require_file "$GLOBAL_POLICY" "The APIM global policy"; then
     done <<EOF
 $headers
 EOF
-    # The forwarded certificate is the more dangerous of the two: a caller who could set it would
-    # be asserting gateway provenance itself, which every other control here rests on.
-    if ! grep -qF '<set-header name="X-Forwarded-Client-Cert" exists-action="delete" />' "$GLOBAL_POLICY"; then
-      missing="${missing}X-Forwarded-Client-Cert"$'\n'
-    fi
-
     if [ -n "$missing" ]; then
       fail "The APIM global policy does not delete an inbound copy of these headers" "$missing"
     else
@@ -165,25 +132,6 @@ EOF
     pass "APIM checks this platform's Front Door identifier."
   else
     fail "The APIM global policy does not check X-Azure-FDID against the {{front-door-id}} named value"
-  fi
-
-  # ------------------------- (4b) the client certificate is referenced in a way that survives
-  #
-  # A Key Vault certificate's thumbprint CHANGES when it is rotated, and an APIM policy that
-  # identifies it by thumbprint silently fails to resolve the new one - it stops attaching a client
-  # certificate at all. There is no error at the gateway; it surfaces as every backend call losing
-  # provenance simultaneously.
-  #
-  # This is checked here rather than left to review because the wrong spelling is the one that
-  # looks more precise, and because it works perfectly until the day it doesn't.
-  if grep -qE '<authentication-certificate[^>]*thumbprint=' "$GLOBAL_POLICY"; then
-    fail "The APIM policy identifies the client certificate by thumbprint" \
-      "A Key Vault certificate's thumbprint changes on rotation and the policy will silently stop
-resolving it. Use certificate-id, which names the APIM entity and survives rotation."
-  elif grep -qE '<authentication-certificate[^>]*certificate-id=' "$GLOBAL_POLICY"; then
-    pass "The client certificate is referenced by certificate-id, which survives rotation."
-  else
-    fail "The APIM global policy attaches no client certificate to the backend connection"
   fi
 fi
 
@@ -221,69 +169,6 @@ if require_file "$FRONTDOOR" "The Front Door definition"; then
     fail "The Front Door origin does not reach APIM over Private Link, so APIM holds a public endpoint"
   else
     pass "Front Door fronts exactly one origin, and reaches it privately."
-  fi
-fi
-
-# ------------------------------------------- (6b) expiry of the gateway certificate is alerted
-#
-# The control that makes the pinned-version rotation strategy safe. Automatic Key Vault sync into
-# APIM is deliberately off, so nothing moves this certificate on our behalf - expiry is the
-# residual risk of the whole edge design.
-#
-# Checked here because the failure it guards against is uniquely misleading: on expiry every
-# application request fails 403 on both deployables while health probes keep passing, so replicas
-# stay green and in rotation with no deployment in the window to correlate against.
-#
-# Asserted against the infrastructure rather than against the policy's claim to have it. A policy
-# that declares monitoring and infrastructure that does not provide it is worse than neither,
-# because the declaration is what stops somebody checking.
-EXPIRY_ALERTS="build/infra/monitoring/gateway-certificate-expiry.json"
-if require_file "$EXPIRY_ALERTS" "The gateway certificate expiry alerting"; then
-  missing=""
-  for event in CertificateNearExpiry CertificateExpired; do
-    if ! grep -qF "Microsoft.KeyVault.$event" "$EXPIRY_ALERTS"; then
-      missing="${missing}Microsoft.KeyVault.${event}"$'\n'
-    fi
-  done
-
-  # An alert nobody is paged by is a dashboard. Both of the above must reach an action group.
-  if ! grep -qF '"actionGroups"' "$EXPIRY_ALERTS"; then
-    missing="${missing}no actionGroups - the alerts notify nobody"$'\n'
-  fi
-
-  if [ -n "$missing" ]; then
-    fail "The gateway certificate expiry alerting does not cover" "$missing"
-  else
-    pass "Gateway certificate expiry and near-expiry both page an action group."
-  fi
-fi
-
-# ------------------------------- (6c) the gateway can actually read its own certificate
-#
-# APIM presents the client certificate that every other control here rests on, and it reads that
-# certificate from Key Vault as its own managed identity. Without the role assignment there is no
-# certificate on the backend connection, ingress rejects the handshake, and EVERY application
-# request fails.
-#
-# Worth a guard rather than a comment because of where the failure lands: nothing in the APIM
-# policy, the ingress manifests or either backend is wrong, so every other check in this script
-# passes and the platform is still completely down. The missing piece is in a different file, in a
-# different resource, in a different deployment step.
-IDENTITIES="build/infra/identity/managed-identities.json"
-if require_file "$IDENTITIES" "The managed identity and role assignment definitions"; then
-  # The APIM identity block must exist and must carry a Key Vault role. Matched on the block rather
-  # than on the file as a whole: a Key Vault role granted to a *deployable* elsewhere in the file
-  # would otherwise satisfy a naive grep while the gateway still had none.
-  apim_block="$(awk '/"name": "id-synthia-apim"/,/^    }/' "$IDENTITIES")"
-
-  if [ -z "$apim_block" ]; then
-    fail "No managed identity is defined for APIM, so it cannot read its own client certificate"
-  elif ! printf '%s' "$apim_block" | grep -qF '"resource": "keyvault"'; then
-    fail "The APIM identity holds no Key Vault role" \
-      "APIM reads the gateway client certificate from Key Vault as this identity. Without it the
-backend connection carries no certificate and every application request fails provenance."
-  else
-    pass "APIM has an identity that can read the gateway certificate from Key Vault."
   fi
 fi
 

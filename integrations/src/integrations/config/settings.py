@@ -6,11 +6,9 @@ type that *could* hold a credential is itself the defect: the shape is what make
 enforceable, because `build/policy/azure-identity.json` scans for the value-shaped variants and
 finds nothing to flag.
 
-**Validation happens at startup and fails the process.** An unconfigured vault fails loudly; an
-unconfigured allow-list fails *silently by accepting forged identity*, which is why
-:class:`EdgeTrustSettings` refuses an empty allow-list rather than defaulting to permissive. The
-asymmetry is the whole point — a service that starts in a state it cannot be secure in has already
-lost, and it has lost invisibly.
+**Validation happens at startup and fails the process.** A service that starts in a state it
+cannot be secure in has already lost, and it has lost invisibly, so a malformed or missing setting
+is a process that does not start rather than one that degrades at the first request.
 
 **No environment read happens outside this module.** Business code consumes a settings object; it
 never reaches for `os.environ`.
@@ -25,7 +23,6 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 __all__ = [
-    "EdgeTrustSettings",
     "IntegrationsSettings",
     "ObservabilitySettings",
     "PersistenceSettings",
@@ -46,51 +43,6 @@ class _Base(BaseSettings):
         extra="forbid",
         frozen=True,
     )
-
-
-class EdgeTrustSettings(_Base):
-    """Gateway provenance. **The allow-list is required and MUST NOT be empty.**
-
-    Attributes:
-        gateway_certificate_thumbprints: SHA-256 hashes of the client certificates APIM may
-            present. A request whose ingress-forwarded certificate hash is absent from this set
-            is **refused** (:mod:`integrations.api.middleware.provenance`).
-    """
-
-    gateway_certificate_thumbprints: Annotated[
-        frozenset[str],
-        Field(
-            default=frozenset(),
-            description="SHA-256 hashes of accepted APIM client certificates.",
-        ),
-    ]
-
-    @field_validator("gateway_certificate_thumbprints")
-    @classmethod
-    def _must_not_be_empty(cls, value: frozenset[str]) -> frozenset[str]:
-        """Refuse to start with no accepted certificate.
-
-        Raises:
-            ValueError: When the allow-list is empty. Two reasons, and **neither is "it would fail
-                open"** — :mod:`integrations.api.middleware.provenance` fails *closed* on an empty
-                set, refusing everything:
-
-                1. **A silent total outage becomes a loud deployment failure.** Health probes are
-                   exempt from provenance, so a service with an empty allow-list refuses every
-                   request while every replica reports healthy. Failing here means the rollout
-                   fails visibly instead of going green and dead.
-                2. **The fail-open refactor has nowhere to start.** The tempting fix when this
-                   bites in local development is `if self._accepted and presented not in ...`,
-                   which reads as "only enforce when configured" and genuinely is fail-open.
-                   Making the empty set unconstructable removes that option.
-        """
-        if not value:
-            raise ValueError(
-                "at least one gateway certificate thumbprint is required. An empty allow-list "
-                "refuses every request while health probes keep reporting healthy, so the process "
-                "refuses to start rather than roll out green and serving nothing."
-            )
-        return value
 
 
 class PersistenceSettings(_Base):
@@ -176,7 +128,6 @@ class IntegrationsSettings(_Base):
     """The composed configuration surface, bound and validated once at startup."""
 
     environment: Annotated[str, Field(default="development")] = "development"
-    edge_trust: EdgeTrustSettings = Field(default_factory=EdgeTrustSettings)
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     service_bus: ServiceBusSettings = Field(default_factory=ServiceBusSettings)
     secrets: SecretsSettings = Field(default_factory=SecretsSettings)

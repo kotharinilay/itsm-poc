@@ -81,9 +81,8 @@ def build_container(secrets: SecretResolverPort | None = None) -> Container:
 
     Raises:
         pydantic.ValidationError: When configuration is invalid. **Deliberately uncaught** — it
-            propagates out of startup and stops the process. In particular an empty gateway
-            certificate allow-list fails here: a service with one refuses every request while its
-            health probes keep reporting healthy, so failing the rollout is the visible outcome.
+            propagates out of startup and stops the process, so a misconfigured revision fails its
+            rollout visibly rather than going green and serving wrongly.
     """
     # Imported here rather than at module scope to keep the import graph acyclic: policy consumes
     # ports that the catalogue modules implement, and a top-level import would make this module and

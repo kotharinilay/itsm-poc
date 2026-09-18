@@ -19,7 +19,6 @@ from integrations.api.app import create_app
 from integrations.api.health import ReadinessRegistry
 from integrations.config.composition import Container
 from integrations.config.settings import (
-    EdgeTrustSettings,
     IntegrationsSettings,
     ObservabilitySettings,
 )
@@ -41,7 +40,7 @@ _SESSION = UUID("22222222-2222-2222-2222-222222222222")
 _TENANT = UUID("33333333-3333-3333-3333-333333333333")
 
 _GATEWAY_HEADERS = {
-    "X-Forwarded-Client-Cert": f"Hash={_HASH};Subject=CN=apim",
+    # No gateway-provenance marker: the service no longer looks for one (ADR 0008).
     "X-Idp-Tenant-Id": "44444444-4444-4444-4444-444444444444",
     "X-Idp-Principal-Id": "55555555-5555-5555-5555-555555555555",
     "X-Idp-Credential-Class": "app",
@@ -100,7 +99,6 @@ class _RefusingPolicy:
 def _client(*, known_session: bool = True) -> TestClient:
     container = Container(
         settings=IntegrationsSettings(
-            edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=frozenset({_HASH})),
             observability=ObservabilitySettings(),
         ),
         readiness=ReadinessRegistry(),
@@ -277,7 +275,6 @@ def test_health_is_absent_from_the_published_contract() -> None:
     document = create_app(
         Container(
             settings=IntegrationsSettings(
-                edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=frozenset({_HASH})),
                 observability=ObservabilitySettings(),
             ),
             readiness=ReadinessRegistry(),

@@ -51,15 +51,6 @@ properties:
       transport: http
       allowInsecure: false
 
-      # GATEWAY PROVENANCE. `require` means ingress rejects a connection presenting no client
-      # certificate and republishes the one it validated. Because ingress sets that header itself, a
-      # caller cannot forge it — which is what lets ProvenanceMiddleware treat the hash as evidence
-      # rather than as input.
-      #
-      # `accept` would be worse than useless: it forwards a certificate when one is offered and
-      # nothing when one is not, so every unauthenticated caller would look identical to a correctly
-      # configured one that had simply not been given a certificate yet.
-      clientCertificateMode: require
 
     secrets:
       - name: database-dsn
@@ -174,15 +165,3 @@ properties:
           - name: SYNTHIA_INTEGRATIONS_OBSERVABILITY__SAMPLE_RATIO
             value: ${TRACE_SAMPLE_RATIO}
 
-          # GATEWAY CERTIFICATE ALLOW-LIST. Rotation is an OVERLAP and the order is the control:
-          # widen the allow-list on every deployable BEFORE repointing APIM
-          # (docs/runbooks/rotate-gateway-certificate.md). The reverse order is a total outage on
-          # whichever backend was missed — and because health probes are exempt from provenance,
-          # that backend stays green while serving nothing.
-          #
-          # AN EMPTY VALUE FAILS THE PROCESS AT START. That is deliberate: an unconfigured vault
-          # fails loudly at first use, but an unconfigured allow-list would fail silently by
-          # accepting forged identity, because at request time an empty set is indistinguishable
-          # from "trust everything".
-          - name: SYNTHIA_INTEGRATIONS_EDGE_TRUST__GATEWAY_CERTIFICATE_THUMBPRINTS
-            value: ${GATEWAY_CERTIFICATE_THUMBPRINTS}

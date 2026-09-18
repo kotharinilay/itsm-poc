@@ -8,7 +8,12 @@
     1. Prove the request came from THIS platform's Front Door.       (edge provenance)
     2. Delete every inbound copy of the identity contract.           (anti-spoofing)
     3. Establish correlation.                                        (observability)
-    4. Present the gateway client certificate to the backend.        (gateway provenance)
+
+  APIM PRESENTS NO CLIENT CERTIFICATE TO THE BACKEND. That step existed and is DEFERRED - see
+  docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md. No replacement backend
+  credential was introduced, and none may be added here without revisiting that decision. The
+  backend connection is therefore protected by network placement alone (internal ingress, no
+  public FQDN), which the ADR records as a weaker guarantee than the deferred mechanism gave.
 
   STEP 2 IS WHY A BACKEND CAN TRUST THE CONTRACT AT ALL. The deletion is unconditional and happens
   before any token is validated, so there is no ordering in which a caller-supplied X-Idp-Roles
@@ -58,14 +63,6 @@
     <set-header name="X-Idp-Client-Surface" exists-action="delete" />
 
     <!--
-      The forwarded-certificate header is deleted for exactly the same reason, and it is the more
-      dangerous of the two: a caller who could set it would be asserting gateway provenance itself,
-      which is the control every other control here rests on. Container Apps ingress re-sets it
-      from the certificate it actually validated, so nothing downstream loses anything.
-    -->
-    <set-header name="X-Forwarded-Client-Cert" exists-action="delete" />
-
-    <!--
       (3) CORRELATION. Established before anything can refuse the request, so a refusal is
       correlatable and the identifier a user quotes leads somewhere (spec FR-OPS-001). Taken from
       the caller when present so a client-initiated journey stays one journey; minted otherwise.
@@ -78,28 +75,6 @@
       </when>
     </choose>
 
-    <!--
-      (4) GATEWAY PROVENANCE TO THE BACKEND. APIM presents this certificate on the backend
-      connection; Container Apps ingress validates it and republishes its SHA-256 hash as
-      X-Forwarded-Client-Cert, which both backends check against their allow-list.
-
-      The certificate lives in Key Vault and is referenced here through the APIM certificate
-      entity that points at it. APIM reads it with its own managed identity, so there is no
-      standing secret anywhere in this arrangement: the vault holds the private key, APIM holds a
-      reference, and the backends hold only a public hash.
-
-      REFERENCED BY certificate-id, NEVER BY THUMBPRINT, and this is not a style preference. A
-      Key Vault certificate's thumbprint changes when it is rotated, and a policy identifying it
-      by thumbprint SILENTLY FAILS TO RESOLVE the new certificate - the policy stops attaching a
-      client certificate at all, and every backend call starts failing provenance. certificate-id
-      names the APIM entity, which survives rotation.
-
-      See docs/runbooks/rotate-gateway-certificate.md for why rotation is nonetheless a deliberate
-      release here rather than the 4-hour automatic sync: the backends pin the LEAF hash, so the
-      allow-list has to widen before the certificate changes, and nothing in Azure sequences those
-      two for us.
-    -->
-    <authentication-certificate certificate-id="{{gateway-client-certificate-id}}" />
 
     <!-- Defence in depth at the edge. The WAF rate-limits too; this bounds a caller that has already passed it. -->
     <rate-limit-by-key calls="600" renewal-period="60" counter-key="@(context.Request.IpAddress)" />
@@ -120,7 +95,6 @@
     <set-header name="X-Idp-Roles" exists-action="delete" />
     <set-header name="X-Idp-Credential-Class" exists-action="delete" />
     <set-header name="X-Idp-Client-Surface" exists-action="delete" />
-    <set-header name="X-Forwarded-Client-Cert" exists-action="delete" />
 
     <!-- Server fingerprints are free reconnaissance. -->
     <set-header name="X-Powered-By" exists-action="delete" />

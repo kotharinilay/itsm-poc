@@ -294,37 +294,12 @@ public sealed class WebApplicationFixture : IDisposable
 
     /// <summary>Creates a client against the running application.</summary>
     /// <remarks>
-    /// Carries gateway provenance, because that is how every real request arrives. A client
-    /// without it is the attacker's position and is created by <see cref="CreateDirectClient"/>.
+    /// It carries no gateway-provenance marker, because the application no longer looks for one:
+    /// that mechanism is deferred (ADR 0008) and was not replaced. Every caller now reaches the
+    /// pipeline the same way, which is itself the consequence the ADR records.
     /// </remarks>
     /// <returns>The client.</returns>
     public HttpClient CreateClient() => _factory.CreateClient();
-
-    /// <summary>Creates a client that reaches the application without traversing the gateway.</summary>
-    /// <returns>The client, with no forwarded certificate.</returns>
-    public HttpClient CreateDirectClient() => _factory.CreateDirectClient();
-
-    /// <summary>Creates a client presenting a certificate this deployment does not accept.</summary>
-    /// <param name="hash">The certificate hash to present.</param>
-    /// <returns>The client.</returns>
-    public HttpClient CreateClientPresenting(string hash)
-    {
-        HttpClient client = _factory.CreateDirectClient();
-        client.DefaultRequestHeaders.TryAddWithoutValidation(
-            "X-Forwarded-Client-Cert",
-            FakeGateway.ForwardedClientCert(hash));
-        return client;
-    }
-
-    /// <summary>Creates a client sending a raw forwarded-certificate header.</summary>
-    /// <param name="headerValue">The exact header value, malformed or otherwise.</param>
-    /// <returns>The client.</returns>
-    public HttpClient CreateClientSendingRaw(string headerValue)
-    {
-        HttpClient client = _factory.CreateDirectClient();
-        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Forwarded-Client-Cert", headerValue);
-        return client;
-    }
 
     /// <summary>The literal patterns of every mapped API route.</summary>
     /// <returns>Route patterns under <c>/api</c>.</returns>

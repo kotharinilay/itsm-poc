@@ -4,43 +4,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace Synthia.ContractTests;
 
 /// <summary>
-/// The gateway this test suite pretends to be.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>There is no test-only bypass of gateway provenance, and there must not be.</b> The suite
-/// simulates APIM rather than disabling the check, because a bypass would mean the pipeline under
-/// test is not the pipeline that ships — and the one control whose absence is invisible in
-/// production would be the one control never exercised.
-/// </para>
-/// <para>
-/// The value is a syntactically valid SHA-256 digest that corresponds to no real certificate. It is
-/// not secret: a thumbprint is the hash of a <i>public</i> certificate, and the constitution's
-/// no-credential-in-tests rule is about credentials, which this is not.
-/// </para>
-/// </remarks>
-internal static class FakeGateway
-{
-    /// <summary>The certificate hash this suite's requests present.</summary>
-    public const string CertificateHash =
-        "1111111111111111111111111111111111111111111111111111111111111111";
-
-    /// <summary>A syntactically valid hash belonging to some other gateway.</summary>
-    /// <remarks>
-    /// Used to assert that a well-formed certificate from the wrong holder is refused. The check
-    /// must be an allow-list, not a format check — the latter would accept any certificate at all.
-    /// </remarks>
-    public const string UnknownCertificateHash =
-        "2222222222222222222222222222222222222222222222222222222222222222";
-
-    /// <summary>Formats a hash as Container Apps ingress forwards it.</summary>
-    /// <param name="hash">The certificate hash.</param>
-    /// <returns>The <c>X-Forwarded-Client-Cert</c> value.</returns>
-    public static string ForwardedClientCert(string hash) =>
-        $"Hash={hash};Subject=\"CN=synthia-gateway\";URI=";
-}
-
-/// <summary>
 /// Boots the real application for contract tests.
 /// </summary>
 /// <remarks>
@@ -103,12 +66,6 @@ internal sealed class SynthiaApiFactory : WebApplicationFactory<Program>
             // asserting the application still starts without them is part of the contract.
             ["Observability__ServiceName"] = "synthia-monolith-tests",
             ["Observability__DeploymentEnvironment"] = "test",
-
-            // Required, and deliberately with no empty state: a process without an allow-list
-            // cannot tell an APIM-stamped identity header from a forged one. Supplied here rather
-            // than defaulted in the application, so that "this setting is mandatory" is something
-            // the suite demonstrates rather than something a comment asserts.
-            ["EdgeTrust__GatewayCertificateThumbprints"] = FakeGateway.CertificateHash,
         };
 
         foreach (KeyValuePair<string, string?> pair in overrides)
@@ -123,42 +80,6 @@ internal sealed class SynthiaApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-    }
-
-    /// <summary>
-    /// Stamps every request with gateway provenance, as Container Apps ingress would.
-    /// </summary>
-    /// <remarks>
-    /// Applied to the client rather than to each call so that a test about casing, cursors or
-    /// problem details is not also a test about the edge. Provenance itself is asserted by
-    /// <c>GatewayProvenanceTests</c>, which uses <see cref="CreateDirectClient"/> to arrive the way
-    /// an attacker would.
-    /// </remarks>
-    /// <param name="client">The client being configured.</param>
-    protected override void ConfigureClient(HttpClient client)
-    {
-        ArgumentNullException.ThrowIfNull(client);
-
-        base.ConfigureClient(client);
-
-        client.DefaultRequestHeaders.TryAddWithoutValidation(
-            "X-Forwarded-Client-Cert",
-            FakeGateway.ForwardedClientCert(FakeGateway.CertificateHash));
-    }
-
-    /// <summary>
-    /// A client that reaches the application without going through the gateway.
-    /// </summary>
-    /// <remarks>
-    /// This is the attacker's position, and the one the whole edge model exists to refuse: inside
-    /// the network, addressing the container directly, free to send any header it likes.
-    /// </remarks>
-    /// <returns>A client with no forwarded certificate.</returns>
-    public HttpClient CreateDirectClient()
-    {
-        HttpClient client = CreateClient();
-        client.DefaultRequestHeaders.Remove("X-Forwarded-Client-Cert");
-        return client;
     }
 
     /// <inheritdoc/>

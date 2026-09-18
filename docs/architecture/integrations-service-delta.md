@@ -159,7 +159,7 @@ executing service declare its own success, which is exactly what `client_atteste
 
 | Document | Nature |
 |---|---|
-| `specs/001-platform-scaffold/spec.md` | `FR-EXT-011` (single owning integration boundary) is now satisfied by a *service*; `FR-DEMO-004a`/`SC-DEMO-003a`/`SC-DEMO-003b` (the direct-path refusal proof) must extend to the third deployable |
+| `specs/001-platform-scaffold/spec.md` | `FR-EXT-011` (single owning integration boundary) is now satisfied by a *service*; `FR-DEMO-004a`/`SC-DEMO-003a` (the direct-path refusal proof) must extend to the third deployable. **`SC-DEMO-003b` is DEFERRED** by [ADR-0008](../adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and does not extend — there is no longer a control for it to exercise |
 | `plan.md` | §Project Structure, §Dependency direction, §Where each bounded context lives, §OpenAPI contract emission (five documents → seven), Stage list |
 | `tasks.md` | Phase 9 (T128–T138) is retro-scoped; a new phase is required; `[X]` tasks whose files move need an explicit disposition |
 | `data-model.md` | New entities; ownership column changes; schema-boundary statement |
@@ -894,6 +894,12 @@ governance (a second evaluation point); adapter (every relocated adapter); confi
 prohibition in §7 must be shown unreachable); and the end-to-end golden path, which now crosses three
 deployables.
 
-**The direct-path refusal proof (`FR-DEMO-004a`, `SC-DEMO-003a`, `SC-DEMO-003b`) is the single most
-important one to extend**, because it is the test that currently proves APIM is the trust boundary —
-and the new RagCore → Integrations edge is exactly the shape a bypass would take.
+**The direct-path refusal proof (`FR-DEMO-004a`, `SC-DEMO-003a`) is the single most important one to
+extend**, because it is the test that currently proves APIM is the trust boundary — and the new
+RagCore → Integrations edge is exactly the shape a bypass would take.
+
+> **`SC-DEMO-003b` is excluded from that extension.** It asserted that a well-formed but
+> self-supplied identity contract was refused; that control is deferred and unreplaced
+> ([ADR-0008](../adr/0008-defer-certificate-based-gateway-to-backend-provenance.md)). The new
+> RagCore → Integrations edge therefore inherits the gap as well as the proof: nothing stops a
+> caller already inside the environment from calling Integrations directly with a forged contract.

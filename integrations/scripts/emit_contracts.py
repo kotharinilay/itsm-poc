@@ -41,7 +41,6 @@ from integrations.catalogue.registry import ConnectorRegistry
 from integrations.catalogue.repository import CatalogueRepository, TenantResolver
 from integrations.config.composition import Container
 from integrations.config.settings import (
-    EdgeTrustSettings,
     IntegrationsSettings,
     ObservabilitySettings,
     PersistenceSettings,
@@ -68,20 +67,11 @@ DOCUMENT_NAME: Final = f"{AUDIENCE}.{CONTRACT_VERSION}.openapi.json"
 # emitting must not require a database — a contract that can only be produced from production is a
 # contract nobody regenerates.
 _EMIT_DSN: Final = "postgresql+asyncpg://localhost/contract-emission"
-_EMIT_THUMBPRINT: Final = "0" * 64
 
 
 def build_emission_container() -> Container:
-    """Compose the application for document emission only.
-
-    The certificate allow-list carries a placeholder rather than being empty: an empty one refuses
-    to construct at all, which is the intended production behaviour and would stop emission dead.
-
-    Returns:
-        A container sufficient to describe the API surface.
-    """
+    """Compose the application for document emission only."""
     resolved = IntegrationsSettings(
-        edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=frozenset({_EMIT_THUMBPRINT})),
         persistence=PersistenceSettings(dsn=_EMIT_DSN),
         observability=ObservabilitySettings(),
     )

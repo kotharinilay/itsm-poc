@@ -46,7 +46,7 @@ expect_fail() {
 }
 
 py_arch() { (cd ragcore && uv run pytest tests/architecture -q); }
-py_leak() { (cd ragcore && uv run pytest tests/integrations/test_no_provider_leak.py -q); }
+py_leak() { (cd ragcore && uv run pytest tests/egress/test_no_provider_leak.py -q); }
 py_isolation() { (cd ragcore && uv run pytest tests/isolation -q -m 'not integration'); }
 py_leakage() { (cd ragcore && uv run pytest tests/security/test_no_leakage.py -q); }
 py_config()  { (cd ragcore && uv run pytest tests/unit/test_settings.py tests/unit/test_cache.py -q); }
@@ -250,9 +250,14 @@ expect_fail "a hand-written OpenAPI document imported" py_edge
 cp /tmp/synthia-apis.bak "$APIS"
 
 # --- 17: a backend shared secret -----------------------------------------------
-# APIM presents a certificate read from Key Vault as its own managed identity. A key here would be
-# a standing credential on the one hop the whole trust boundary rests on.
-sed -i '0,/"type": "client-certificate"/s//"type": "header", "apiKey": "{{ragcore-backend-key}}"/' "$APIS"
+# APIM presents NO credential on this hop: the client certificate that used to serve that purpose
+# is deferred (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and nothing
+# replaced it. This case matters MORE after that deferral, not less - an unguarded hop is exactly
+# where somebody reaches for a key, and a standing credential is what the ADR refused to adopt as
+# an interim substitute.
+#
+# Planted by ADDING a credentials block, since there is no longer one to rewrite.
+sed -i 's|"containerApp": "build/docker/containerapps/ragcore.yaml",|"containerApp": "build/docker/containerapps/ragcore.yaml", "credentials": { "type": "header", "apiKey": "{{ragcore-backend-key}}" },|' "$APIS"
 expect_fail "a shared secret on an APIM backend" py_edge
 cp /tmp/synthia-apis.bak "$APIS"
 

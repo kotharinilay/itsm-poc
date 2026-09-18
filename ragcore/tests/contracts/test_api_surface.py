@@ -22,7 +22,7 @@ from ragcore.api.app import create_app
 from ragcore.api.customer import streaming
 from ragcore.api.middleware.problems import PROBLEM_MEDIA_TYPE
 from ragcore.config.composition import Container, build_container
-from ragcore.config.settings import DatabaseSettings, EdgeTrustSettings, Settings
+from ragcore.config.settings import DatabaseSettings, Settings
 from ragcore.domain.identifiers import EntraTenantId, PrincipalId
 from ragcore.domain.principal import (
     Audience,
@@ -34,7 +34,6 @@ from ragcore.domain.roles import RoleSet
 from ragcore.domain.tenancy import TenantContext, TenantStatus
 from ragcore.infrastructure.clock import SystemClock
 from tests.support.fakes import admitted_tenant
-from tests.support.gateway import CERTIFICATE_HASH, gateway_headers
 
 CUSTOMER_ROUTES = {
     ("POST", "/api/customer/v1/sessions"),
@@ -104,13 +103,7 @@ def app_fixture() -> Any:
     # A syntactically valid DSN pointing nowhere. Nothing in the scaffold opens a connection:
     # the container binds no repository, so a reachable database would prove nothing.
     dsn = TypeAdapter(PostgresDsn).validate_python("postgresql://user:pw@localhost/synthia")
-    settings = Settings(
-        database=DatabaseSettings(dsn=dsn),
-        # Required, with no empty state: a process that cannot prove gateway provenance does not
-        # start. Supplied here rather than defaulted in the application, so that "this setting is
-        # mandatory" is something the suite demonstrates rather than something a comment asserts.
-        edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=CERTIFICATE_HASH),
-    )
+    settings = Settings(database=DatabaseSettings(dsn=dsn))
     return create_app(
         container=Container(
             settings=settings,
@@ -122,13 +115,13 @@ def app_fixture() -> Any:
 
 @pytest.fixture(name="client")
 def client_fixture(app: Any) -> Any:
-    """A test client arriving the way every real request does — through the gateway.
+    """A test client arriving the way every real request does.
 
-    The forwarded certificate is a default header rather than an argument on each call, so that a
-    test about casing, correlation or problem details is not also a test about the edge. Provenance
-    itself is asserted by ``tests/security/test_gateway_provenance.py``, which arrives without it.
+    It carries no gateway-provenance marker, because the application no longer looks for one: that
+    mechanism is deferred (ADR 0008) and was not replaced. A request reaching this process is
+    admitted on its ``X-Idp-*`` contract alone.
     """
-    with TestClient(app, raise_server_exceptions=False, headers=gateway_headers()) as client:
+    with TestClient(app, raise_server_exceptions=False) as client:
         yield client
 
 
@@ -250,7 +243,7 @@ class TestIdentityIsDerivedNeverParsed:
 
         It sits at ``/health/*`` rather than under an audience because of where the caller is: the
         probe comes from the Container Apps infrastructure on the internal network and does not
-        traverse APIM, so it carries neither identity nor a gateway certificate.
+        traverse APIM, so it carries no identity.
         """
         assert client.get("/health/live").status_code == 200
 

@@ -6,7 +6,7 @@ request context, and authorization decisions live in application and domain poli
 **Middleware order is load-bearing** and is the constitution's, not a preference:
 
 ```text
-exception handling → correlation → trace context → provenance → identity → endpoint
+exception handling → correlation → trace context → identity → endpoint
 ```
 
 Starlette applies middleware in reverse registration order, so the registrations below read
@@ -14,9 +14,13 @@ bottom-up relative to that list. Two orderings in particular are the control rat
 
 * **Correlation before anything that logs.** Otherwise the first record of a request — the one
   describing a request nobody can then find — is uncorrelated.
-* **Provenance before identity.** Identity trusts the `X-Idp-*` contract completely, so proving the
-  request actually came through APIM has to happen first. Reversed, a caller could present a
-  self-made contract and be believed.
+* **Identity last.** It rejects self-asserted authority before routing, so no endpoint and no
+  dependency ever sees a client-supplied tenant or role.
+
+**There is no backend-side provenance layer.** The certificate-based one that used to sit before
+identity is **deferred** (ADR 0008) and no replacement was introduced, so this service cannot
+itself prove a request arrived through APIM. Internal-only ingress and APIM's deletion of every
+inbound copy of the contract are what remain; both are recorded, with their limits, in the ADR.
 
 **This service is not client-facing.** It serves the workload audience only; only RagCore calls
 it, through APIM. It emits its own OpenAPI document, never merged with RagCore's — a merged one
@@ -33,7 +37,6 @@ from integrations.api.health import build_health_router
 from integrations.api.middleware.correlation import CorrelationMiddleware
 from integrations.api.middleware.identity import IdentityMiddleware
 from integrations.api.middleware.problems import ProblemMiddleware, install_exception_handlers
-from integrations.api.middleware.provenance import ProvenanceMiddleware
 from integrations.api.workload.routes import build_workload_router
 from integrations.config.composition import build_container
 
@@ -82,7 +85,6 @@ def create_app(container: Container | None = None) -> FastAPI:
     # Registered in reverse of execution order — Starlette wraps each around the previous, so the
     # LAST registered runs FIRST. Reading bottom-up gives the constitution's order.
     app.add_middleware(IdentityMiddleware)
-    app.add_middleware(ProvenanceMiddleware, edge_trust=resolved.settings.edge_trust)
     app.add_middleware(CorrelationMiddleware)
     app.add_middleware(ProblemMiddleware)
 

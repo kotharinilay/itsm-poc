@@ -31,8 +31,8 @@ deployable; two policies would be two places for the derivation to drift.
 | Credential class | **App-only.** A delegated token is refused with 403 — `scp` is present only on a delegated token, and there is no safe interpretation of a human credential on this surface |
 | Application role | **Its own**, distinct from the generic workload role, so a workload-audience caller cannot drive connectors merely by being one |
 | Token parsing | **The service MUST NOT parse a token.** It consumes only the closed `X-Idp-*` contract APIM emits |
-| Caller-supplied identity | **Never trusted.** APIM deletes every inbound copy of the contract and writes its own; a request arriving with a self-supplied one is refused, not sanitised |
-| Backend authentication | Mutual TLS from APIM, the same certificate and the same recorded exemption as the other two backends |
+| Caller-supplied identity | **Deleted at the gateway.** APIM deletes every inbound copy of the contract and writes its own, so a contract cannot be smuggled in from outside. **The service itself cannot tell an APIM-stamped contract from a self-supplied one** — the control that did is deferred (ADR 0008) with no replacement, so a caller already inside the environment is believed |
+| Backend authentication | **None.** APIM presents no credential on this hop. The mutual-TLS client certificate is deferred in full (ADR 0008); the hop rests on internal-only ingress alone, and no shared secret or key may be introduced in its place |
 
 ## The organisation is never a parameter
 

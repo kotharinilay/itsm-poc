@@ -443,60 +443,6 @@ class ObservabilitySettings(BaseSettings):
     """
 
 
-class EdgeTrustSettings(BaseSettings):
-    """How this process proves a request arrived through APIM.
-
-    **APIM is the identity/trust boundary.** This service consumes the closed ``X-Idp-*`` contract
-    and never parses a token, which is only safe while it can tell an APIM-stamped header from one
-    a caller typed. The certificate hash below is what tells it apart
-    (:mod:`ragcore.api.middleware.provenance`, ``build/policy/edge-trust.json``).
-
-    **Required, with no default and no environment branch.** Every other setting in this module has
-    a defensible empty state; this one does not. An unconfigured vault fails loudly on the first
-    secret it needs, whereas an unconfigured allow-list fails *silently*, by accepting forged
-    identity, and produces a service that looks perfectly healthy. There is therefore no local
-    bypass — which matches how identity is already treated here, since a developer running this
-    process directly must already supply the five ``X-Idp-*`` headers by hand.
-
-    **Not secret material.** A thumbprint is the hash of a public certificate, so it is ordinary
-    configuration rather than a Key Vault reference. Naming it ``*_secret_name`` would wrongly
-    suggest that keeping it quiet was load-bearing.
-    """
-
-    model_config = SettingsConfigDict(env_prefix="SYNTHIA_EDGE_", extra="forbid", frozen=True)
-
-    gateway_certificate_thumbprints: str = ""
-    """SHA-256 hashes of the accepted gateway client certificates, comma-separated.
-
-    Comma-separated because rotation is an overlap: both the outgoing and the incoming hash sit here
-    while APIM is cut over, so there is no instant at which neither is accepted.
-    """
-
-    @field_validator("gateway_certificate_thumbprints")
-    @classmethod
-    def _must_be_hex_digests(cls, value: str) -> str:
-        """Refuse a malformed allow-list at startup rather than at first request.
-
-        Raises:
-            ValueError: When an entry is not a 64-character hex SHA-256 digest. A truncated or
-                colon-formatted thumbprint pasted from a certificate viewer would otherwise match
-                nothing, and a control that matches nothing rejects every request — an outage
-                whose cause is a formatting difference nobody can see.
-        """
-        for entry in value.split(","):
-            candidate = entry.strip().strip('"').replace(":", "").lower()
-            if not candidate:
-                continue
-            if len(candidate) != 64 or any(
-                character not in "0123456789abcdef" for character in candidate
-            ):
-                raise ValueError(
-                    "each gateway certificate thumbprint must be a 64-character hex SHA-256 "
-                    f"digest, got one of length {len(candidate)}"
-                )
-        return value
-
-
 class KeyVaultSettings(BaseSettings):
     """Where secret material comes from. **The only source there is.**
 
@@ -559,7 +505,6 @@ class Settings(BaseSettings):
     """
 
     database: DatabaseSettings
-    edge_trust: EdgeTrustSettings = EdgeTrustSettings()
     key_vault: KeyVaultSettings = KeyVaultSettings()
     messaging: MessagingSettings = MessagingSettings()
     notifications: NotificationSettings = NotificationSettings()

@@ -853,6 +853,62 @@ reference connector. Configuration review does not substitute for traversal.
 - [X] T298 [US6] Provision `synthia-integration-commands` and `synthia-integration-results` as **separate queues**, with role assignments granting RagCore send-on-commands and listen-on-results, and the Integrations Service listen-on-commands and send-on-results — **and nothing more**. `synthia-triggers` is **not** reused: mixing lifecycles makes dead-letter triage ambiguous — Boundary: messaging | Validates: Spec §FR-INTEG-013, Contracts §triggers
 - [X] T323 [US6] Write the APIM routing and direct-route proofs in `integrations/tests/security/test_apim_routing.py` — asserted from the committed registry: the gateway fronts this service on the workload audience, its path is strictly longer than RagCore's so the most specific prefix wins, the role check is a **prefix match rather than a substring one**, and **exactly one API points at this backend and it is not client-facing**. Complements the runtime refusal in `test_boundary.py`: that half would pass on a deployment where APIM never routed here, and this half would pass on a service that accepted anything — Boundary: gateway | Validates: Spec §FR-INTEG-011, §FR-INTEG-012, §13.4
 - [ ] T324 [US6] Wire the worker **processes** and their container definitions — Service Bus receive loops with lock renewal, settlement and graceful drain for `integrations/workers/command_consumer.py` and `ragcore/workers/integration_result_worker.py`, plus the five pre-existing RagCore workers (`outbox_dispatch`, `resume_worker`, `expiry_sweep`, `retention_sweep`, `ingestion_run`), each with a container app that actually runs it. **All seven `main()` functions currently raise `NotImplementedError` by design** and no manifest runs any of them, so nothing consumes any queue in a deployment. This is a **pre-existing platform-wide gap**, not an Integrations one — Boundary: messaging | Validates: Spec §FR-INTEG-013, §FR-EXEC-006, Constitution §Idempotency and messaging
+- [X] T325 [US6] Write the **third** Azure identity enforcer in `integrations/tests/security/test_azure_identity.py` — reads `build/policy/azure-identity.json` rather than restating it, scans `integrations/src` and `integrations/workers` for application-owned credential types, connection-string tokens, DSN passwords and settings fields naming a secret value, and asserts the four resources this service must **never** reach leave no trace in its source. Extend RagCore's parity class from two enforcers to three — Boundary: security | Validates: Spec §FR-INTEG-017, §FR-EXT-016, Constitution P-VIII
+
+> **Remediation — X6, the unscanned credential surface (2026-09-18).** Delivered **T325**.
+>
+> **The one deployable holding every organisation's connector credentials was the one whose source
+> nothing scanned.** `ragcore/tests/security/test_azure_identity.py` scans `PRODUCTION_ROOTS =
+> (ragcore/src, ragcore/workers, ragcore/migrations)` and config globs over `ragcore/**` and
+> `build/**`. `integrations/**` appeared in neither. A `ClientSecretCredential` in
+> `integrations/src` would have passed every gate in the repository.
+>
+> **Being on the workload audience does not cover this, and that was the crux of the exchange.**
+> The Integrations API *is* reached with a workload token through APIM — true, and tested by T323.
+> That rule governs who may **call** the service. These tests govern what the service's own source
+> may **contain**, and a hard-coded client secret is equally a violation on an audience nobody can
+> reach. The two rules are unrelated; only one of them existed.
+>
+> **A third enforcer rather than widening RagCore's globs**, matching the pattern
+> `azure-identity.json` already documented: each deployable enforces the shared registry itself and
+> scans **only its own tree**. Widening RagCore's roots to `*/src` would have had RagCore's suite
+> assert on the Integrations tree — the cross-tree coupling ADR-0001 and ADR-0007 exist to prevent,
+> created for the convenience of a test. The parity test asserts the new enforcer reads the registry
+> **and** scans its own production source, because an enforcer can parse a policy and scan nothing
+> while passing exactly as loudly as one that checked every file.
+>
+> **Two rules in this service are stronger than RagCore's, because they can be.** It constructs
+> **no** Azure credential at all — every client takes an injected one — where RagCore permits
+> `DefaultAzureCredential` in one module. And it asserts the four resources it must never reach
+> (SignalR, AI Search, Foundry, Redis) leave no trace in its source: withholding the role stops the
+> call succeeding, but only a source scan stops the client being written, reviewed and merged.
+>
+> **Fourteen mutations planted, and the first run found two real defects in my own guard.**
+>
+> | Planted | First result | Cause |
+> |---|---|---|
+> | `from azure.search.documents.aio import SearchClient` | **MISSED** | `_names_in` collects the names an import *binds* — `SearchClient` — never the module path, so a marker of `search.documents` could not match. Added `_imported_modules_in`. |
+> | `from azure.messaging.signalr import SignalRClient` | **MISSED** | The predicate was `startswith`, and vendors put the product name **last**. Only packages named after their product were ever caught. Now containment. |
+>
+> Both are exactly the vacuous-pass failure this file exists to prevent, and neither was visible by
+> reading. All fourteen are caught now, with a clean restore: five credential shapes, a settings
+> field, committed configuration, a deliberately broken scan root, and each of the four forbidden
+> resources in both `import` and `from ... import` form.
+>
+> **Also corrected**: `build/policy/azure-identity.json` said "One registry, two enforcers" and
+> named only two. That is **X10**, resolved by the same change — the registry now names all three
+> and records why the Integrations one mattered most.
+>
+> **Gates.** RagCore **1259 passed** (was 1256; +3 parity), Integrations **109 passed** (was 93;
+> +16). Ruff, format and `mypy --strict` clean on both.
+>
+> **Still open from the analysis**: **X5** (no test anywhere references the `synthia_integrations`
+> database principal, so the column-scoped grant behind `FR-INTEG-020` remains unexercised — this
+> is T283 and it is still the top item), **X7** (`edge-trust.json` and
+> `gateway-certificate-expiry.json` still say "BOTH deployables" in the rotation instruction, which
+> is the green-but-dead failure mode), **X8** (T307 needs an audit-table grant no task names),
+> **X9**, **X11**, **X12**.
+
 
 > **Remediation — the asynchronous seam, X1–X4 (2026-09-18).** A drift analysis found **four tasks
 > marked `[X]` whose deliverables did not exist or were never called**. The behaviour now exists and

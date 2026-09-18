@@ -425,16 +425,66 @@ class TestEachResourceIsReachedByManagedIdentity:
 # ---------------------------------------------------------------------------
 
 
-class TestBothPlatformsEnforceTheSamePolicy:
-    """A rule enforced on one stack and not the other decides where insecure code gets written."""
+class TestEveryPlatformEnforcesTheSamePolicy:
+    """A rule enforced on one stack and not another decides where insecure code gets written.
+
+    **Three enforcers now, not two** (ADR-0007). The class was
+    ``TestBothPlatformsEnforceTheSamePolicy`` and asserted only the .NET half, which meant the
+    Integrations Service — the one deployable holding every organisation's connector credentials —
+    was the one whose source nothing scanned. Renamed rather than extended in place so the count is
+    visible in the name: "both" is the word that went stale, and it went stale silently.
+
+    Each enforcer scans **only its own tree**. None reads another's files, so adding a third cost no
+    cross-tree dependency — which is what makes this pattern extensible rather than a facade over
+    one shared scanner.
+    """
 
     def test_the_dotnet_enforcer_exists(self) -> None:
-        """Its absence would mean this policy covers half the platform."""
+        """Its absence would mean this policy covers part of the platform."""
         enforcer = ROOT / "dotnet" / "tests" / "Synthia.ArchitectureTests" / "AzureIdentityTests.cs"
         assert enforcer.is_file(), (
-            "the .NET half of the Azure identity rule is missing. Both deployables reach Azure "
-            "resources; a rule that only binds RagCore is not a platform rule."
+            "the .NET half of the Azure identity rule is missing. All three deployables reach "
+            "Azure resources; a rule that only binds RagCore is not a platform rule."
         )
+
+    def test_the_integrations_enforcer_exists(self) -> None:
+        """The third one, and the one whose absence mattered most.
+
+        This service holds the Key Vault role for ``secret:synthia-connector-*`` and is the only
+        component with an egress path to a customer system. Until its enforcer existed, a
+        ``ClientSecretCredential`` in ``integrations/src`` would have passed every gate here.
+        """
+        enforcer = ROOT / "integrations" / "tests" / "security" / "test_azure_identity.py"
+        assert enforcer.is_file(), (
+            "the Integrations half of the Azure identity rule is missing. It is the deployable "
+            "that holds per-organisation connector credentials, so an application-owned credential "
+            "there has the largest blast radius on the platform."
+        )
+
+    def test_the_integrations_enforcer_reads_the_shared_registry(self) -> None:
+        """Not a reimplementation of it — the same file, so the three cannot disagree."""
+        enforcer = ROOT / "integrations" / "tests" / "security" / "test_azure_identity.py"
+        source = enforcer.read_text(encoding="utf-8")
+        assert "azure-identity.json" in source, (
+            "the Integrations enforcer does not read build/policy/azure-identity.json. Three "
+            "hand-maintained lists drift faster than two, and the drift is invisible until the "
+            "weakest one is the one that mattered."
+        )
+
+    def test_the_integrations_enforcer_scans_its_own_production_source(self) -> None:
+        """**Reading the registry is not the same as scanning a tree.**
+
+        An enforcer could parse the policy, assert the registry is well formed, and scan nothing —
+        passing exactly as loudly as one that checked every file. This asserts the scan roots are
+        that deployable's own shipping code, and that tests are excluded from them.
+        """
+        enforcer = ROOT / "integrations" / "tests" / "security" / "test_azure_identity.py"
+        source = enforcer.read_text(encoding="utf-8")
+
+        assert '"integrations" / "src"' in source
+        assert '"integrations" / "workers"' in source
+        # And it does not scan RagCore's tree: each enforcer covers only its own.
+        assert '"ragcore"' not in source
 
     def test_the_dotnet_enforcer_reads_the_shared_registry(self) -> None:
         """Not a reimplementation of it — the same file, so the two cannot disagree."""
@@ -445,8 +495,16 @@ class TestBothPlatformsEnforceTheSamePolicy:
             "lists drift, and the drift is invisible until the weaker one is the one that mattered."
         )
 
-    def test_both_enforcers_cover_every_registered_resource(self, policy: dict[str, Any]) -> None:
-        """Each resource id appears in the .NET enforcer's parametrised coverage."""
+    def test_the_dotnet_enforcer_covers_every_registered_resource(
+        self, policy: dict[str, Any]
+    ) -> None:
+        """Each resource id appears in the .NET enforcer's parametrised coverage.
+
+        **Every** resource, because the monolith's rule is that it reaches almost none of them and
+        the registry is where that is stated. The Integrations enforcer is checked differently and
+        deliberately: it names the four it reaches and asserts the other four leave no trace in its
+        source, which is a stronger claim than naming all eight.
+        """
         enforcer = ROOT / "dotnet" / "tests" / "Synthia.ArchitectureTests" / "AzureIdentityTests.cs"
         source = enforcer.read_text(encoding="utf-8")
         missing = [

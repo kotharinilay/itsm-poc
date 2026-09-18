@@ -1,0 +1,188 @@
+# Azure Container Apps configuration for the Synthia Integrations Service (ADR-0007, §21.6).
+#
+# The third sibling of ragcore.yaml and monolith.yaml, and deliberately the same shape where the
+# shape is a control: the ingress block is identical on all three, because the trust boundary must
+# not be easier to satisfy on one deployable than another. A rule that is cheaper to meet on one
+# stack decides where the insecure code gets written.
+#
+# WHAT IS DIFFERENT HERE, AND WHY. This is the only deployable that holds connector credentials and
+# the only one with an egress path to customer systems. Two consequences appear below and nowhere
+# else in the platform:
+#
+#   1. The Key Vault reference for CONNECTOR secrets is bound to this identity. The same reference
+#      is NOT bound to RagCore's — the role was withdrawn from it, not duplicated. That withdrawal
+#      is what makes SC-DEMO-020 provable by attempting the resolution from RagCore and observing
+#      Key Vault refuse.
+#   2. There is no SignalR, no AI Search, no AI Gateway and no model endpoint configured. This
+#      service does no reasoning and delivers no notification; adding any of them is an
+#      architectural change, not a configuration one.
+#
+# Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret: every
+# secret arrives as a secret-reference environment variable resolved from Key Vault through the
+# managed identity (constitution §Configuration).
+
+apiVersion: 2024-03-01
+type: Microsoft.App/containerApps
+name: synthia-integrations
+
+identity:
+  # User-assigned managed identity, DISTINCT from RagCore's. Zero standing secrets: the application
+  # holds nothing that could be exfiltrated and replayed, because it holds nothing.
+  #
+  # This identity alone carries the Key Vault role for per-organisation connector secrets
+  # (build/infra/identity/managed-identities.json).
+  type: UserAssigned
+  userAssignedIdentities:
+    ${MANAGED_IDENTITY_RESOURCE_ID}: {}
+
+properties:
+  managedEnvironmentId: ${CONTAINER_APP_ENVIRONMENT_ID}
+
+  configuration:
+    activeRevisionsMode: Single
+
+    ingress:
+      # Internal only. Front Door with WAF is the sole public edge and APIM is the API trust
+      # boundary; no application API is reachable by a path that bypasses the gateway. External
+      # ingress here would be exactly that path — and on this service it would be a public route to
+      # the component holding every customer's connector credentials.
+      external: false
+      targetPort: 8000
+      transport: http
+      allowInsecure: false
+
+      # GATEWAY PROVENANCE. `require` means ingress rejects a connection presenting no client
+      # certificate and republishes the one it validated. Because ingress sets that header itself, a
+      # caller cannot forge it — which is what lets ProvenanceMiddleware treat the hash as evidence
+      # rather than as input.
+      #
+      # `accept` would be worse than useless: it forwards a certificate when one is offered and
+      # nothing when one is not, so every unauthenticated caller would look identical to a correctly
+      # configured one that had simply not been given a certificate yet.
+      clientCertificateMode: require
+
+    secrets:
+      - name: database-dsn
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-integrations-database-dsn
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
+      # Application Insights. A connection string carries an instrumentation key, which is a WRITE
+      # credential for a telemetry workspace: hold it and you can inject telemetry into somebody
+      # else's dashboards. A Key Vault reference like any other credential.
+      - name: applicationinsights-connection-string
+        keyVaultUrl: ${KEY_VAULT_URI}/secrets/synthia-appinsights-connection-string
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
+    registries:
+      - server: ${CONTAINER_REGISTRY}
+        identity: ${MANAGED_IDENTITY_RESOURCE_ID}
+
+  template:
+    # THE DRAIN IS A GRACE PERIOD, NOT A GUARANTEE. Twenty-five seconds, the number the plan fixes
+    # for every deployable rather than one chosen per service.
+    #
+    # What happens when it elapses is stated rather than hoped about, and it differs from RagCore's
+    # because this service does not hold the claim:
+    #
+    #   - An API replica stops accepting requests and finishes those in flight. It holds no claim,
+    #     so nothing is at risk.
+    #   - A command-consumer replica PRE-EXECUTION: the message returns to the queue, another
+    #     replica takes it, and the DERIVED IDEMPOTENCY KEY absorbs the duplicate. The claim in
+    #     RagCore absorbs it too — both boundaries are in play and both are required.
+    #   - A command-consumer replica MID-EXECUTION, drain elapsed: the external effect may already
+    #     have happened. The execution record is written before the result is published, so the
+    #     attempt is durable; the work item stays claimed and NON-RETRIABLE, surfaces as
+    #     approved-but-not-executed, and recovers only through FRESH AUTHORIZATION. It is never
+    #     silently re-fired, and a drain elapsing is never a reason to re-fire it.
+    #
+    # A LONGER DRAIN WOULD NOT FIX THAT. It would widen the window in which a replica is neither
+    # serving nor gone. The real control is the explicit timeout on every outbound call: an
+    # execution that cannot finish inside the drain is one whose timeout was set wrong.
+    terminationGracePeriodSeconds: 25
+
+    containers:
+      - name: synthia-integrations
+        # Digest-pinned, never a floating tag. A tag is a pointer somebody else can move.
+        image: ${CONTAINER_REGISTRY}/synthia-integrations@${IMAGE_DIGEST}
+
+        resources:
+          # Explicit limits, not defaults. An unbounded container takes the node down with it rather
+          # than failing on its own. Smaller than RagCore's: this service holds no graph state and
+          # runs no model client.
+          cpu: 1.0
+          memory: 2Gi
+
+        probes:
+          # Process-only. A liveness probe that consulted a dependency would restart a healthy
+          # process because something else was down, turning one outage into two.
+          - type: Liveness
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+
+          # PLATFORM dependencies only — the durable store, the message transport, the secret store.
+          # NEVER an external customer system (FR-INTEG-026). A readiness probe that failed on a
+          # ServiceNow outage would remove capacity at exactly the moment the fallback path needs
+          # it, and because readiness drives scaling it would scale the platform toward zero for
+          # every other organisation. That is the noisy-neighbour failure arriving through the back
+          # door.
+          - type: Readiness
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+        env:
+          - name: SYNTHIA_INTEGRATIONS_ENVIRONMENT
+            value: ${SYNTHIA_ENVIRONMENT}
+
+          - name: SYNTHIA_INTEGRATIONS_PERSISTENCE__DSN
+            secretRef: database-dsn
+          - name: SYNTHIA_INTEGRATIONS_PERSISTENCE__SCHEMA_NAME
+            value: integration
+
+          # Entra authentication only. There is no connection-string setting for Service Bus and
+          # there will not be one.
+          - name: SYNTHIA_INTEGRATIONS_SERVICE_BUS__NAMESPACE
+            value: ${SERVICE_BUS_NAMESPACE}
+          - name: SYNTHIA_INTEGRATIONS_SERVICE_BUS__COMMAND_QUEUE
+            value: synthia-integration-commands
+          - name: SYNTHIA_INTEGRATIONS_SERVICE_BUS__RESULT_QUEUE
+            value: synthia-integration-results
+
+          # The vault this service resolves CONNECTOR credential references against. RagCore has no
+          # role on these secrets.
+          - name: SYNTHIA_INTEGRATIONS_SECRETS__VAULT_URL
+            value: ${KEY_VAULT_URI}
+
+          # A DISTINCT service name. FR-DEMO-028 requires this service to be identifiable as its own
+          # telemetry source while the platform's single correlation identifier still spans the
+          # journey — a distinct source and a shared identifier are two different things and both
+          # are required.
+          - name: SYNTHIA_INTEGRATIONS_OBSERVABILITY__SERVICE_NAME
+            value: synthia-integrations
+
+          # The secret NAME, not the value.
+          - name: SYNTHIA_INTEGRATIONS_OBSERVABILITY__CONNECTION_STRING_SECRET_NAME
+            value: synthia-appinsights-connection-string
+
+          - name: SYNTHIA_INTEGRATIONS_OBSERVABILITY__SAMPLE_RATIO
+            value: ${TRACE_SAMPLE_RATIO}
+
+          # GATEWAY CERTIFICATE ALLOW-LIST. Rotation is an OVERLAP and the order is the control:
+          # widen the allow-list on every deployable BEFORE repointing APIM
+          # (docs/runbooks/rotate-gateway-certificate.md). The reverse order is a total outage on
+          # whichever backend was missed — and because health probes are exempt from provenance,
+          # that backend stays green while serving nothing.
+          #
+          # AN EMPTY VALUE FAILS THE PROCESS AT START. That is deliberate: an unconfigured vault
+          # fails loudly at first use, but an unconfigured allow-list would fail silently by
+          # accepting forged identity, because at request time an empty set is indistinguishable
+          # from "trust everything".
+          - name: SYNTHIA_INTEGRATIONS_EDGE_TRUST__GATEWAY_CERTIFICATE_THUMBPRINTS
+            value: ${GATEWAY_CERTIFICATE_THUMBPRINTS}

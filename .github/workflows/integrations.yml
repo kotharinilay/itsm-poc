@@ -1,0 +1,94 @@
+name: integrations
+
+# The Synthia Integrations Service (ADR-0007, specification §21.6).
+#
+# A THIRD PIPELINE, NOT A BRANCH OF RAGCORE'S. The two services are separate deployables with
+# separate lockfiles and separate virtual environments; a shared job would make one fail because the
+# other changed, which is the coupling the separation exists to avoid.
+#
+# Constitution §Python baseline: CI runs strict type checking and pytest as FAILING steps.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'integrations/**'
+      - 'build/docker/integrations.Dockerfile'
+      - '.github/workflows/integrations.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  lint-type-test:
+    name: ruff, mypy, pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: integrations/uv.lock
+
+      # --frozen: the lockfile is authoritative. A dependency change that was not committed fails
+      # here rather than resolving to something nobody reviewed.
+      - name: Sync (locked)
+        run: uv sync --all-groups --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      # The Ruff formatter is authoritative (constitution §Python baseline).
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: mypy --strict
+        run: uv run mypy
+
+      - name: pytest
+        run: uv run pytest -q
+
+  boundary:
+    name: no dependency on RagCore
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A SECOND CHECK OF THE SAME RULE, AND NOT REDUNDANT. The architecture test in
+      # integrations/tests/architecture/ fails the suite; this fails the build even when the suite
+      # is skipped, filtered or newly broken. The rule — that the two Python deployables share no
+      # import and no library — is the one whose violation would be invisible to every network and
+      # gateway check, because it never crosses a wire.
+      - name: Deployable boundaries
+        run: bash build/scripts/check-boundaries.sh
+
+  image:
+    name: container build
+    runs-on: ubuntu-latest
+    needs: [lint-type-test]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build only — never pushed from a pull request. The production digest is pinned and promoted
+      # separately; a tag built here is a pointer somebody else could move.
+      #
+      # The runtime stage carries a PLACEHOLDER digest until one is resolved and reviewed, so this
+      # step builds the BUILD stage alone. That is deliberate: a plausible-looking digest invented
+      # to make CI green would be indistinguishable from a reviewed one, and the point of pinning is
+      # that somebody looked.
+      - name: Build (build stage)
+        run: |
+          docker build \
+            --file build/docker/integrations.Dockerfile \
+            --target build \
+            --tag synthia-integrations:ci \
+            .

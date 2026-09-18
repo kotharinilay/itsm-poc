@@ -105,6 +105,58 @@ check ".NET configures an HTTP client targeting RagCore" \
 check "RagCore configures an HTTP client targeting the monolith" \
   '(BaseAddress|base_?[Uu]rl).{0,80}(synthia-api|synthia\.api)' ragcore '*.py' '*.toml' '*.json'
 
+# ------------------------------------- Integrations Service boundary (ADR-0007, spec 21.6)
+# The Integrations Service is a THIRD deployable, parallel to RagCore. RagCore reaches it two ways
+# and no other: synchronously through APIM, asynchronously over Service Bus. Neither imports the
+# other.
+#
+# THIS IS THE ONE VIOLATION NO NETWORK OR GATEWAY CHECK COULD SEE, because an import never crosses
+# a wire. The edge guard proves no direct HTTP route exists; only this proves no direct LINKAGE
+# does.
+
+check "Integrations imports RagCore" \
+  '^[[:space:]]*(from|import)[[:space:]]+ragcore([.[:space:]]|$)' integrations '*.py'
+
+check "RagCore imports the Integrations Service" \
+  '^[[:space:]]*(from|import)[[:space:]]+integrations([.[:space:]]|$)' ragcore '*.py'
+
+check "Integrations declares a RagCore dependency" \
+  '^[[:space:]]*"?ragcore"?[[:space:]]*[=><~]' integrations '*.toml'
+
+check "RagCore declares an Integrations dependency" \
+  '^[[:space:]]*"?integrations"?[[:space:]]*[=><~]' ragcore '*.toml'
+
+check ".NET build files reference the Integrations Service" \
+  'synthia[._-]integrations' dotnet '*.csproj' '*.sln' '*.props' '*.targets'
+
+# A SHARED LIBRARY IS THE SAME COUPLING WEARING A FRIENDLIER NAME. Constitution Principle VI:
+# duplication across a boundary is cheaper than a false shared contract. The two services duplicate
+# their correlation middleware, problem-details shape, settings base and telemetry setup on purpose,
+# and the tempting fix — extracting `synthia_common` — would be a build-level dependency between
+# deployables required to have none.
+check "A shared Synthia Python package is imported" \
+  '^[[:space:]]*(from|import)[[:space:]]+synthia(_common|_shared)?([.[:space:]]|$)' \
+  integrations '*.py'
+
+check "A shared Synthia Python package is imported by RagCore" \
+  '^[[:space:]]*(from|import)[[:space:]]+synthia(_common|_shared)([.[:space:]]|$)' ragcore '*.py'
+
+# Specification 13.4 again: a base address naming the other deployable is a direct route, however it
+# is spelled. RagCore reaches Integrations through APIM or not at all.
+check "RagCore configures an HTTP client targeting Integrations directly" \
+  '(BaseAddress|base_?[Uu]rl).{0,80}synthia[._-]integrations' ragcore '*.py' '*.toml' '*.json'
+
+check "Integrations configures an HTTP client targeting RagCore" \
+  '(BaseAddress|base_?[Uu]rl).{0,80}(ragcore|synthia-api|synthia\.api)' \
+  integrations '*.py' '*.toml' '*.json'
+
+# THE INTEGRATIONS SERVICE DOES NO REASONING (FR-INTEG-007). It reaches no model provider and no AI
+# Gateway; model egress and content safety stay in RagCore because they are reasoning, not
+# integration. A model client here would be a second, ungoverned model egress outside the AI
+# Gateway's metering, budgets and content safety.
+check "Integrations declares a model or graph dependency" \
+  '^[[:space:]]*"?(langgraph|openai|azure-ai-[a-z]+|anthropic)' integrations '*.toml'
+
 # ------------------------------------------- the monolith owns no schema (ADR-0001, ADR-0003)
 #
 # Scoped to dotnet/src, and that is the same deferral this script already makes for RagCore prose
@@ -126,12 +178,16 @@ fi
 # ---------------------------------------------------------------- result
 if [ "$violations" -gt 0 ]; then
   printf '\nBoundary check FAILED with %d violation(s).\n' "$violations"
-  echo "The two deployables meet only at PostgreSQL (versioned views) and Service Bus (opaque"
-  echo "triggers). If this dependency is genuinely needed it requires an ADR amending ADR-0001 -"
-  echo "not a suppression here."
+  echo "RagCore and the monolith meet only at PostgreSQL (versioned views) and Service Bus (opaque"
+  echo "triggers), with no application dependency in either direction. RagCore reaches the"
+  echo "Integrations Service only through APIM and Service Bus, and the Integrations Service never"
+  echo "calls back. If a dependency here is genuinely needed it requires an ADR amending ADR-0001"
+  echo "or ADR-0007 - not a suppression here."
   exit 1
 fi
 
 printf '  \xe2\x9c\x93 No cross-deployable dependency found.\n'
+printf '  \xe2\x9c\x93 No shared Python package between the two services.\n'
+printf '  \xe2\x9c\x93 Integrations declares no model or graph dependency.\n'
 printf '  \xe2\x9c\x93 The monolith owns no schema.\n'
 exit 0

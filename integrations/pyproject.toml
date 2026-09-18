@@ -1,0 +1,146 @@
+[project]
+name = "integrations"
+version = "0.1.0"
+description = "Synthia Integrations Service — the tool catalogue, the connector registry, and all traffic to external systems"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+
+# THE INTEGRATIONS SERVICE IS A SEPARATE DEPLOYABLE (ADR-0007, specification §21.6).
+#
+# It is parallel to RagCore, not part of it. RagCore reaches it through APIM (synchronous) and
+# Service Bus (asynchronous), and reaches no external system itself.
+#
+# NEITHER PROJECT DEPENDS ON THE OTHER, AND NO SHARED LIBRARY EXISTS BETWEEN THEM. The
+# correlation middleware, the problem-details shape, the settings base and the telemetry setup
+# below are DUPLICATED from RagCore deliberately. Constitution Principle VI: DRY applies within a
+# module boundary, and duplication across boundaries is cheaper than a false shared contract. A
+# `synthia-common` package would be a build-level dependency between two deployables required to
+# have none — and it would not appear as a cross-tree path, so `build/scripts/check-boundaries.sh`
+# could not catch it. The duplication is the cheaper error, and it is the one we take.
+#
+# WHAT THIS SERVICE DELIBERATELY DOES NOT DEPEND ON:
+#   langgraph            — it does no reasoning and holds no graph (FR-INTEG-007)
+#   langgraph-checkpoint — it holds no orchestration state
+#   azure-ai-*, openai   — it reaches no model provider and no AI Gateway
+#   redis                — it caches nothing; Redis is authoritative for nothing and this service
+#                          has no transient-coordination need of its own
+# Adding any of them is an architectural change, not a dependency bump.
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.53",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.31",
+    "azure-servicebus>=7.14",
+    "azure-identity>=1.25",
+    "azure-keyvault-secrets>=4.11",
+    # The async Azure SDK clients need an async transport. Declared explicitly for the same reason
+    # RagCore declares it: without it `azure.identity.aio` fails at first use with a message that
+    # names neither the caller nor the cause.
+    "aiohttp>=3.10",
+    "httpx>=0.28",
+    "mcp>=2.2",
+    "opentelemetry-api>=1.44",
+    "opentelemetry-sdk>=1.44",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "azure-monitor-opentelemetry>=1.8",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16",
+    "mypy>=2.3",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "testcontainers[postgres]>=4.15",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/integrations"]
+
+# ---------------------------------------------------------------------------
+# Ruff — constitution §Python baseline. The FORMATTER IS AUTHORITATIVE.
+# Identical selection to RagCore's, because the constitution names one selection for the
+# repository rather than one per project.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "workers"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "UP", "S", "PTH", "SIM", "ASYNC", "DTZ", "N"]
+
+# Blanket ignores MUST NOT be committed. Suppression is a justified `# noqa: <code>` on the
+# specific line. This list is deliberately empty and stays that way.
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+# S101 (assert) — the constitution permits `assert` in tests and prohibits it everywhere else.
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+# `ragcore` is not importable from here, and this is the first of three places that says so —
+# the others are `integrations/tests/architecture/test_layering.py` and
+# `build/scripts/check-boundaries.sh`. Three checks because this one is advisory at lint time,
+# the test fails the suite, and the script fails CI even when the test is not run.
+banned-module-level-imports = ["ragcore"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"ragcore".msg = "The Integrations Service MUST NOT import RagCore. They are separate deployables meeting only at APIM and Service Bus (ADR-0007)."
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# mypy — strict, and CI runs it as a failing step.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+# Pydantic ships its own mypy plugin, and without it `Field(default_factory=...)` on a nested
+# settings model is misresolved — mypy infers the factory's return as `Never` and rejects a
+# correct declaration. Enabling the plugin is the supported fix; the alternative would have been
+# a `type: ignore` on every nested settings field, which would suppress real errors alongside the
+# spurious one.
+plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+warn_no_return = true
+disallow_any_unimported = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+show_error_codes = true
+pretty = true
+files = ["src", "workers", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["testcontainers.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "integration: requires a real collaborator (database, messaging) via Testcontainers",
+    "isolation: proves no path returns another organisation's data",
+    "idempotency: proves at-least-once delivery produces exactly one effect",
+    "concurrency: proves concurrent claims resolve to one outcome",
+    "security: proves a documented prohibition is actually unreachable",
+    "architecture: proves a module boundary or a banned dependency",
+    "e2e: a representative journey through every layer",
+]

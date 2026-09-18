@@ -1,6 +1,68 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.2.0 -> 4.0.0
+
+Bump rationale: MAJOR, and this is the uncomfortable kind. The versioning policy reserves MAJOR for
+"removing or redefining a principle, or RELAXING A NON-NEGOTIABLE". Nothing here is removed or
+redefined — but Principle I is, in practice, not met in full, and this amendment is the act of
+admitting that in the file the reviewers read. Recording a deviation from a non-negotiable is the
+same severity as relaxing one, and grading it lower to keep the number small would be exactly the
+silent divergence the Amendment procedure calls a defect.
+
+WHAT CHANGED, and what deliberately did not:
+
+  1. NEW SECTION "Recorded deviations" under Governance, with its own rules: an entry is added only
+     by the Amendment procedure at the severity it earns, names the principle, the deciding record,
+     the consequence in plain terms and the removal condition, is never widened by implication, and
+     is deleted only when the deviation actually ends.
+
+  2. NEW ENTRY D-01 — Gateway-to-backend provenance is not proved (open). ADR-0008 deferred the
+     APIM client certificate, the ingress requirement, the forwarded hash and the backend allow-list
+     in full, with NO replacement. Consequence recorded without softening: a caller already inside
+     the container apps environment can reach a backend directly, present an X-Idp-* contract of its
+     own choosing, and be believed — it can name any organisation and any role, and tenant
+     isolation, authorization and audit all sit downstream of that contract.
+
+  3. Principle I — TEXT UNCHANGED. A pointer to D-01 is added after the gateway clause so a reader
+     cannot finish the principle believing it is currently true. The rule stays as written because
+     it remains the target; what changed is the platform, not the standard.
+
+  4. Principle VIII — TEXT UNCHANGED. A pointer to D-01 is added after the hard-failure list,
+     naming the two failures ("tenant context derived from an untrusted client field",
+     "authorization bypass") that no longer have a test that fails when the protection is removed.
+
+  5. Development Workflow, "Coverage" — OBLIGATION UNCHANGED. Records that the behavioural gate is
+     NOT met for that pair, and warns against writing a test that appears to meet it by asserting
+     something weaker. A gate stated as absolute while one case silently fails it is worse than a
+     gate with a named hole.
+
+WHY NOT FIX IT INSTEAD OF RECORDING IT. The Amendment procedure offers exactly two ways out —
+correct the practice, or amend here. Correcting the practice means re-implementing the mechanism,
+which ADR-0008's re-entry condition forbids without the architecture and security decision being
+revisited and explicitly approved. Until that happens, recording is the only honest option
+available, and leaving it unrecorded was not one.
+
+NOTHING IS LICENSED BY THIS AMENDMENT. D-01 states its own limits: no public backend exposure, no
+weakening of APIM's deletion of the inbound contract, no token parsing in a service, and no
+substitute credential on that hop — a shared secret, API key, bearer header or application-generated
+provenance token is refused by ADR-0008 as strictly worse than the certificate it would replace.
+Tests in both stacks assert the absence, so the gap cannot be quietly filled instead of decided.
+
+Migration path for work in flight: none at the code level. This document follows a decision already
+implemented in commit f09bafd; it creates no new obligation and invalidates no completed work. Tasks
+T233a-T233f and T230a are already retired [D] in specs/001-platform-scaffold/tasks.md and stay
+retired — this amendment does not reopen them, and completing it must not be read as licence to.
+
+Related records, already consistent and not amended here: ADR-0008 (the deciding record);
+docs/adr/README.md (indexed, with the open item); spec.md (FR-IDENT-012 and SC-DEMO-003b both marked
+DEFERRED); plan.md (§Deferred from Active Implementation); build/policy/edge-trust.json (the hop
+declares applicationControlStatus "deferred" with no replacement).
+
+PRINCIPLE NUMBERING UNCHANGED. Roman numerals I-X keep their numerals and meanings.
+
+-- 3.2.0 report retained below --
+
 Version change: 3.1.0 -> 3.2.0
 
 Bump rationale: MINOR. The Principle V realization statement is updated to describe three
@@ -181,6 +243,12 @@ authorization.
 
 Front Door with WAF is the sole public edge; APIM is the API trust boundary. No application API is
 reachable by a path that bypasses the gateway.
+
+> ⚠️ **This principle is not currently met in full — see [D-01](#d-01--gateway-to-backend-provenance-is-not-proved-open).**
+> Gateway-to-backend provenance is deferred with no replacement (ADR-0008), so a caller already
+> inside the services' network can reach a backend directly and supply its own `X-Idp-*` contract.
+> The rule above is unchanged and remains the target; D-01 records that practice departs from it,
+> the consequence, and what must happen before the deviation ends.
 
 *Rationale:* A single derivation point is the only structure in which authority can be audited and
 cannot be forged by a compromised surface, a misbehaving agent, or an untrusted message.
@@ -419,6 +487,12 @@ idempotent.
 required authority; authorization bypass; execution caused by untrusted model output; duplicate
 consequential execution from a retry; approval bypass; tenant context derived from an untrusted client
 field.
+
+> ⚠️ **Two of those hard failures currently have no test that fails when the protection is removed —
+> see [D-01](#d-01--gateway-to-backend-provenance-is-not-proved-open).** *Tenant context derived from
+> an untrusted client field* and *authorization bypass* were proved at the backend by gateway
+> provenance, which is deferred with no replacement (ADR-0008). The protection is gone, so no such
+> test can exist. The §Coverage obligation below is unchanged and is **not** satisfied for this pair.
 
 *Rationale:* A platform acting agentically inside customer tenants is accountable for what it did. That
 evidence must be a by-product of the design, not reconstructed later.
@@ -734,6 +808,13 @@ percentage target would be satisfiable without any of that, and would reward exe
 proving a guarantee. Coverage MAY be measured and reported as information; it MUST NOT become a gate
 without amending this section.
 
+**One recorded exception, and it is a gap rather than a carve-out.** Two Principle VIII hard failures
+— *tenant context derived from an untrusted client field* and *authorization bypass* — have no such
+test at the backend, because the protection they tested was deferred and not replaced. See
+[D-01](#d-01--gateway-to-backend-provenance-is-not-proved-open). The obligation above is unchanged;
+it is simply **not met** for that pair, and no test should be written that appears to meet it by
+asserting something weaker.
+
 ### Quality gate
 
 No implementation phase is complete unless **all** of the following hold: the code builds; tests pass;
@@ -809,4 +890,79 @@ Runtime development guidance for agents and contributors derives from this const
 `Synthia-Platform-Specification.md`; where a guidance file disagrees with either, the authoritative
 artefact for that axis wins.
 
-**Version**: 3.2.0 | **Ratified**: 2026-09-15 | **Last Amended**: 2026-09-18
+### Recorded deviations
+
+**A deviation recorded here is a rule this platform currently does not meet.** It is not an
+exemption, not a reinterpretation, and not a second way of satisfying the principle. The rule above
+stands exactly as written; what this section records is that practice has departed from it, on whose
+decision, with what consequence, and what must happen before the deviation ends.
+
+This section exists because the Amendment procedure forbids the alternative: *"Silent divergence is a
+defect: practice that has drifted is corrected in the practice or amended here, never left
+undocumented."* A deviation that lives only in an ADR is invisible to a reviewer reading this file,
+and a reviewer reading a principle has to be able to see that it is not currently true.
+
+**Rules for this section.** An entry is added only by the Amendment procedure, with the version bump
+its severity earns — relaxing a non-negotiable is MAJOR. Every entry names the principle, the
+deciding record, the consequence in plain terms, and the condition under which it is removed. An
+entry is deleted only when the deviation actually ends, and its removal is itself an amendment.
+**An entry is never widened by implication**: it licenses exactly what it describes and nothing
+adjacent.
+
+#### D-01 — Gateway-to-backend provenance is not proved *(open)*
+
+| | |
+|---|---|
+| **Principles not met** | **I** (Identity Is Derived Once, Authority Is Never Asserted); **VIII** + **§Coverage** (Provable by Audit and by Test) |
+| **Decided by** | [ADR-0008 — Defer certificate-based gateway-to-backend provenance](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md), 2026-09-18 |
+| **Also recorded in** | `specs/001-platform-scaffold/spec.md` (`FR-IDENT-012`, `SC-DEMO-003b` — both marked DEFERRED); `specs/001-platform-scaffold/plan.md` §Deferred from Active Implementation; `build/policy/edge-trust.json` |
+| **Status** | Open. No end date. |
+
+**What the principles say, and what is actually true.**
+
+Principle I states that *"No application API is reachable by a path that bypasses the gateway"* and
+that *"A client-supplied tenant, role or audience MUST NEVER establish authority."* The mechanism
+that made the second of these true at the backend — APIM presenting a client certificate, Container
+Apps ingress validating it, and each backend refusing any request whose forwarded certificate hash
+was not allow-listed — is deferred in full by ADR-0008, and **nothing replaced it**.
+
+Principle VIII names *"tenant context derived from an untrusted client field"* and *"authorization
+bypass"* among the hard failures, and §Coverage requires that *"every protection named as a hard
+failure in Principle VIII must have a test that fails when the protection is removed."* The tests
+that discharged that requirement for this pair — `ragcore/tests/security/test_gateway_provenance.py`,
+`dotnet/tests/Synthia.ContractTests/GatewayProvenanceTests.cs`, and the self-supplied-contract case
+in `integrations/tests/security/test_boundary.py` — were deleted along with the protection itself.
+**No such test can exist while this deviation is open**, because there is no protection left for one
+to remove. §Coverage is therefore not satisfiable for these two hard failures, and that is stated
+here rather than left as a gate a future reviewer would read as met.
+
+**The consequence, in plain terms.** A caller positioned inside the container apps environment — a
+compromised sidecar, a misconfigured job, a second container app — can reach any backend directly,
+present an `X-Idp-*` contract of its own choosing, and be believed. It can name any organisation and
+any role. Tenant isolation, authorization and audit all sit *downstream* of that contract and will
+faithfully enforce decisions taken from a forged identity. **This must not be described as
+mitigated, compensated, or defence in depth.**
+
+**What still holds, and its limit.** APIM remains the API trust boundary and still deletes every
+inbound copy of the contract before validation, so no caller *outside* the platform can smuggle one
+through the gateway. Container Apps ingress remains internal-only on every application container
+app, with no public FQDN, and external ingress remains prohibited and guarded. Together these mean
+the attack requires a foothold inside the environment. That is a real barrier and it is **the whole
+of the barrier** — a first control, not a second one.
+
+**What this entry does NOT license.** It is not permission to expose a backend publicly, to weaken
+APIM's deletion of the inbound contract, to let a service parse a token, or to introduce a
+substitute credential on this hop. A shared secret, API key, bearer header or
+application-generated provenance token is **explicitly refused** by ADR-0008 as strictly worse than
+the certificate it would replace: a replayable bearer value that appears in every header-capturing
+log. Tests in both stacks assert the absence — no backend may declare a credential, and any chain
+hop lacking an application control must declare it deferred against an existing ADR with no
+replacement.
+
+**Removal condition.** This entry is deleted when gateway-to-backend provenance is actually proved.
+Per ADR-0008's re-entry condition that requires: the architecture and security decision revisited
+and explicitly approved; the operational owner of the credential's lifecycle named; and ADR-0008
+superseded by a new record, not amended in place. Deleting this entry is an amendment in its own
+right and carries its own version bump.
+
+**Version**: 4.0.0 | **Ratified**: 2026-09-15 | **Last Amended**: 2026-09-18

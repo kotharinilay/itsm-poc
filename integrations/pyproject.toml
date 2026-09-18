@@ -130,6 +130,13 @@ ignore_missing_imports = true
 minversion = "9.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# `workers/` is a TOP-LEVEL package beside `src/`, not part of the `integrations` package, and both
+# Dockerfiles copy it to `/app/workers` — so `import workers.command_consumer` is exactly how the
+# module resolves at runtime. Declared explicitly rather than relying on rootdir insertion: this
+# suite's test directories are not packages, so pytest would otherwise put only the test file's own
+# directory on the path and the worker would be untestable. RagCore gets the same effect from having
+# `tests/__init__.py`; stating it here is the same decision made visibly.
+pythonpath = ["."]
 addopts = [
     "--strict-markers",
     "--strict-config",

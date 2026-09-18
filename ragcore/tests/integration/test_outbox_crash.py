@@ -31,7 +31,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from workers.outbox_dispatch import dispatch_once, envelope_from_row
 
-from ragcore.domain.envelopes import TriggerKind
+from ragcore.domain.envelopes import TriggerEnvelope, TriggerKind
 from ragcore.domain.identifiers import EntraTenantId, TenantId, WorkItemId
 from ragcore.domain.tenancy import TenantContext, TenantStatus
 from ragcore.domain.work import ApprovalState, SessionState, WorkItemState
@@ -286,5 +286,9 @@ class TestAFailingTransportDoesNotLoseTheRow:
 
         assert set(rows[0].payload) == {"workItemId", "correlationId"}
         envelope = envelope_from_row(rows[0])
+        # Narrowed explicitly. `envelope_from_row` now returns a trigger OR an integration command,
+        # and asserting the type is what makes this test still about a trigger — without it the
+        # `work_item_id` access below would be the one line that quietly stopped type-checking.
+        assert isinstance(envelope, TriggerEnvelope)
         assert envelope.work_item_id == organisation["work_item_id"]
         assert envelope.kind is TriggerKind.SAMPLE_FLOW

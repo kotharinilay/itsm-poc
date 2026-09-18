@@ -1,9 +1,18 @@
 """Publication of a durable outbox row to Service Bus.
 
-**The payload is the whole contract, and it is three fields.** ``workItemId``, ``correlationId``,
-``kind`` — nothing else, ever (``contracts/triggers.md``). No tenant, requester, role, action,
-target, approval state, expiry or command content. A consumer reads authority from the durable work
-record, which is what makes a forged or replayed trigger unable to authorize anything.
+**The payload is the whole contract, and it is three fields.** For a trigger: ``workItemId``,
+``correlationId``, ``kind``. For an integration command: ``jobId``, ``correlationId``, ``kind``.
+Nothing else, ever (``contracts/triggers.md``, `FR-INTEG-014`).
+
+**Two envelope types, two bodies, two queues, one dispatcher.** The identifier differs because the
+durable row differs — a trigger names a work item, a command names an integration job — and the
+queues differ because their dead-letter semantics differ. What does *not* differ is the machinery:
+one retry policy and one dead-letter story for every message this deployable publishes, because two
+would be two places for "how many attempts before a human sees it" to be answered differently.
+
+No tenant, requester, role, action, target, approval state, expiry or command content travels in
+either body. A consumer reads authority from the durable record, which is what makes a forged or
+replayed message unable to authorize anything.
 
 **Correlation and trace context travel as message metadata, not as payload.** ``traceparent`` is a
 transport concern — it says how to stitch this hop to the last one, not what may happen — so it
@@ -22,7 +31,10 @@ import json
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
-from ragcore.domain.envelopes import TriggerEnvelope
+from ragcore.domain.envelopes import (
+    IntegrationCommandEnvelope,
+    TriggerEnvelope,
+)
 from ragcore.messaging.credentials import service_bus_client
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
@@ -39,6 +51,15 @@ TRACESTATE_PROPERTY: Final = "tracestate"
 
 PAYLOAD_FIELDS: Final[frozenset[str]] = frozenset({"workItemId", "correlationId", "kind"})
 """Every key a trigger body may carry. Asserted by ``tests/messaging/test_trigger_payload.py``."""
+
+INTEGRATION_PAYLOAD_FIELDS: Final[frozenset[str]] = frozenset({"jobId", "correlationId", "kind"})
+"""Every key an integration command body may carry.
+
+**A closed set, and the far side enforces it too.** `integrations.messaging.envelope` refuses a
+message carrying a field this does not name, and dead-letters rather than sanitising — so a
+publisher that added one here would not quietly succeed, it would produce an alert. Both halves are
+stated because a contract only one side checks is a contract one deployment change removes.
+"""
 
 
 def trigger_body(envelope: TriggerEnvelope) -> dict[str, str]:
@@ -60,8 +81,45 @@ def trigger_body(envelope: TriggerEnvelope) -> dict[str, str]:
     }
 
 
+def integration_command_body(envelope: IntegrationCommandEnvelope) -> dict[str, str]:
+    """The entire message body for one integration command.
+
+    A function rather than inline construction so that exactly one place decides what a command
+    contains, and so a test can assert on it without a Service Bus client.
+
+    Args:
+        envelope: The command.
+
+    Returns:
+        The three contract fields, and nothing else. **No organisation, no capability, no
+        parameters** — those live on the durable job row the identifier names.
+    """
+    return {
+        "jobId": str(envelope.job_id),
+        "correlationId": str(envelope.correlation_id),
+        "kind": envelope.kind.value,
+    }
+
+
+def message_body(envelope: TriggerEnvelope | IntegrationCommandEnvelope) -> dict[str, str]:
+    """The body for either envelope type.
+
+    Dispatches on the **type**, not on a flag or a string. A caller cannot ask for the wrong body
+    for an envelope because there is no argument with which to ask.
+
+    Args:
+        envelope: The trigger or the command.
+
+    Returns:
+        That envelope's three contract fields.
+    """
+    if isinstance(envelope, IntegrationCommandEnvelope):
+        return integration_command_body(envelope)
+    return trigger_body(envelope)
+
+
 def build_message(
-    envelope: TriggerEnvelope,
+    envelope: TriggerEnvelope | IntegrationCommandEnvelope,
     *,
     traceparent: str | None = None,
     tracestate: str | None = None,
@@ -73,7 +131,7 @@ def build_message(
     asserted on without a namespace, a credential or a network.
 
     Args:
-        envelope: The trigger.
+        envelope: The trigger or the integration command.
         traceparent: The W3C trace context to continue, when there is one.
         tracestate: The accompanying vendor state, when there is one.
         time_to_live_seconds: Message expiry. A trigger that outlives the execution window can no
@@ -95,7 +153,7 @@ def build_message(
         properties[TRACESTATE_PROPERTY] = tracestate
 
     message = ServiceBusMessage(
-        body=json.dumps(trigger_body(envelope), sort_keys=True),
+        body=json.dumps(message_body(envelope), sort_keys=True),
         content_type="application/json",
         subject=envelope.kind.value,
         correlation_id=str(envelope.correlation_id),
@@ -111,7 +169,7 @@ def build_message(
 
 
 class ServiceBusTriggerPublisher:
-    """Publishes triggers to the one queue, authenticated by managed identity.
+    """Publishes a trigger or an integration command, authenticated by managed identity.
 
     Satisfies :class:`~ragcore.application.ports.MessagePublisherPort`.
 
@@ -130,14 +188,40 @@ class ServiceBusTriggerPublisher:
         self._settings = settings
         self._client = client if client is not None else service_bus_client(settings)
 
+    def _queue_for(self, envelope: TriggerEnvelope | IntegrationCommandEnvelope) -> str:
+        """Which queue this envelope goes to.
+
+        Args:
+            envelope: The trigger or the command.
+
+        Returns:
+            The queue name.
+
+        Raises:
+            ValueError: When asked to publish an integration **result** kind. RagCore consumes
+                those and holds no Sender role on the results queue, so this would fail at the
+                platform anyway — failing here names the defect instead of surfacing it as a
+                puzzling authorization error against a queue nobody expected this process to write.
+        """
+        if not isinstance(envelope, IntegrationCommandEnvelope):
+            return self._settings.trigger_queue
+
+        if not envelope.kind.is_outbound:
+            raise ValueError(
+                f"{envelope.kind.value} is consumed by RagCore, never published by it. Publishing "
+                "a result would let this process report an outcome for work it did not perform."
+            )
+
+        return self._settings.integration_command_queue
+
     async def publish(
         self,
-        envelope: TriggerEnvelope,
+        envelope: TriggerEnvelope | IntegrationCommandEnvelope,
         *,
         traceparent: str | None = None,
         tracestate: str | None = None,
     ) -> None:
-        """Publish one trigger.
+        """Publish one trigger or integration command.
 
         Consumers assume at-least-once delivery, so this makes no attempt to be exactly-once. The
         duplicate is absorbed downstream by the atomic claim, which is a property of the durable
@@ -145,9 +229,12 @@ class ServiceBusTriggerPublisher:
         misbehaves.
 
         Args:
-            envelope: The trigger.
+            envelope: The trigger or the command.
             traceparent: The W3C trace context to continue.
             tracestate: The accompanying vendor state.
+
+        Raises:
+            ValueError: When the envelope is an integration result kind. See :meth:`_queue_for`.
         """
         message = build_message(
             envelope,
@@ -156,5 +243,5 @@ class ServiceBusTriggerPublisher:
             time_to_live_seconds=self._settings.message_time_to_live_seconds,
         )
 
-        async with self._client.get_queue_sender(self._settings.trigger_queue) as sender:
+        async with self._client.get_queue_sender(self._queue_for(envelope)) as sender:
             await sender.send_messages(message)

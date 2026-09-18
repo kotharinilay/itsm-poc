@@ -34,10 +34,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol
 from uuid import uuid4
 
 from sqlalchemy import text
+
+from ragcore.domain.envelopes import IntegrationCommandEnvelope, IntegrationMessageKind
+from ragcore.domain.identifiers import CorrelationId, IntegrationJobId
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Mapping
@@ -45,6 +48,24 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from ragcore.domain.tenancy import TenantContext
+
+
+class OutboxPort(Protocol):
+    """What this module needs from the outbox. **Declared here because this is the consumer.**
+
+    Ports belong to the consuming module (constitution Principle V). One method, because one method
+    is what dispatch uses — a wider port would invite this module to reach for the trigger path too,
+    and an integration command is not a trigger.
+    """
+
+    async def enqueue_integration_command(
+        self, tenant: TenantContext, envelope: IntegrationCommandEnvelope
+    ) -> None:
+        """Write the outbox row inside the caller's transaction."""
+        ...
+
 
 __all__ = ["DispatchedJob", "IntegrationDispatcher"]
 
@@ -133,15 +154,17 @@ class IntegrationResult:
 
 
 class IntegrationDispatcher:
-    """Writes the instruction and queues its announcement, atomically."""
+    """Writes the instruction and queues its announcement, **in one transaction**."""
 
-    def __init__(self, outbox: object) -> None:
+    def __init__(self, outbox: OutboxPort) -> None:
         """Bind the dispatcher.
 
         Args:
             outbox: RagCore's existing transactional outbox. Reused rather than duplicated: one
                 dispatcher, one retry policy, one dead-letter story for every message this
-                deployable publishes.
+                deployable publishes. Typed as a **port** rather than as ``object`` — an untyped
+                collaborator is one a caller can forget to use, and forgetting this one produces a
+                job row nobody will ever act on.
         """
         self._outbox = outbox
 
@@ -149,6 +172,7 @@ class IntegrationDispatcher:
         self,
         session: AsyncSession,
         *,
+        tenant: TenantContext,
         work_item_id: UUID,
         operation_id: UUID,
         tenant_id: UUID,
@@ -156,6 +180,7 @@ class IntegrationDispatcher:
         catalogue_version: int,
         parameters: Mapping[str, object],
         expires_at: datetime,
+        correlation_id: CorrelationId,
     ) -> DispatchedJob:
         """Write the job row in the caller's transaction.
 
@@ -166,6 +191,8 @@ class IntegrationDispatcher:
         Args:
             session: The caller's transaction — **the same one as the state change**, so the
                 instruction and the change that justified it are durable together.
+            tenant: The organisation, as trusted context. Used to scope the **outbox row**; the
+                message it produces carries no organisation at all.
             work_item_id: The authority record.
             operation_id: The operation within it.
             tenant_id: The organisation, from trusted context. Written here so the Integrations
@@ -175,6 +202,8 @@ class IntegrationDispatcher:
                 mismatch rather than silently running whatever is current.
             parameters: The arguments, as data.
             expires_at: The execution window, from the authority record.
+            correlation_id: The journey, carried onto the message so one request can be followed
+                across the gateway hop and both queues.
 
         Returns:
             The written job.
@@ -193,6 +222,23 @@ class IntegrationDispatcher:
                 "expires_at": expires_at,
             },
         )
+
+        # THE OUTBOX ROW, IN THE SAME TRANSACTION AS THE JOB ROW. Neither is written without the
+        # other, and that is the whole reason this method owns both.
+        #
+        # A job row with no outbox row is an instruction nobody will ever act on: the work sits
+        # approved and unexecuted with nothing in any queue to explain it. An outbox row with no job
+        # row is a command naming a row that does not exist, which the consumer dead-letters. Both
+        # are silent stalls, and both were reachable while this method wrote only the first.
+        await self._outbox.enqueue_integration_command(
+            tenant,
+            IntegrationCommandEnvelope(
+                job_id=IntegrationJobId(job_id),
+                correlation_id=correlation_id,
+                kind=IntegrationMessageKind.EXECUTE,
+            ),
+        )
+
         return DispatchedJob(job_id=job_id, work_item_id=work_item_id)
 
     async def mark_dispatched(self, session: AsyncSession, job_id: UUID) -> None:

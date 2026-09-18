@@ -79,6 +79,27 @@ class MessagingSettings(BaseSettings):
 
     trigger_queue: str = "synthia-triggers"
 
+    integration_command_queue: str = "synthia-integration-commands"
+    """Where RagCore dispatches authorized work to the Integrations Service (ADR-0007).
+
+    **A separate queue, not a separate outbox.** One dispatcher, one retry policy and one
+    dead-letter story serve every message this deployable publishes; what differs is the
+    destination. The queues are separate because their lifecycles are: a dead-lettered command
+    means *approved work never ran*, which is a governance failure, while a dead-lettered trigger
+    means a resume was lost. Mixing them makes that triage ambiguous
+    (``build/infra/messaging/queues.json``).
+    """
+
+    integration_result_queue: str = "synthia-integration-results"
+    """Where the Integrations Service reports outcomes back.
+
+    **RagCore consumes this queue and never publishes to it.** It holds Receiver and not Sender
+    (``build/infra/messaging/queues.json``), and the asymmetry is a control: a compromised
+    orchestrator that could publish ``integration.completed`` could fabricate a successful outcome
+    for work that never ran. Named here because the consumer needs it, not because anything in this
+    process sends to it.
+    """
+
     max_delivery_count: int = Field(default=10, ge=1)
     """The dispatch ceiling. A row past it is marked undispatchable and surfaced to a human."""
 

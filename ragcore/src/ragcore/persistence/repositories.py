@@ -46,7 +46,7 @@ from sqlalchemy.sql.functions import func
 
 from ragcore.domain.audit import ActorChain, AuditFacts
 from ragcore.domain.decisions import EndUserConsent, StaffVerdict
-from ragcore.domain.envelopes import TriggerEnvelope
+from ragcore.domain.envelopes import IntegrationCommandEnvelope, TriggerEnvelope
 from ragcore.domain.governance import VerificationOutcome
 from ragcore.domain.identifiers import (
     ApprovalId,
@@ -868,6 +868,39 @@ class Outbox(_TenantScoped):
                 kind=envelope.kind.value,
                 payload={
                     "workItemId": str(envelope.work_item_id),
+                    "correlationId": str(envelope.correlation_id),
+                },
+            )
+        )
+
+    async def enqueue_integration_command(
+        self, tenant: TenantContext, envelope: IntegrationCommandEnvelope
+    ) -> None:
+        """Write an outbox row for an integration command, **inside the caller's transaction**.
+
+        Separate from :meth:`enqueue` because the payload differs — ``jobId`` rather than
+        ``workItemId`` — and a single method taking either envelope would need a branch that picks
+        the identifier name. That branch is exactly where a command eventually gets written with a
+        work identifier, which deserialises perfectly on the far side and names the wrong row.
+
+        The same contract applies as to a trigger: **no tenant, requester, role, action, target,
+        parameters or approval state** (`FR-INTEG-014`). The Integrations Service reads all of it
+        from the durable job row, and refuses a message carrying any of it.
+
+        Args:
+            tenant: The organisation, from trusted context. Written to the **row**, which is
+                tenant-scoped, and deliberately **not** to the payload, which is not.
+            envelope: The command. Three fields.
+        """
+        table = models.OUTBOX_MESSAGE
+        await current_session().execute(
+            insert(table).values(
+                outbox_id=uuid4(),
+                tenant_id=tenant.tenant_id.value,
+                occurred_at=func.now(),
+                kind=envelope.kind.value,
+                payload={
+                    "jobId": str(envelope.job_id),
                     "correlationId": str(envelope.correlation_id),
                 },
             )

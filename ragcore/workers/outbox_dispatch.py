@@ -25,8 +25,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ragcore.domain.envelopes import TriggerEnvelope, TriggerKind
-from ragcore.domain.identifiers import CorrelationId, WorkItemId
+from ragcore.domain.envelopes import (
+    IntegrationCommandEnvelope,
+    IntegrationMessageKind,
+    TriggerEnvelope,
+    TriggerKind,
+)
+from ragcore.domain.identifiers import CorrelationId, IntegrationJobId, WorkItemId
 from ragcore.messaging.deadletter import report_dead_letter
 from ragcore.messaging.retry import BackoffPolicy
 
@@ -47,21 +52,66 @@ class DispatchResult:
         return self.published + self.failed + self.undispatchable > 0
 
 
-def envelope_from_row(row: Any) -> TriggerEnvelope:  # noqa: ANN401 — a SQLAlchemy row
-    """Rebuild the trigger envelope from a durable outbox row.
+_INTEGRATION_KINDS: frozenset[str] = frozenset(member.value for member in IntegrationMessageKind)
+"""The kind values that mean "this row is an integration command, not a trigger".
+
+Derived from the enum rather than written out, so adding a kind cannot leave this behind — and a
+row whose kind is in neither set raises below rather than being published as the wrong shape.
+"""
+
+
+def subject_of(envelope: TriggerEnvelope | IntegrationCommandEnvelope) -> str:
+    """The durable row this envelope names, as a string an operator can look up.
+
+    Args:
+        envelope: The trigger or the command.
+
+    Returns:
+        The work identifier for a trigger, the job identifier for a command.
+    """
+    if isinstance(envelope, IntegrationCommandEnvelope):
+        return str(envelope.job_id)
+    return str(envelope.work_item_id)
+
+
+def envelope_from_row(row: Any) -> TriggerEnvelope | IntegrationCommandEnvelope:  # noqa: ANN401
+    """Rebuild the envelope from a durable outbox row.
 
     The row's ``payload`` holds what a consumer may see; ``kind`` is a column because the dispatcher
     routes on it and a routing value buried in JSON is one nobody can index.
+
+    **Routing happens here, on the kind, and the identifier follows from it.** A trigger names a
+    work item; an integration command names an integration job. Reading the wrong key would produce
+    a message that deserialises perfectly on the far side and names a row that does not exist — so
+    the key is chosen by the same value the queue is chosen by, in one place.
 
     Args:
         row: The outbox row.
 
     Returns:
         The envelope to publish.
+
+    Raises:
+        ValueError: When the row's kind belongs to neither closed set. An unrecognised kind is
+            **never** published as a best guess: the dispatcher does not know which queue it
+            belongs on or which identifier it carries, and either guess is a message somebody has
+            to trace.
+        KeyError: When the payload lacks the identifier its kind requires. Also a refusal rather
+            than a blank-identifier message. Both land in :func:`dispatch_once`'s failure path,
+            which retries to the ceiling and then surfaces the row to a human — so neither is
+            silently dropped, and neither is published half-formed.
     """
     from uuid import UUID
 
     payload = row.payload or {}
+
+    if row.kind in _INTEGRATION_KINDS:
+        return IntegrationCommandEnvelope(
+            job_id=IntegrationJobId(UUID(payload["jobId"])),
+            correlation_id=CorrelationId(payload["correlationId"]),
+            kind=IntegrationMessageKind(row.kind),
+        )
+
     return TriggerEnvelope(
         work_item_id=WorkItemId(UUID(payload["workItemId"])),
         correlation_id=CorrelationId(payload["correlationId"]),
@@ -106,7 +156,12 @@ async def dispatch_once(
             if backoff.exhausted(attempts):
                 undispatchable += 1
                 report_dead_letter(
-                    work_item_id=str(envelope.work_item_id),
+                    # The row's own subject, whichever kind it is. An integration command names a
+                    # job rather than a work item; reporting an empty string, or the wrong
+                    # identifier, would put an undispatchable row in the alert with nothing an
+                    # operator can look up — and an undispatchable command means **approved work
+                    # never ran**, which is the alert that most needs to be actionable.
+                    work_item_id=subject_of(envelope),
                     correlation_id=str(envelope.correlation_id),
                     kind=envelope.kind.value,
                     reason=(

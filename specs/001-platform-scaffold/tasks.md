@@ -852,6 +852,69 @@ reference connector. Configuration review does not substitute for traversal.
 
 - [X] T298 [US6] Provision `synthia-integration-commands` and `synthia-integration-results` as **separate queues**, with role assignments granting RagCore send-on-commands and listen-on-results, and the Integrations Service listen-on-commands and send-on-results — **and nothing more**. `synthia-triggers` is **not** reused: mixing lifecycles makes dead-letter triage ambiguous — Boundary: messaging | Validates: Spec §FR-INTEG-013, Contracts §triggers
 - [X] T323 [US6] Write the APIM routing and direct-route proofs in `integrations/tests/security/test_apim_routing.py` — asserted from the committed registry: the gateway fronts this service on the workload audience, its path is strictly longer than RagCore's so the most specific prefix wins, the role check is a **prefix match rather than a substring one**, and **exactly one API points at this backend and it is not client-facing**. Complements the runtime refusal in `test_boundary.py`: that half would pass on a deployment where APIM never routed here, and this half would pass on a service that accepted anything — Boundary: gateway | Validates: Spec §FR-INTEG-011, §FR-INTEG-012, §13.4
+- [ ] T324 [US6] Wire the worker **processes** and their container definitions — Service Bus receive loops with lock renewal, settlement and graceful drain for `integrations/workers/command_consumer.py` and `ragcore/workers/integration_result_worker.py`, plus the five pre-existing RagCore workers (`outbox_dispatch`, `resume_worker`, `expiry_sweep`, `retention_sweep`, `ingestion_run`), each with a container app that actually runs it. **All seven `main()` functions currently raise `NotImplementedError` by design** and no manifest runs any of them, so nothing consumes any queue in a deployment. This is a **pre-existing platform-wide gap**, not an Integrations one — Boundary: messaging | Validates: Spec §FR-INTEG-013, §FR-EXEC-006, Constitution §Idempotency and messaging
+
+> **Remediation — the asynchronous seam, X1–X4 (2026-09-18).** A drift analysis found **four tasks
+> marked `[X]` whose deliverables did not exist or were never called**. The behaviour now exists and
+> is tested; the runtime half is **T324**, above.
+>
+> **What was actually wrong** — and all four were on the seam the 2026-09-18 slice reported as
+> delivered:
+>
+> | Task | Was marked | Reality found by the analysis |
+> |---|---|---|
+> | T302 | `[X]` | `IntegrationDispatcher` had **zero callers**. `self._outbox` was assigned and never used, so **no outbox row was written** — the job row alone is an instruction nobody will ever act on. |
+> | T302 | `[X]` | `TriggerKind` had no `integration.execute` member, so `outbox_dispatch` would have raised `ValueError` on such a row; and the dispatcher published to one queue with no routing. **RagCore could not publish a command at all.** |
+> | T300 | `[X]` | `integrations/workers/command_consumer.py` **did not exist**. |
+> | T303 | `[X]` | **Zero references** to `integration.completed`/`failed` anywhere in RagCore. The result consumer did not exist. |
+>
+> **These were marked complete by me, and the checkpoint above them said the round trip existed.**
+> It did not: three of seven legs were missing. Recording it rather than quietly correcting it,
+> because a task marked done on work that was not done is the one failure a task list exists to
+> prevent — and the same scepticism is owed to every other `[X]` on that slice.
+>
+> **`integration.execute` is NOT a `TriggerKind`, and that was the key design finding.**
+> `TriggerEnvelope` carries `work_item_id`; a command must carry `job_id`. Adding the integration
+> kinds to that enum would have made the envelope constructible with one, producing a message that
+> deserialises perfectly and is then **refused by the far side's closed field set** — with the cause
+> two modules from the symptom. RagCore now has its own `IntegrationCommandEnvelope` and
+> `IntegrationMessageKind`, deliberately duplicating the Integrations Service's three-field contract
+> rather than sharing a package (constitution Principle VI).
+>
+> **One outbox, two queues, one dispatcher.** The retry policy and dead-letter story are not
+> duplicated — `envelope_from_row` routes on the kind and the publisher routes to the queue, so
+> "how many attempts before a human sees it" is still answered in exactly one place.
+>
+> **RagCore cannot publish a result, and that is enforced twice.** `_queue_for` raises on a result
+> kind, and the identity registry grants RagCore Receiver-not-Sender on the results queue. An
+> orchestrator that could publish `integration.completed` could fabricate a successful outcome for
+> work that never ran — and pairing that forgery with the database write it would also need is
+> already denied by revision 0022's column-scoped grant.
+>
+> **`concluded_from` takes no `kind` argument**, and the omission is the control: a forged
+> `integration.completed` naming a job whose row records nothing concludes `PENDING`, not success.
+> There is no `Conclusion` member meaning "retry" and the module exports no publisher, so
+> `FR-EXEC-006` is enforced by there being nothing to call.
+>
+> **Gates.** RagCore **1256 passed** (was 1229), Integrations **93 passed** (was 85). Ruff, format
+> and `mypy --strict` clean on both. Boundary, edge-path and contract guards green; the Integrations
+> contract re-emits byte-identical.
+>
+> **Eight mutations, eight caught, clean restore** — including replanting the original X1 defect
+> (the unused outbox), routing a command to the trigger queue, permitting a result publication,
+> swapping `jobId` for `workItemId` in the body, and dropping a settlement entry so a dead-letter
+> would silently complete.
+>
+> **`mypy --strict` caught two things the tests would not have.** Widening
+> `envelope_from_row`'s return type made an existing assertion in `test_outbox_crash.py` unsound
+> until it narrowed explicitly; and a local look-alike for `IntegrationResult` could not satisfy a
+> concrete dataclass, so the result tests now construct the **production type**, which makes drift
+> impossible rather than merely unlikely.
+>
+> **What is still not true.** No queue is consumed in a deployment — seven `main()` functions raise
+> and no manifest runs them. That is **T324** and it predates this work: RagCore's five workers have
+> been in the same state throughout. The seam is correct and tested in-process; it is not yet live.
+
 
 > **Slice checkpoint — contracts and the infrastructure boundary (2026-09-18).** Delivered **T298**
 > and **T323**, and made **T274** true rather than merely marked.

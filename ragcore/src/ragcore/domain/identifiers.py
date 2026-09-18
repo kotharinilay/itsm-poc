@@ -115,6 +115,27 @@ class ConsentId:
 
 
 @dataclass(frozen=True, slots=True)
+class IntegrationJobId:
+    """One written instruction to the Integrations Service (ADR-0007).
+
+    **An opaque platform identifier of the same class as a work identifier.** It names a durable
+    row; it carries no organisation, actor, capability or authority, and it grants nothing on its
+    own. That is precisely what lets the command message carry it and nothing else: the consumer
+    reads its instruction from the row this names, never from the message that delivered it.
+
+    Distinct from :class:`WorkItemId` as a **type**, not merely by convention. Both wrap a ``UUID``,
+    and a command carrying a work identifier where a job identifier belongs would deserialise
+    perfectly and then name the wrong row. A separate type makes that swap a type error at the call
+    site rather than a lookup failure in a worker.
+    """
+
+    value: UUID
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
 class AuditEventId:
     """A durable business or security record, distinct from telemetry."""
 

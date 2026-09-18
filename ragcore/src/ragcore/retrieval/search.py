@@ -19,7 +19,7 @@ store, which is how a derived copy becomes a data-protection incident.
 
 **3. Retrieved content is data, never instruction, and never confers authority** (spec FR-EXT-017,
 FR-EXT-018). Every chunk leaves this module through
-:func:`~ragcore.integrations.validation.as_data`. The defence is structural, not a filter: content
+:func:`~ragcore.egress.validation.as_data`. The defence is structural, not a filter: content
 cannot reach a treatment, a role or an outbound destination, so a successful injection produces at
 most a bad proposal that governance still refuses.
 
@@ -41,15 +41,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
-from ragcore.infrastructure.azure_credentials import azure_credential
-from ragcore.integrations.http import IntegrationError, OutboundRequest, ResilientHttpCaller
-from ragcore.integrations.validation import (
+from ragcore.egress.http import IntegrationError, OutboundRequest, ResilientHttpCaller
+from ragcore.egress.validation import (
     BoundaryValidationError,
     as_data,
     optional_text,
     require_object,
     require_text,
 )
+from ragcore.infrastructure.azure_credentials import azure_credential
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.config.settings import RetrievalSettings

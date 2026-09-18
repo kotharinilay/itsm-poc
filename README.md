@@ -25,26 +25,39 @@ conflict is resolved as an ADR — never settled by whichever document was read 
 ## Two deployables, and the rule between them
 
 ```text
-                    Front Door + WAF  ──▶  APIM  ──┬──▶  RagCore    (Python, writes)
-                                                    └──▶  Monolith   (.NET, reads)
+                    Front Door + WAF  ──▶  APIM  ──┬──▶  RagCore       (Python, writes)
+                                                    ├──▶  Integrations  (Python, egress)
+                                                    └──▶  Monolith      (.NET, reads)
 
     RagCore  ─────────────── PostgreSQL ───────────────  Monolith
                         (versioned vw_*_v1 views)
 
-    RagCore  ─────────────── Service Bus ──────────────  RagCore workers
-                         (opaque triggers)
+    RagCore  ──▶ Service Bus ──▶  Integrations  ──▶ Service Bus ──▶  RagCore
+              (jobId only)                        (result event)
+
+    Integrations  ──▶  ServiceNow · Graph · OneLogin · Duo · MCP servers
 ```
 
-**RagCore** (`ragcore/`) owns orchestration, execution and **every state-changing operation**.
-**The .NET modular monolith** (`dotnet/`) is **read-only** and exposes no write endpoint, ever.
+**Three deployables.** **RagCore** (`ragcore/`) owns orchestration, reasoning, governance and
+**every state-changing decision**. **The Integrations Service** (`integrations/`) owns **every call
+to an external system** — connectors, credentials and egress. **The .NET modular monolith**
+(`dotnet/`) is **read-only** and exposes no write endpoint, ever.
 
-> **They have no application-level dependency in either direction.** No API call, no library
-> reference, no deployment coupling. They meet at exactly two places: PostgreSQL, through versioned
-> views RagCore owns, and Service Bus, through triggers that carry only opaque identifiers.
+> **No two of them have an application-level dependency in either direction.** No library
+> reference, no deployment coupling, no direct network route. RagCore and the monolith meet at
+> exactly two places: PostgreSQL, through versioned views RagCore owns, and Service Bus, through
+> triggers that carry only opaque identifiers. RagCore reaches Integrations only through APIM, or
+> over Service Bus with a message carrying nothing but a job identifier — the authority is read
+> from the durable record, never from the message.
 
-This is [ADR-0001](./docs/adr/0001-ragcore-owns-orchestration-dotnet-owns-read.md), and it is enforced
-mechanically: `build/scripts/check-boundaries.sh` fails CI on any cross-tree reference, and
-architecture tests assert it from inside each stack. A violation is a build failure, not a review note.
+**RagCore holds no connector, no connector credential and no vault role for one.** That is not a
+convention: the code is absent, the `mcp` dependency is gone, and the Key Vault role was withdrawn
+rather than duplicated — so a direct call fails at authorization even where someone writes one.
+
+This is [ADR-0001](./docs/adr/0001-ragcore-owns-orchestration-dotnet-owns-read.md) and
+[ADR-0007](./docs/adr/0007-integration-service-boundary.md), and both are enforced mechanically:
+`build/scripts/check-boundaries.sh` fails CI on any cross-tree reference, and architecture tests
+assert it from inside each stack. A violation is a build failure, not a review note.
 
 ## Layout
 
@@ -52,7 +65,8 @@ architecture tests assert it from inside each stack. A violation is a build fail
 apps/web/         One Angular workspace — 3 applications, 4 libraries
 apps/desktop/     Electron host. Thin, hardened, decides nothing
 dotnet/           Read-only modular monolith — 6 modules, 1 composition root
-ragcore/          Orchestration, execution, all writes, all migrations
+ragcore/          Orchestration, reasoning, governance, all writes, all migrations
+integrations/     Every external connector, credential and egress path
 build/            Dockerfiles, AI Gateway policy, boundary and gate scripts
 docs/adr/         Architecture decision records (MADR)
 specs/            Specification, plan, tasks, contracts, checklists

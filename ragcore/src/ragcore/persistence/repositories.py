@@ -731,62 +731,22 @@ class OperationCatalogue(_TenantScoped):
             return (await session.execute(statement)).one_or_none() is not None
 
 
-class EntitlementCredentials(_TenantScoped):
-    """Credential **references**, per organisation and per system.
-
-    Satisfies :class:`~ragcore.integrations.credentials.CredentialReferenceStorePort`.
-
-    **This class returns a Key Vault secret name and cannot return a value**, because the column it
-    reads holds a name and nothing else (``data-model.md``, ``tenant_entitlement``). That is the
-    division the platform rests on: PostgreSQL holds references, Key Vault holds values, and a
-    resolved value is never written back here (spec FR-EXT-016, FR-DEMO-012).
-
-    Separate from :class:`OperationCatalogue` even though both read ``tenant_entitlement``, and the
-    separation is deliberate: the catalogue's ``lookup`` selects its columns explicitly and
-    ``credential_reference`` is **not among them**, so catalogue data — which flows toward
-    governance, the agent loop and published views — cannot carry a credential reference with it.
-    Merging the two would put the reference on that path for the convenience of one caller.
-
-    **Entitlement gates the credential.** The predicate requires ``enabled``, so a disabled
-    entitlement resolves no credential at all. Revoking an entitlement therefore revokes the
-    organisation's ability to authenticate to the system, rather than leaving a working credential
-    behind a closed door.
-    """
-
-    async def credential_reference(
-        self, tenant: TenantContext, catalogue_prefix: str
-    ) -> str | None:
-        """The Key Vault secret name this organisation uses for one system's capabilities.
-
-        Args:
-            tenant: The organisation, from trusted context.
-            catalogue_prefix: The catalogue-identifier prefix the system owns, for example
-                ``onelogin.``. **Formed by the caller, not here.** Mapping a system's name to its
-                catalogue prefix is an integrations concept — each integration module declares its
-                own ``CATALOGUE_PREFIX`` — and building it in this module would put a formatted
-                string in the query layer, which ``tests/isolation/`` prohibits outright rather
-                than case by case.
-
-        Returns:
-            The reference, or ``None`` when the organisation has no enabled entitlement naming one.
-            ``None`` is a refusal: the caller raises rather than falling back to a platform-wide
-            credential, because there is no such thing here.
-        """
-        table = models.TENANT_ENTITLEMENT
-        statement = (
-            select(table.c.credential_reference)
-            .where(
-                self._scope(tenant, table),
-                table.c.enabled.is_(True),
-                table.c.catalogue_id.startswith(catalogue_prefix),
-                table.c.credential_reference.isnot(None),
-            )
-            .limit(1)
-        )
-        async with read_session(self._sessions) as session:
-            row = (await session.execute(statement)).one_or_none()
-
-        return str(row[0]) if row is not None else None
+# `EntitlementCredentials` STOOD HERE AND IS GONE (T296, ADR-0007, spec `FR-INTEG-017`).
+#
+# It read `tenant_entitlement.credential_reference` — a Key Vault secret *name*, never a value — so
+# that a RagCore adapter could resolve an organisation's connector credential at the point of use.
+# There is no such adapter in this process any more, and the read has moved to the Integrations
+# Service, which reaches the column through `vw_connector_credential_ref_v1`.
+#
+# **The column is still not published to RagCore, and that is the point of the split.**
+# `vw_tenant_entitlement_v1` deliberately omits `credential_reference`; the credential view is a
+# second, separately granted view that this deployable's database role cannot select from. So the
+# control is not "nobody wrote the query" — it is that the query would be refused.
+#
+# `OperationCatalogue` still reads the same table, and the separation that kept them apart still
+# holds: its `lookup` names its columns explicitly and `credential_reference` was never among them,
+# so catalogue data — which flows toward governance, the agent loop and published views — cannot
+# carry a credential reference along with it.
 
 
 class OperationRepository(_TenantScoped):

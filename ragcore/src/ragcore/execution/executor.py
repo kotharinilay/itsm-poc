@@ -13,12 +13,19 @@ the first as the second on the day they differ — which is the day it matters.
 * ``contradicted`` — a server-side read disagreed with the claim. Treated as a failure, because a
   claim the platform has actively disproved is worse than one it never checked.
 
-**Verification is a separate call to a separate tool, and it is the catalogue that names it.** Not
-the model, not the proposal, not the executing adapter. An adapter that could nominate its own
-verifier could nominate itself, and "the thing that acted says it worked" is exactly what
-``client_attested`` means — so the platform would be relabelling an attestation as a confirmation.
-Where an entry names no verification tool the outcome can only ever be ``client_attested``, and
-:func:`verify` says so rather than optimistically defaulting.
+**The verification workflow is split, and the split is the control** (constitution Principle III,
+`FR-INTEG-009`, T295). Verification is a **server-side read against the external system**, so the
+call belongs to the Integrations Service along with every other external call. What stays here is
+the **conclusion**: whether the platform may tell a user the issue is resolved.
+
+That division is not bureaucratic. A service that both acted and judged its own success would be
+reporting an attestation as a confirmation, which is precisely what ``client_attested`` exists to
+name. And putting the verification call back in RagCore would hand the orchestrator the external
+access ADR-0007 removed from it — so each half is where it is because the other place is worse.
+
+:attr:`ExecutionReport.verification` is therefore **received, not computed**. It arrives on the
+result of the invocation, and this module's job is to carry it faithfully into
+:attr:`ExecutionReport.may_report_resolution` without upgrading it.
 
 **This module executes; it MUST NEVER decide** (constitution Principle III). :func:`execute` takes
 a :class:`~ragcore.governance.gate.GateOutcome` and refuses to run without ``PROCEED``. That check
@@ -37,7 +44,7 @@ key is derived, never random, so a repeat of the same logical action is recognis
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from ragcore.domain.governance import ExecutionMethod, VerificationOutcome
 from ragcore.execution.idempotency import derive_key
@@ -56,13 +63,7 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.domain.tenancy import TenantContext
     from ragcore.governance.gate import GateOutcome
 
-__all__ = [
-    "ExecutionLeg",
-    "ExecutionReport",
-    "UnauthorizedExecutionError",
-    "VerificationPort",
-    "verify",
-]
+__all__ = ["ExecutionLeg", "ExecutionReport", "UnauthorizedExecutionError"]
 
 
 class UnauthorizedExecutionError(Exception):
@@ -81,32 +82,15 @@ class UnauthorizedExecutionError(Exception):
         self.disposition = disposition
 
 
-class VerificationPort(Protocol):
-    """A **server-side read** that confirms or contradicts a claimed effect.
-
-    Declared here because this module is the consumer. Deliberately read-shaped: it observes state
-    and returns whether the claim holds. There is no verb on it that changes anything, so a
-    verification step cannot become a second execution — which is what "verify by re-running it"
-    would quietly be.
-    """
-
-    async def observe(
-        self,
-        tenant: TenantContext,
-        tool: str,
-        identity: OperationIdentity,
-        parameters: Mapping[str, object],
-        correlation_id: CorrelationId,
-    ) -> bool:
-        """Read the real state and report whether the intended effect is present.
-
-        Returns:
-            ``True`` when the effect is observed. ``False`` means observed-and-absent, which is a
-            contradiction — an implementation that cannot reach the system raises rather than
-            returning ``False``, because "I could not look" and "I looked and it is not there" must
-            not become the same answer.
-        """
-        ...
+# `VerificationPort` AND `verify()` STOOD HERE AND ARE GONE (T295).
+#
+# They declared a server-side read and performed it — an outbound call to the system the effect
+# landed in. That is an external call, and RagCore makes none: the port and its one implementation
+# moved to the Integrations Service, which reports what it observed on the result of the invocation.
+#
+# **What did not move is the sentence below**, :attr:`ExecutionReport.may_report_resolution`. The
+# observation is the far side's to make and the conclusion is RagCore's, and keeping the two in
+# different deployables is what stops the service that acted from grading its own work.
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +99,13 @@ class ExecutionReport:
 
     Attributes:
         succeeded: Whether the invocation itself completed. **Not** proof of the effect.
-        verification: What the platform knows. The only field a user-facing message may be derived
-            from, and only when it is ``SERVER_CONFIRMED``.
+        verification: What the platform knows. **Reported by the Integrations Service, never
+            computed here** (T295) — this module carries it and must not upgrade it. The only field
+            a user-facing message may be derived from, and only when it is ``SERVER_CONFIRMED``.
         idempotency_key: The derived key the invocation carried, for the audit record.
         method: By what means the effect was performed. Recorded distinctly from the actor (§28.4).
-        verified_by: The verification tool the catalogue named, where one ran. ``None`` when the
-            entry named none — which is why the outcome is an attestation.
+        verified_by: The verification tool the catalogue named, where one ran, as reported back.
+            ``None`` when the entry named none — which is why the outcome is an attestation.
     """
 
     succeeded: bool
@@ -140,56 +125,19 @@ class ExecutionReport:
         return self.verification is VerificationOutcome.SERVER_CONFIRMED
 
 
-async def verify(
-    verifier: VerificationPort | None,
-    tenant: TenantContext,
-    verification_tool: str | None,
-    identity: OperationIdentity,
-    parameters: Mapping[str, object],
-    correlation_id: CorrelationId,
-) -> tuple[VerificationOutcome, str | None]:
-    """Confirm the effect independently, where the catalogue names a tool to confirm it with.
-
-    Args:
-        verifier: The server-side read port, or ``None`` when the platform has none bound.
-        tenant: The organisation.
-        verification_tool: The tool named **by the catalogue entry**. ``None`` is the ordinary case
-            in the scaffold: the reference fixtures change nothing, so there is nothing to observe,
-            and naming a tool would claim a confirmation the platform cannot perform.
-        identity: What ran.
-        parameters: What it ran with. Passed so the observation is of *this* effect rather than of
-            the system in general.
-        correlation_id: The journey.
-
-    Returns:
-        The outcome and the tool that produced it. ``(CLIENT_ATTESTED, None)`` when no tool is
-        named or none is bound — an honest statement that nobody checked, never an optimistic
-        default.
-    """
-    if verification_tool is None or verifier is None:
-        return VerificationOutcome.CLIENT_ATTESTED, None
-
-    observed = await verifier.observe(
-        tenant, verification_tool, identity, parameters, correlation_id
-    )
-    outcome = VerificationOutcome.SERVER_CONFIRMED if observed else VerificationOutcome.CONTRADICTED
-    return outcome, verification_tool
-
-
 @dataclass(frozen=True, slots=True)
 class ExecutionLeg:
     """Invokes an authorized capability exactly once and establishes what is known about it.
 
     Attributes:
-        tools: Invocation of a governed capability. Reached only past the gate.
+        tools: Invocation of a governed capability. Reached only past the gate. In a deployed
+            process this dispatches to the Integrations Service; **there is no in-process
+            implementation of it and there must not be one** (T296).
         clock: The current instant.
-        verifier: The server-side read used for verification, where one is bound. ``None`` in the
-            scaffold, which is why every outcome here is an attestation and says so.
     """
 
     tools: ToolExecutionPort
     clock: ClockPort
-    verifier: VerificationPort | None = None
 
     async def run(
         self,
@@ -204,7 +152,11 @@ class ExecutionLeg:
         correlation_id: CorrelationId,
         method: ExecutionMethod = ExecutionMethod.WORKLOAD,
     ) -> ExecutionReport:
-        """Execute, then verify. In that order, and both exactly once.
+        """Execute once, and record what the far side reported about the effect.
+
+        **No longer "execute, then verify".** Both halves happen on the other side of the boundary
+        now, and this method's remaining job is the one thing that must not: deciding what the
+        reported outcome entitles the platform to say.
 
         Keyword-only past the gate outcome: several arguments are identifiers of the same shape,
         and a positional call could swap two of them into a key that looks derived and correlates
@@ -220,7 +172,9 @@ class ExecutionLeg:
             parameters: The arguments, as the proposal disclosed them. **Data**: the destination of
                 the outbound call comes from the catalogue entry, never from here
                 (spec FR-EXT-018).
-            verification_tool: The tool the **catalogue entry** names, or ``None``.
+            verification_tool: The tool the **catalogue entry** names, or ``None``. Passed
+                through to the far side, which performs the read; it is **not** consulted here, and
+                a ``None`` no longer implies the outcome — the reported verification does.
             correlation_id: The journey.
             method: By what means. Defaults to the workload principal acting directly, which is the
                 only mechanism the scaffold implements — desktop execution is deferred.
@@ -251,14 +205,13 @@ class ExecutionLeg:
                 method=method,
             )
 
-        verification, verified_by = await verify(
-            self.verifier, tenant, verification_tool, identity, parameters, correlation_id
-        )
-
+        # TAKEN FROM THE RESULT, NOT DERIVED HERE. The far side looked, or did not; either way it
+        # says which. A local default at this point — optimistic or pessimistic — would be RagCore
+        # asserting a fact about an external system it cannot reach.
         return ExecutionReport(
             succeeded=True,
-            verification=verification,
+            verification=result.verification,
             idempotency_key=str(key),
             method=method,
-            verified_by=verified_by,
+            verified_by=verification_tool,
         )

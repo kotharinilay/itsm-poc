@@ -740,15 +740,64 @@ traceability. Their original tasks stay `[X]`; these tasks cover the relocation 
 - [X] T286 [P] Implement the connector registry in `integrations/src/integrations/catalogue/registry.py` — resolving a catalogue identifier and version to its connector, endpoint, signing profile and idempotency policy. **The destination comes from here and never from parameters, model output or retrieved content** — Boundary: Tool Execution | Validates: Spec §FR-INTEG-003, §FR-EXT-018
 - [X] T287 Implement the execution-time re-check in `integrations/src/integrations/policy/` — organisation active, work authorized and uncancelled and inside its window, organisation entitled, capability registered, **catalogue version matching what was authorized**, capability reached past the gate. **It assigns no treatment and performs no role intersection**; prior catalogue retrieval is not standing permission — Boundary: policy | Validates: Spec §FR-INTEG-019, §FR-INTEG-008, Constitution P-III
 - [X] T288 [P] Relocate the ServiceNow adapter to `integrations/src/integrations/connectors/servicenow/` — idempotent write-backs, queue-and-replay on outage, tenant stamping on every record. Behaviour unchanged from T129 — Boundary: Integration—ServiceNow | Validates: Spec §FR-EXT-004, §FR-EXT-007
-- [ ] T289 [P] Relocate the Microsoft Graph adapter to `integrations/src/integrations/connectors/graph/` — token caching, throttling compliance and retry inside the adapter. Behaviour unchanged from T130 — Boundary: Integration—Graph | Validates: Spec §FR-EXT-008
-- [ ] T290 [P] Relocate the OneLogin adapter to `integrations/src/integrations/connectors/onelogin/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
-- [ ] T291 [P] Relocate the Duo adapter to `integrations/src/integrations/connectors/duo/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
+- [X] T289 [P] Relocate the Microsoft Graph adapter to `integrations/src/integrations/connectors/graph/` — token caching, throttling compliance and retry inside the adapter. Behaviour unchanged from T130 — Boundary: Integration—Graph | Validates: Spec §FR-EXT-008
+- [X] T290 [P] Relocate the OneLogin adapter to `integrations/src/integrations/connectors/onelogin/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
+- [X] T291 [P] Relocate the Duo adapter to `integrations/src/integrations/connectors/duo/` as an MCP-backed target system. Behaviour unchanged from T132 — Boundary: Tool Execution | Validates: ADR-0005
 - [X] T292 Relocate the MCP client to `integrations/src/integrations/mcp/client.py` — **the `discover`/`invoke` type separation must survive the move intact**, because it is what enforces "discovery is not entitlement" rather than a convenience. There is no overload taking an advertised tool — Boundary: Tool Execution | Validates: Spec §FR-EXT-014, §FR-INTEG-005
 - [X] T293 [P] Relocate boundary contract validation to `integrations/src/integrations/execution/normalization.py` — provider output size-checked and contract-checked at the boundary, **treated as data**: never an instruction, destination, identity, organisation or source of authority. Malformed, oversized or off-contract output is rejected rather than passed inward — Boundary: integration | Validates: Spec §FR-INTEG-023, §FR-EXT-017, §FR-EXT-021
 - [X] T294 Implement the execution leg in `integrations/src/integrations/execution/executor.py` — derives the idempotency key from organisation, work item and operation (**derived, never random**), invokes the connector, records the attempt. **It refuses to run without a `PROCEED` re-derived from durable state**; a serialised gate outcome is a model-free but still *asserted* authority and MUST NOT be accepted — Boundary: execution | Validates: Spec §FR-INTEG-019, §FR-INTEG-021, Constitution P-I
-- [ ] T295 Split RagCore's execution leg in `ragcore/src/ragcore/execution/executor.py` — invocation and verification move to the Integrations Service; **`ExecutionReport.may_report_resolution` stays in RagCore**. A service that both acted and judged its own success would report an attestation as a confirmation — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-009, Constitution P-III
-- [ ] T296 **Remove** `ragcore/src/ragcore/integrations/` **except `model/`**, together with its connector settings and secret references in `ragcore/src/ragcore/config/` and its connector dependencies in `ragcore/pyproject.toml` and `uv.lock`. `integrations/model/` **stays**: model egress and content safety are reasoning, not integration — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-016, ADR-0007
-- [ ] T297 Write an architecture test in `ragcore/tests/architecture/test_no_connector_in_ragcore.py` asserting **no adapter, connector, MCP client or external-provider client remains in RagCore**, and that no module outside `integrations/model/` holds an external endpoint — Boundary: layering | Validates: Spec §FR-DEMO-021, §FR-EXT-011
+- [X] T295 Split RagCore's execution leg in `ragcore/src/ragcore/execution/executor.py` — invocation and verification move to the Integrations Service; **`ExecutionReport.may_report_resolution` stays in RagCore**. A service that both acted and judged its own success would report an attestation as a confirmation — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-009, Constitution P-III
+- [X] T296 **Remove** `ragcore/src/ragcore/integrations/` **except `model/`**, together with its connector settings and secret references in `ragcore/src/ragcore/config/` and its connector dependencies in `ragcore/pyproject.toml` and `uv.lock`. `integrations/model/` **stays**: model egress and content safety are reasoning, not integration — Boundary: Agent/RagCore | Validates: Spec §FR-INTEG-016, ADR-0007
+- [X] T297 Write an architecture test in `ragcore/tests/architecture/test_no_connector_in_ragcore.py` asserting **no adapter, connector, MCP client or external-provider client remains in RagCore**, and that no module outside `integrations/model/` holds an external endpoint — Boundary: layering | Validates: Spec §FR-DEMO-021, §FR-EXT-011
+
+> **Slice checkpoint — the boundary removal (2026-09-18).** Delivered **T289–T291, T295–T297**.
+> RagCore no longer owns connector execution, and the claim is now enforced rather than asserted.
+>
+> **What moved.** The Graph adapter is `integrations/connectors/graph/`, rewritten to take its
+> destination from the connector registry rather than from settings — the relocation removed the
+> last place an address came from configuration instead of the registry. OneLogin and Duo are
+> `integrations/connectors/{onelogin,duo}/`, still a name each, which is the ADR-0005 evidence and
+> is now asserted rather than described: a test fails if either module grows a client.
+>
+> **What was removed from RagCore.** `ragcore/integrations/` holds `model/` and nothing else. Gone:
+> the Graph adapter, the MCP client, OneLogin, Duo, `credentials.py`, `EntitlementCredentials`,
+> `IntegrationSettings` and the `mcp` dependency (removed from `pyproject.toml` **and** the lock —
+> a library in the lock file is a library an import can reach). `http.py` and `validation.py` were
+> **not** deleted: they are the shared outbound transport and the boundary-validation rule, not
+> connectors, and they moved to `ragcore/egress/` because leaving them under a package named
+> `integrations` kept suggesting connectors belonged there.
+>
+> **The four connector ports are bound to `None`, and that is the design.** A stand-in would be
+> worse than a connector: it is an object with a method to call, so the first caller to call it
+> would have re-created the in-process path — and every test would keep passing, because a stand-in
+> returns successfully. `test_scaffold.py`'s assertion was **inverted** to require the absence.
+>
+> **T295 split the verification workflow, not the verification.** The *call* is a server-side read
+> against an external system and moved with everything else; `ExecutionReport.may_report_resolution`
+> — the **conclusion** — stayed. `ExecutionLeg` now carries the reported outcome instead of
+> computing one, so RagCore cannot upgrade an attestation into a confirmation. A stale comment in
+> the Integrations executor claiming verification ran in RagCore was the code disagreeing with
+> constitution Principle III; the code is now what the constitution says.
+>
+> **Gates.** RagCore **1229 passed** (ruff, `mypy --strict` clean, 17 migration tests against real
+> PostgreSQL); Integrations **77 passed**, up from 69. `check-boundaries.sh` green.
+>
+> **The build-time guard was widened and then proven by mutation.** Four new checks: a connector
+> import, a connector client dependency, a customer-system host, and connector-credential
+> resolution. Each was verified by planting a violation and observing it caught. **The host check
+> failed that verification the first time** — it required a `base_url`-shaped assignment near the
+> host and missed `BASE_URL` on capitalisation alone. It now matches the host itself. A guard that
+> passes because its pattern is broken is worse than no guard, and only the mutation found it.
+>
+> **This is necessary and not sufficient, and the task list should keep saying so.** Every check
+> here is an absence assertion, and an absence assertion passes equally where the path exists and
+> merely has no caller yet. **T311 is the proof that matters** — it *attempts* the connection and
+> observes it refused at the network layer and at Key Vault. Until T311 runs against a deployment,
+> the claim rests on code inspection rather than on observed authorization.
+>
+> **Also still open**: T282, T283 (the `integration_job` grant test — still the top item, still
+> unproven by exercise), T298 (queue provisioning), T304–T322.
+
 
 **Checkpoint**: RagCore holds no connector code and no connector credential. Every relocated adapter passes its suite in its new home. The column-scoped grant refuses a write to a non-result column.
 

@@ -15,11 +15,10 @@ There is no AI Gateway, no AI Search index and no ServiceNow instance in a pull-
 the choice is between fakes at the transport and no adapter coverage at all. Fakes at the transport
 leave everything above the socket exercised.
 
-**No credential appears in this module.** :class:`FakeCredential` returns a token-shaped string that
-authenticates nothing, and :class:`FakeSecretResolver` returns a
-:class:`~ragcore.config.secrets.SecretValue` whose content is a placeholder. The constitution's rule
-is that no credential appears in source, in tests, or in committed local configuration; a fake that
-carried a real-looking secret would be indistinguishable from a leak to every scanner that looks.
+**No credential appears in this module.** :class:`FakeCredential` returns a token-shaped string
+that authenticates nothing. The constitution's rule is that no credential appears in source, in
+tests, or in committed local configuration; a fake that carried a real-looking secret would be
+indistinguishable from a leak to every scanner that looks.
 """
 
 from __future__ import annotations
@@ -30,20 +29,8 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from ragcore.config.secrets import SecretRef, SecretValue
-
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Callable
-
-    from ragcore.domain.tenancy import TenantContext
-
-PLACEHOLDER_SECRET = "not-a-credential-placeholder"  # noqa: S105 — a fixed literal, not a secret
-"""What :class:`FakeSecretResolver` resolves to.
-
-Deliberately not a plausible-looking credential. A test fixture that resembles a real token is one a
-secret scanner flags and a reader has to verify, and the twentieth false positive is the one nobody
-checks.
-"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,64 +65,14 @@ class FakeCredential:
         return _FakeToken(token="placeholder-token")  # noqa: S106 — authenticates nothing
 
 
-class FakeSecretResolver:
-    """Resolves any reference to a placeholder value.
-
-    Satisfies :class:`~ragcore.config.secrets.SecretResolverPort`. Records what it was asked for, so
-    a test can assert that an adapter resolved *the organisation's* reference rather than some
-    shared one.
-    """
-
-    def __init__(self, *, fail_for: set[str] | None = None) -> None:
-        self.resolved: list[str] = []
-        self._fail_for = fail_for or set()
-
-    async def resolve(self, ref: SecretRef) -> SecretValue:
-        """Return a placeholder value for the reference.
-
-        Raises:
-            SecretResolutionError: For any name in ``fail_for``, so the unresolvable-secret path is
-                testable without a vault.
-        """
-        from ragcore.config.secrets import SecretResolutionError
-
-        self.resolved.append(ref.name)
-
-        if ref.name in self._fail_for:
-            raise SecretResolutionError(ref.name, "https://fake.vault", "seeded failure")
-
-        return SecretValue(ref.name, PLACEHOLDER_SECRET)
-
-
-class FakeCredentialReferenceStore:
-    """Credential **references**, per organisation and per system, held in memory.
-
-    Satisfies :class:`~ragcore.integrations.credentials.CredentialReferenceStorePort`. Keyed by
-    organisation *and* system rather than by system alone — a store with one reference per system
-    would happily hand one organisation's credential to another, and the test written against it
-    would prove nothing about the isolation it was meant to check.
-    """
-
-    def __init__(self) -> None:
-        self._references: dict[tuple[str, str], str] = {}
-
-    def bind(self, tenant: TenantContext, system: str, reference: str) -> None:
-        """Give one organisation a credential reference for one system.
-
-        Keyed through :func:`~ragcore.integrations.credentials.catalogue_prefix_for`, the same
-        function the resolver uses, so this fake is keyed exactly as the real repository's
-        ``catalogue_id`` prefix match is. A fake keyed on the bare system name would accept a
-        lookup the real store would miss.
-        """
-        from ragcore.integrations.credentials import catalogue_prefix_for
-
-        self._references[(str(tenant.tenant_id.value), catalogue_prefix_for(system))] = reference
-
-    async def credential_reference(
-        self, tenant: TenantContext, catalogue_prefix: str
-    ) -> str | None:
-        """The reference, or ``None`` when this organisation has none for this system."""
-        return self._references.get((str(tenant.tenant_id.value), catalogue_prefix))
+# `FakeSecretResolver` AND `FakeCredentialReferenceStore` STOOD HERE AND ARE GONE (T296).
+#
+# They existed to test per-organisation connector credential resolution, which this deployable no
+# longer performs. Their equivalents live beside the code that does, in the Integrations Service.
+#
+# **A dead fake is not harmless.** A fixture modelling a removed capability is an invitation to
+# rebuild it — the next author finds a ready-made store for connector credentials and reasonably
+# concludes that resolving one here is a supported thing to do.
 
 
 @dataclass
@@ -181,7 +118,7 @@ def transport_returning(
             exercised without a real dependency.
 
     Returns:
-        The transport to hand to :class:`~ragcore.integrations.http.HttpClientFactory`, and the
+        The transport to hand to :class:`~ragcore.egress.http.HttpClientFactory`, and the
         recorder.
     """
     recorder = TransportRecorder()

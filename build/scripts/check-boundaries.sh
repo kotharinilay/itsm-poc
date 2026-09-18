@@ -162,26 +162,60 @@ check "Integrations declares a model or graph dependency" \
 # system directly - the blast radius that motivated the split is an orchestrator compromise
 # yielding every organisation's connector credentials.
 #
-# THIS LIST WIDENS AS EACH CONNECTOR RELOCATES, AND IT IS DELIBERATELY NOT COMPLETE YET.
-#
-# ServiceNow has moved (this slice). Microsoft Graph, the MCP client, OneLogin and Duo have not -
-# they relocate in the remaining Phase 16 tasks. Listing them here now would fail the build on work
-# that has not been scheduled yet, and a guard that fails for work-in-progress is a guard somebody
-# comments out. Each relocation adds its name below in the same change that removes its code.
+# THE LIST IS NOW COMPLETE. Every connector has relocated (T288-T292, T296), so every one of them
+# is named below. The staged version of this block existed because a guard that fails for
+# work-in-progress is a guard somebody comments out; that reason has expired.
 #
 # Anchored on IMPORT and on a MODULE PATH rather than on the vendor's name in prose: RagCore
-# legitimately names ServiceNow throughout its documentation, its ports and its tests, and a guard
-# that flagged those is a guard somebody disables.
-check "RagCore imports the removed ServiceNow connector" \
-  '^[[:space:]]*(from|import)[[:space:]]+ragcore\.integrations\.servicenow' \
+# legitimately names ServiceNow, Graph and MCP throughout its documentation, its ports and its
+# tests, and a guard that flagged those is a guard somebody disables.
+check "RagCore imports a removed connector" \
+  '^[[:space:]]*(from|import)[[:space:]]+ragcore\.integrations\.(servicenow|graph|mcp|onelogin|duo|credentials)' \
   ragcore '*.py'
 
-# A ServiceNow base address anywhere in RagCore. `integrations/model/` remains the one permitted
-# egress - the AI Gateway - and it is untouched by naming the connector rather than excluding a path,
-# because an exclusion is what somebody widens.
-check "RagCore configures a ServiceNow endpoint" \
-  '(instance_url|base_?[Uu]rl|BaseAddress).{0,60}service-?now' \
-  ragcore '*.py' '*.toml' '*.json'
+# The connector client LIBRARIES. This catches the reintroduction that brings no ragcore.* import
+# with it - an adapter written directly over a vendor SDK. `azure-*` is deliberately absent: RagCore
+# legitimately uses Azure SDKs for its OWN platform resources, and banning the vendor namespace
+# would force an exception list long enough to hide a real violation in.
+check "RagCore declares a connector client dependency" \
+  '^[[:space:]]*"?(mcp|pysnow|msgraph|msgraph-core|onelogin|duo-client|duo_universal)[">=~]' \
+  ragcore '*.toml'
+
+# A customer system's ADDRESS anywhere in RagCore. Knowing where a system lives permits nothing on
+# its own, but it is the one thing a direct call cannot be written without.
+#
+# `integrations/model/` remains the one permitted egress - the AI Gateway - and it is untouched
+# because these patterns name CUSTOMER systems rather than excluding a path. An exclusion is what
+# somebody widens; a positive list of customer hosts is not.
+#
+# THE HOST ALONE, with no variable-name prefix required. An earlier version of this check demanded
+# a `base_url`-shaped assignment near the host and was proven by mutation to MISS `BASE_URL` on a
+# capitalisation alone - which is exactly the kind of near-miss a guard must not have, because it
+# fails silently and looks like it passed. These are fully qualified customer hostnames; they do not
+# occur in prose, so requiring an assignment near them bought nothing and cost the match.
+# Scoped to `ragcore/src`, which is the same deferral this script already makes for the .NET
+# migration rule below: the tests that ENFORCE this boundary have to name the hosts they forbid, and
+# grep cannot tell a rule from a description of one. `tests/architecture/test_no_connector_in_
+# ragcore.py` owns the test tree and reads the source with a parser, so the two together cover what
+# neither does alone - and a host in a fixture cannot make a production call regardless.
+check "RagCore names a customer-system endpoint" \
+  '(service-now\.com|servicenow\.com|graph\.microsoft\.com|onelogin\.com|duosecurity\.com)' \
+  ragcore/src '*.py' '*.toml' '*.json'
+
+# The credential path, which is the one with the blast radius. RagCore resolves its OWN secrets
+# through `ragcore.config.secrets`; what it must not do is resolve an ORGANISATION's connector
+# credential. The withdrawn Key Vault role is the real control - this catches the code that would
+# discover the role is gone only in production.
+#
+# Anchored on an IMPORT or a CONSTRUCTION, not on the bare name, and the distinction is load-bearing
+# here. RagCore still OWNS the `tenant_entitlement` schema, so `credential_reference` legitimately
+# appears in its migration, its model and the view definitions that decide who may read it - and
+# `tests/architecture/test_no_connector_in_ragcore.py` names the resolver types precisely to forbid
+# them. A guard that flagged the schema owner and its own enforcement test is a guard somebody
+# disables, which is worse than no guard.
+check "RagCore resolves a connector credential" \
+  '((from|import)[[:space:]]+\S*[[:space:]]*import[[:space:]].*(TenantCredentialResolver|EntitlementCredentials)|(TenantCredentialResolver|EntitlementCredentials)[[:space:]]*\()' \
+  ragcore '*.py'
 
 # ------------------------------------------- the monolith owns no schema (ADR-0001, ADR-0003)
 #

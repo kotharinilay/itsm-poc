@@ -19,7 +19,7 @@ call — it is recovered by the far side from the durable object the opaque iden
 whether an operation was permitted, and there is no method here that could — a refusal comes back as
 an outcome, not as a decision RagCore then re-interprets.
 
-**Reuses RagCore's existing outbound stack** (:mod:`ragcore.integrations.http`) rather than adding a
+**Reuses RagCore's existing outbound stack** (:mod:`ragcore.egress.http`) rather than adding a
 second one: the same pool, the same explicit-timeout rule, the same transient/permanent
 classification. A second HTTP path would be a second place "which statuses are worth retrying" gets
 answered, and only one of the answers would ever be tested.
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlencode
 
-from ragcore.integrations.http import (
+from ragcore.egress.http import (
     IntegrationError,
     OutboundRequest,
     PermanentIntegrationError,
@@ -43,7 +43,7 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from uuid import UUID
 
     from ragcore.domain.identifiers import CorrelationId, IdempotencyKey
-    from ragcore.integrations.http import ResilientHttpCaller
+    from ragcore.egress.http import ResilientHttpCaller
 
 __all__ = ["CaseOperationOutcome", "IntegrationsClient", "IntegrationsClientSettings"]
 

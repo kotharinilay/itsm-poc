@@ -17,14 +17,9 @@ from uuid import uuid4
 
 import pytest
 
-from ragcore.config.settings import IntegrationSettings, ModelGatewaySettings, RetrievalSettings
-from ragcore.domain.identifiers import CorrelationId, IdempotencyKey, OperationIdentity, PrincipalId
-from ragcore.execution.availability import CapabilityAvailability, availability_of
-from ragcore.integrations.credentials import (
-    TenantCredentialResolver,
-)
-from ragcore.integrations.graph.adapter import GRAPH_SCOPE, MicrosoftGraphAdapter
-from ragcore.integrations.http import (
+from ragcore.config.settings import ModelGatewaySettings, RetrievalSettings
+from ragcore.domain.identifiers import CorrelationId
+from ragcore.egress.http import (
     HttpClientFactory,
     OutboundRequest,
     PermanentIntegrationError,
@@ -32,7 +27,8 @@ from ragcore.integrations.http import (
     RetryPolicy,
     TransientIntegrationError,
 )
-from ragcore.integrations.mcp.client import McpToolClient, parse_server_urls
+from ragcore.egress.validation import BoundaryValidationError
+from ragcore.execution.availability import CapabilityAvailability, availability_of
 from ragcore.integrations.model.adapter import GatewayModelAdapter
 from ragcore.integrations.model.egress import (
     ModelBudgetExceededError,
@@ -42,14 +38,11 @@ from ragcore.integrations.model.egress import (
 )
 from ragcore.integrations.model.gateway import AiGatewayEgress, GatewayNotConfiguredError
 from ragcore.integrations.model.local import SERVED_BY, LocalDevelopmentEgress
-from ragcore.integrations.validation import BoundaryValidationError
 from ragcore.retrieval.search import AzureAiSearchRetrieval, RetrievalNotConfiguredError
 from tests.support.fakes import admitted_tenant
 from tests.support.integrations import (
     FakeCredential,
-    FakeCredentialReferenceStore,
     FakeModelEgress,
-    FakeSecretResolver,
     json_response,
     transport_returning,
 )
@@ -58,15 +51,6 @@ GATEWAY = ModelGatewaySettings(
     base_url="https://gateway.example", entra_scope="api://gateway/.default"
 )
 SEARCH = RetrievalSettings(endpoint="https://search.example", index_name="knowledge")
-INTEGRATIONS = IntegrationSettings(
-    servicenow_instance_url="https://itsm.example",
-    mcp_server_urls="onelogin=https://mcp.example/onelogin,duo=https://mcp.example/duo",
-)
-
-
-def _credentials() -> tuple[TenantCredentialResolver, FakeCredentialReferenceStore]:
-    store = FakeCredentialReferenceStore()
-    return TenantCredentialResolver(store, FakeSecretResolver()), store
 
 
 # ---------------------------------------------------------------------------
@@ -396,152 +380,19 @@ class TestRetrievalIsTenantFiltered:
 
 
 # ---------------------------------------------------------------------------
-# Microsoft Graph
+# The Graph and MCP sections stood here and are gone (T289, T292, T296)
 # ---------------------------------------------------------------------------
-
-
-class TestTheDirectoryBoundary:
-    """Read-only, managed identity, and Graph's vocabulary stops at the adapter."""
-
-    async def test_it_returns_platform_terms_not_graph_terms(self) -> None:
-        transport, _ = transport_returning(
-            lambda _: json_response(
-                {"@odata.context": "…", "displayName": "Ada", "mail": "ada@example.com"}
-            )
-        )
-
-        profile = await MicrosoftGraphAdapter(
-            INTEGRATIONS,
-            ResilientHttpCaller(HttpClientFactory(transport=transport)),
-            FakeCredential(),
-        ).lookup_principal(admitted_tenant(), PrincipalId(uuid4()))
-
-        assert profile is not None
-        assert profile.display_name == "Ada"
-        assert profile.mail == "ada@example.com"
-
-    async def test_an_unknown_principal_is_an_absence_not_an_error(self) -> None:
-        """``None`` is an absence of information and is never read as an authorization outcome."""
-        transport, _ = transport_returning(lambda _: json_response({}, status=404))
-
-        profile = await MicrosoftGraphAdapter(
-            INTEGRATIONS,
-            ResilientHttpCaller(
-                HttpClientFactory(transport=transport), retry=RetryPolicy(max_attempts=1)
-            ),
-            FakeCredential(),
-        ).lookup_principal(admitted_tenant(), PrincipalId(uuid4()))
-
-        assert profile is None
-
-    async def test_it_requests_the_graph_application_scope(self) -> None:
-        transport, _ = transport_returning(lambda _: json_response({"displayName": "Ada"}))
-        credential = FakeCredential()
-
-        await MicrosoftGraphAdapter(
-            INTEGRATIONS, ResilientHttpCaller(HttpClientFactory(transport=transport)), credential
-        ).lookup_principal(admitted_tenant(), PrincipalId(uuid4()))
-
-        assert credential.requested_scopes == [GRAPH_SCOPE]
-
-
-# ---------------------------------------------------------------------------
-# MCP — discovery is not entitlement
-# ---------------------------------------------------------------------------
-
-
-class TestDiscoveryConfersNothing:
-    """The gap between what a server advertises and what an organisation may call."""
-
-    async def test_an_advertised_tool_carries_no_treatment_or_entitlement(self) -> None:
-        """There is no field here a caller could read to decide whether to proceed
-        (spec FR-EXT-014)."""
-        tenant = admitted_tenant()
-        transport, _ = transport_returning(
-            lambda _: json_response({"tools": [{"name": "user.disable", "description": "d"}]})
-        )
-        resolver, store = _credentials()
-        store.bind(tenant, "onelogin", "onelogin-credential-name")
-
-        tools = await McpToolClient(
-            INTEGRATIONS, ResilientHttpCaller(HttpClientFactory(transport=transport)), resolver
-        ).discover(tenant, "onelogin")
-
-        from dataclasses import fields
-
-        assert [tool.name for tool in tools] == ["user.disable"]
-        assert {field.name for field in fields(tools[0])} == {"system", "name", "description"}
-
-    async def test_invoke_takes_a_catalogue_identity_and_not_an_advertised_tool(self) -> None:
-        """An advertised tool cannot be passed to the method that calls one. Going from one to the
-        other means going through the catalogue."""
-        from ragcore.integrations.mcp.client import AdvertisedTool
-
-        parameters = McpToolClient.invoke.__annotations__
-        assert parameters["identity"] == "OperationIdentity"
-        assert AdvertisedTool.__name__ not in str(parameters)
-
-    async def test_an_unreachable_server_raises_rather_than_advertising_nothing(self) -> None:
-        """ "Advertises nothing" and "could not be asked" are different facts; collapsing them would
-        report an outage as a shrunken toolset."""
-        tenant = admitted_tenant()
-        transport, _ = transport_returning(lambda _: json_response({}, status=503))
-        resolver, store = _credentials()
-        store.bind(tenant, "onelogin", "onelogin-credential-name")
-
-        with pytest.raises(TransientIntegrationError):
-            await McpToolClient(
-                INTEGRATIONS,
-                ResilientHttpCaller(
-                    HttpClientFactory(transport=transport), retry=RetryPolicy(max_attempts=1)
-                ),
-                resolver,
-            ).discover(tenant, "onelogin")
-
-    async def test_an_unconfigured_system_has_no_shared_fallback(self) -> None:
-        tenant = admitted_tenant()
-        transport, _ = transport_returning(lambda _: json_response({"tools": []}))
-        resolver, store = _credentials()
-        store.bind(tenant, "unlisted", "some-credential-name")
-
-        with pytest.raises(Exception, match="no MCP server endpoint"):
-            await McpToolClient(
-                INTEGRATIONS, ResilientHttpCaller(HttpClientFactory(transport=transport)), resolver
-            ).discover(tenant, "unlisted")
-
-    async def test_an_invocation_never_claims_more_than_the_platform_knows(self) -> None:
-        """A success field in the response is the server's claim about its own work; a
-        server-confirmed outcome requires the platform to read the effect back."""
-        from ragcore.domain.governance import VerificationOutcome
-
-        tenant = admitted_tenant()
-        transport, recorder = transport_returning(
-            lambda _: json_response({"isError": False, "summary": "done"})
-        )
-        resolver, store = _credentials()
-        store.bind(tenant, "duo", "duo-credential-name")
-
-        result = await McpToolClient(
-            INTEGRATIONS, ResilientHttpCaller(HttpClientFactory(transport=transport)), resolver
-        ).invoke(
-            tenant,
-            OperationIdentity("duo.device.read", 1),
-            {"device": "x"},
-            IdempotencyKey("k-1"),
-            CorrelationId("c-1"),
-        )
-
-        assert result.succeeded
-        assert result.verification is VerificationOutcome.CLIENT_ATTESTED
-        assert recorder.header("X-Synthia-Idempotency-Key") == "k-1"
-
-    def test_a_malformed_server_list_is_refused_at_startup(self) -> None:
-        with pytest.raises(ValueError, match="system=url"):
-            parse_server_urls("https://mcp.example/onelogin")
-
-    def test_a_plaintext_server_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="https"):
-            parse_server_urls("onelogin=http://mcp.example")
+#
+# `TestTheDirectoryBoundary` and `TestDiscoveryConfersNothing` tested adapters this deployable no
+# longer contains. They were not deleted: the facts they pinned — that Graph's vocabulary stops at
+# the boundary, that a directory profile carries no roles, that discovery confers no entitlement and
+# that there is no overload taking an advertised tool — moved with the code they were about, to
+# `integrations/tests/unit/test_connectors.py` and the MCP tests beside it.
+#
+# **What replaces them in THIS tree is an absence proof, not a behaviour test**, because the claim
+# here is different. There is nothing left to exercise; the claim is that nothing can be added back.
+# `tests/architecture/test_no_connector_in_ragcore.py` makes it, and `check-boundaries.sh` makes it
+# again at build time.
 
 
 # ---------------------------------------------------------------------------

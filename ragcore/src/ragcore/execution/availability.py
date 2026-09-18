@@ -28,7 +28,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from ragcore.integrations.http import TransientIntegrationError
+from ragcore.egress.http import TransientIntegrationError
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Awaitable, Callable

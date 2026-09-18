@@ -24,8 +24,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from ragcore.egress.validation import as_data
 from ragcore.integrations.model.egress import ModelPurpose, ModelRequest
-from ragcore.integrations.validation import as_data
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.domain.identifiers import CorrelationId

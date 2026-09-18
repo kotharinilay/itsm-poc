@@ -35,8 +35,10 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
 
 __all__ = [
     "BoundaryValidationError",
+    "NormalizedProfile",
     "NormalizedResult",
     "normalize_case_result",
+    "normalize_directory_profile",
     "normalize_tool_result",
 ]
 
@@ -48,6 +50,11 @@ _MAX_PAYLOAD_BYTES: Final = 64 * 1024
 _CASE_FIELDS: Final = frozenset({"number", "sys_id", "state", "short_description", "opened_at"})
 
 _EXTERNAL_REFERENCE_KEYS: Final = ("number", "sys_id")
+
+# Directory field bounds. Graph's own limits, restated here because a boundary that trusted the far
+# side to enforce its documented maximums would be trusting the thing it exists to check.
+_DISPLAY_NAME_LIMIT: Final = 256
+_MAIL_LIMIT: Final = 320
 
 # Field names that plausibly carry a credential or a destination. Matched on the KEY, because the
 # value's shape is not reliably distinguishable and a value-based scan would drop legitimate text.
@@ -76,6 +83,19 @@ class NormalizedResult:
 
     external_reference: str | None
     payload: Mapping[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedProfile:
+    """Directory facts in platform terms. **Deliberately two fields.**
+
+    Attributes:
+        display_name: The principal's name, for presentation only.
+        mail: The primary address, where the directory publishes one.
+    """
+
+    display_name: str
+    mail: str | None
 
 
 def normalize_case_result(raw: Mapping[str, object]) -> NormalizedResult:
@@ -166,3 +186,78 @@ def normalize_tool_result(raw: Mapping[str, object]) -> NormalizedResult:
             break
 
     return NormalizedResult(external_reference=external_reference, payload=payload)
+
+
+def normalize_directory_profile(raw: Mapping[str, object]) -> NormalizedProfile:
+    """Validate and reduce a directory response.
+
+    **The narrowest contract in this module, and deliberately so.** The platform's identity is
+    derived once at the gateway (constitution Principle I), so what a directory adds is presentation
+    detail — not identity, not roles, not group membership. A profile carrying any of those would be
+    a second source of authorization beside the closed header contract, which is why there is no
+    field here to put one in.
+
+    **Graph's vocabulary stops at this function.** ``userPrincipalName``, ``@odata.context`` and
+    ``id`` are read here and nowhere else; what leaves is stated in platform terms.
+
+    Args:
+        raw: The decoded provider body.
+
+    Returns:
+        The normalized profile.
+
+    Raises:
+        BoundaryValidationError: When the body exceeds the size bound, or carries no usable display
+            name. A profile with nothing to display is an absence dressed as a presence, and the
+            caller that received it would render an empty string as though the directory had
+            answered.
+    """
+    encoded = json.dumps(raw, default=str)
+    if len(encoded.encode("utf-8")) > _MAX_PAYLOAD_BYTES:
+        raise BoundaryValidationError(
+            f"provider response exceeds the {_MAX_PAYLOAD_BYTES} byte boundary limit"
+        )
+
+    display_name = _bounded_text(raw.get("displayName"), limit=_DISPLAY_NAME_LIMIT)
+    if display_name is None:
+        raise BoundaryValidationError(
+            "directory response carried no display name. An empty profile would render as though "
+            "the directory had answered, which is not the same fact as an unknown principal."
+        )
+
+    return NormalizedProfile(
+        display_name=display_name,
+        mail=_bounded_text(raw.get("mail"), limit=_MAIL_LIMIT),
+    )
+
+
+def _bounded_text(value: object, *, limit: int) -> str | None:
+    """One bounded string field, or ``None``.
+
+    **Truncation is not an option here.** A silently shortened value is a value the platform now
+    holds a wrong version of, and the wrongness is invisible; refusing is what makes a contract
+    change show up as a failure rather than as subtly corrupted data.
+
+    Args:
+        value: The raw field.
+        limit: The inclusive maximum length.
+
+    Returns:
+        The stripped text, or ``None`` when absent, blank or not a string.
+
+    Raises:
+        BoundaryValidationError: When the text exceeds the bound.
+    """
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    if len(candidate) > limit:
+        raise BoundaryValidationError(
+            f"a directory field exceeds its {limit} character bound at the boundary"
+        )
+
+    return candidate

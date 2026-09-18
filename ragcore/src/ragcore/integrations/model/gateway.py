@@ -25,13 +25,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ragcore.infrastructure.azure_credentials import azure_credential
-from ragcore.integrations.http import (
+from ragcore.egress.http import (
     IntegrationError,
     OutboundRequest,
     PermanentIntegrationError,
     ResilientHttpCaller,
 )
+from ragcore.egress.validation import require_object, require_text
+from ragcore.infrastructure.azure_credentials import azure_credential
 from ragcore.integrations.model.egress import (
     ModelBudgetExceededError,
     ModelEgressError,
@@ -39,7 +40,6 @@ from ragcore.integrations.model.egress import (
     ModelRequest,
     ModelResponse,
 )
-from ragcore.integrations.validation import require_object, require_text
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from ragcore.config.settings import ModelGatewaySettings

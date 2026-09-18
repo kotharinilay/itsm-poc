@@ -26,7 +26,11 @@ dependencies = [
     # with "aiohttp package is not installed", which names neither the caller nor the cause.
     "aiohttp>=3.10",
     "httpx>=0.28",
-    "mcp>=2.2",
+    # `mcp` STOOD HERE AND IS GONE (T296, ADR-0007). RagCore invokes no capability and discovers
+    # none; the MCP client belongs to the Integrations Service, which declares the dependency.
+    # Removing it is not tidying — a library present in the lock file is a library an import can
+    # reach, and `tests/architecture/test_no_connector_in_ragcore.py` would then be guarding
+    # against something the environment was still willing to supply.
     "opentelemetry-api>=1.44",
     "opentelemetry-sdk>=1.44",
     "opentelemetry-instrumentation-fastapi>=0.65b0",

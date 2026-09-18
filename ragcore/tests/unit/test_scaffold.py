@@ -82,24 +82,41 @@ class TestTheScaffoldBindsNoAdapter:
         ):
             assert bound is not None
 
-    def test_the_integration_ports_are_bound(self) -> None:
-        """Stage 9 brings the adapters, and binding them is still not inventing product.
+    def test_the_connector_ports_are_deliberately_unbound(self) -> None:
+        """**This assertion was inverted by T296, and the inversion is the boundary change.**
 
-        Each is a real boundary over a real external system, and none of them answers a question by
-        making one up: an unconfigured index raises rather than returning an empty result, an
-        organisation without a credential is refused rather than falling back to a shared one, and
-        an unreachable system of record reports a *queued* write rather than a committed one.
+        It used to require ``execution``, ``directory`` and ``discovery`` to be bound, because each
+        was a real adapter over a real external system. RagCore now owns none of them: capabilities
+        execute in the Integrations Service, reached through APIM or over Service Bus.
+
+        ``None`` rather than a stand-in, and the difference matters more than it looks. A stand-in
+        is an object with a method to call — the first caller to call it would have re-created the
+        in-process path this removes, and every test would keep passing, because a stand-in returns
+        successfully. ``None`` makes the absence something a caller has to handle.
         """
         container = build_container(_settings())
 
         assert container.http is not None
-        for bound in (
-            container.model,
+        for unbound in (
             container.execution,
             container.directory,
             container.discovery,
+            container.case_system,
         ):
-            assert bound is not None
+            assert unbound is None
+
+    def test_the_model_port_is_still_bound_because_reasoning_is_ragcores(self) -> None:
+        """The line the removal above draws is **whose system is at the other end**, not whether a
+        call leaves the process.
+
+        The AI Gateway is a platform destination RagCore owns, in the same class as its own derived
+        index — not a customer system behind a per-organisation credential. Asserting this beside
+        the unbound ports is what keeps the distinction legible: if the rule were "no outbound
+        calls", this line would have to go too, and RagCore could not reason.
+        """
+        container = build_container(_settings())
+
+        assert container.model is not None
 
     def test_the_model_port_is_bound_even_with_no_gateway_configured(self) -> None:
         """**And it reaches no provider.** With no gateway, the composition root selects the local

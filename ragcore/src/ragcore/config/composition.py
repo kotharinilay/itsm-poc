@@ -40,21 +40,11 @@ from ragcore.application.ports import (
     ToolExecutionPort,
     WorkItemRepositoryPort,
 )
-from ragcore.config.secrets import (
-    KeyVaultSecretResolver,
-    SecretRef,
-    SecretResolutionError,
-    SecretResolverPort,
-    SecretValue,
-)
 from ragcore.config.settings import Settings, get_settings
+from ragcore.egress.http import HttpClientFactory, ResilientHttpCaller
 from ragcore.graph.dependencies import GraphDependencies
 from ragcore.infrastructure.cache import NullCache, RedisTransientCache, TransientCachePort
 from ragcore.infrastructure.clock import SystemClock
-from ragcore.integrations.credentials import TenantCredentialResolver
-from ragcore.integrations.graph.adapter import MicrosoftGraphAdapter
-from ragcore.integrations.http import HttpClientFactory, ResilientHttpCaller
-from ragcore.integrations.mcp.client import McpToolClient
 from ragcore.integrations.model.adapter import GatewayModelAdapter
 from ragcore.integrations.model.egress import ModelEgressPort
 from ragcore.integrations.model.gateway import AiGatewayEgress
@@ -64,12 +54,15 @@ from ragcore.persistence.repositories import (
     ApprovalRepository,
     AuditSink,
     ConsentRepository,
-    EntitlementCredentials,
     FeedbackRepository,
     OperationCatalogue,
     Outbox,
     TenantRegistry,
     WorkItemRepository,
+)
+from ragcore.platform_clients.integrations import (
+    IntegrationsClient,
+    IntegrationsClientSettings,
 )
 from ragcore.retrieval.search import AzureAiSearchRetrieval
 
@@ -110,12 +103,16 @@ class Container:
             calls no model. **There is deliberately no third option and no provider client** —
             RagCore holds no model provider role at all
             (``build/infra/identity/managed-identities.json``).
-        execution: Governed capability invocation through MCP. **Stage 9 — bound.** Reached only
-            past the governance gate; the client executes and never decides.
-        case_system: The system of record. **Stage 9 — bound** when an instance is configured. Not
-            an authority: it holds the case, never an approval.
-        directory: Microsoft Graph, read-only. **Stage 9 — bound.**
-        discovery: What third-party systems advertise. **Stage 9 — bound**, and separate from
+        execution: Governed capability invocation. **Always ``None`` in this process** — the
+            binding that used to hold an MCP client was removed with the connector boundary
+            (T296, ADR-0007). Capabilities execute in the Integrations Service, reached over
+            Service Bus; the port survives because the graph node and its tests are written against
+            it, and a **test double** satisfying it is legitimate where a production adapter is not.
+        case_system: The system of record. **Always ``None``.** See the note at the binding below.
+        directory: Directory reads. **Always ``None``** — Microsoft Graph moved to the Integrations
+            Service with every other connector (T289).
+        discovery: What third-party systems advertise. **Always ``None``** — discovery is an MCP
+            call, and MCP calls are made by the Integrations Service. The port stays separate from
             ``catalogue`` on purpose: discovery confers no entitlement, and one port returning both
             would make the two indistinguishable at the call site.
         notifications: Realtime delivery. ``None`` until Stage 8.
@@ -148,6 +145,18 @@ class Container:
     notifications: NotificationPort | None = None
     audit: AuditSinkPort | None = None
     cache: TransientCachePort = field(default_factory=NullCache)
+
+    integrations: IntegrationsClient | None = None
+    """The Integrations Service, through APIM. **RagCore's only synchronous route outward.**
+
+    Bound when an edge address is configured, ``None`` otherwise — and ``None`` here is not the same
+    kind of absence as the connector bindings above. Those are permanently ``None`` by design; this
+    one is ``None`` only because no route is configured for this process, and a caller that finds it
+    so reports the capability as unavailable rather than proceeding.
+
+    **It is not a connector, which is why it may exist at all.** The thing at the other end is a
+    sibling platform service reached through the gateway, not a customer system reached directly.
+    """
 
     sessions: async_sessionmaker[AsyncSession] | None = None
     """The session factory every repository was built with.
@@ -220,7 +229,6 @@ def build_container(settings: Settings | None = None) -> Container:
     caller = ResilientHttpCaller(http)
 
     clock = SystemClock()
-    credentials = _credential_resolver(resolved, sessions)
 
     return Container(
         settings=resolved,
@@ -247,13 +255,9 @@ def build_container(settings: Settings | None = None) -> Container:
         # would put the decision back at the call sites, where the tempting resolution is a
         # provider client.
         model=GatewayModelAdapter(_model_egress(resolved, caller)),
-        execution=McpToolClient(resolved.integrations, caller, credentials),
-        discovery=McpToolClient(resolved.integrations, caller, credentials),
-        directory=MicrosoftGraphAdapter(resolved.integrations, caller),
-        # These two stay `None` when unconfigured rather than getting a stand-in. Retrieval with no
-        # index and a case system with no instance are absences a caller must be able to detect: an
-        # empty result set would read as "this organisation has nothing", and a silently discarded
-        # case write would read as a committed one.
+        # Retrieval stays `None` when unconfigured rather than getting a stand-in: an empty result
+        # set would read as "this organisation has nothing" rather than "this process cannot
+        # retrieve", and those are different facts.
         retrieval=(
             AzureAiSearchRetrieval(resolved.retrieval, caller)
             if resolved.retrieval.is_configured
@@ -261,22 +265,46 @@ def build_container(settings: Settings | None = None) -> Container:
         ),
         # Always bound, never `None`. Redis is transient only: it is never an authority and never
         # a durable record, so a process without one is fully correct and simply slower.
+        # THE REPLACEMENT FOR EVERY BINDING REMOVED ABOVE. Synchronous integration work — the
+        # catalogue read, the system-of-record operation — goes through here, over APIM. The
+        # asynchronous path needs no binding at all: it writes an `integration_job` row and
+        # publishes the job identifier, and `ragcore.persistence.integration_jobs` owns that.
+        integrations=(
+            IntegrationsClient(
+                IntegrationsClientSettings(gateway_base_url=resolved.integrations.gateway_base_url),
+                caller,
+            )
+            if resolved.integrations.is_configured
+            else None
+        ),
         cache=(
             RedisTransientCache(resolved.cache) if resolved.cache.is_configured else NullCache()
         ),
-        # THE DIRECT SERVICENOW PATH IS GONE (ADR-0007, spec §22.1). RagCore no longer calls the
-        # system of record: it calls the Integrations Service, through APIM, and that service owns
-        # every connector, every credential and every egress path.
+        # EVERY CONNECTOR BINDING IS `None`, AND THAT IS THE BOUNDARY (ADR-0007, spec §22.1,
+        # `FR-INTEG-016`). RagCore calls no external system. It calls the Integrations Service
+        # through APIM for the synchronous paths, and dispatches a durable job over Service Bus for
+        # the asynchronous ones; that service owns every connector, every credential and every
+        # egress path.
         #
-        # `None` rather than a stand-in, and deliberately so. The `CaseSystemPort` binding that used
-        # to hold `ServiceNowAdapter` has no in-process implementation any more and must not gain
-        # one — an adapter here would be exactly the direct path the boundary removes. Case
-        # operations go through `ragcore.platform_clients.integrations.IntegrationsClient`, which
-        # is bound separately below because it is a **platform service client**, not a connector.
+        # `None` rather than a stand-in, and deliberately so. A stand-in is an object with a method
+        # to call, and the first caller to call it would have re-created in-process exactly the
+        # path this removes. These four MUST NOT gain an in-process implementation:
         #
-        # A silently discarded case write would read as a committed one, so a caller that finds
-        # this `None` escalates rather than proceeding.
+        #   case_system  — was `ServiceNowAdapter`      → `integrations.connectors.servicenow`
+        #   directory    — was `MicrosoftGraphAdapter`  → `integrations.connectors.graph`
+        #   execution    — was `McpToolClient`          → `integrations.mcp.client`
+        #   discovery    — was `McpToolClient`          → `integrations.mcp.client`
+        #
+        # Enforced rather than asked for: `tests/architecture/test_no_connector_in_ragcore.py`
+        # fails if one is bound here, and `build/scripts/check-boundaries.sh` fails the build if
+        # the code to bind reappears in this tree at all.
+        #
+        # A silently discarded write would read as a committed one, so a caller that finds one of
+        # these `None` escalates rather than proceeding.
         case_system=None,
+        directory=None,
+        execution=None,
+        discovery=None,
         # Still `None`, and still honestly so: notifications have no transport until Stage 8 binds
         # one here. A default that quietly dropped them would let the platform appear to work while
         # no boundary was real.
@@ -315,50 +343,21 @@ def _model_egress(settings: Settings, caller: ResilientHttpCaller) -> ModelEgres
     return LocalDevelopmentEgress(environment=settings.environment)
 
 
-def _credential_resolver(
-    settings: Settings, sessions: async_sessionmaker[AsyncSession]
-) -> TenantCredentialResolver:
-    """Build per-organisation credential resolution: a reference from PostgreSQL, a value from Key
-    Vault.
-
-    Args:
-        settings: The validated configuration.
-        sessions: The session factory the reference store reads through.
-
-    Returns:
-        The resolver every third-party adapter takes. It holds no credential itself — it resolves
-        one, per organisation, at the point of use (spec FR-EXT-016).
-    """
-    secrets: SecretResolverPort = (
-        KeyVaultSecretResolver(settings.key_vault.vault_uri)
-        if settings.key_vault.is_configured
-        else _NoVaultResolver()
-    )
-    return TenantCredentialResolver(EntitlementCredentials(sessions), secrets)
-
-
-class _NoVaultResolver:
-    """What resolves a secret when no vault is configured: **nothing, loudly.**
-
-    Satisfies :class:`~ragcore.config.secrets.SecretResolverPort` by always raising. A developer
-    machine legitimately has no vault, and the honest consequence is that a call needing an
-    organisation's credential fails with a message naming the missing vault — not that it proceeds
-    unauthenticated, and not that it falls back to an environment variable, which would be a
-    credential in configuration.
-    """
-
-    async def resolve(self, ref: SecretRef) -> SecretValue:
-        """Raise, naming the reference that could not be resolved.
-
-        Raises:
-            SecretResolutionError: Always. There is no vault to resolve from.
-        """
-        raise SecretResolutionError(
-            ref.name,
-            "no vault",
-            "no Key Vault is configured for this process, and there is no other source of secret "
-            "material. Set SYNTHIA_KEYVAULT_VAULT_URI",
-        )
+# THERE IS NO CREDENTIAL RESOLVER IN THIS PROCESS, AND ITS ABSENCE IS THE CONTROL.
+#
+# `_credential_resolver` and its no-vault stand-in used to sit here, resolving a per-organisation
+# connector secret: a reference from `tenant_entitlement`, a value from Key Vault. Both are gone
+# with the connector boundary (T296, ADR-0007, spec `FR-INTEG-017`).
+#
+# **The removal is not only of code.** `id-synthia-ragcore` no longer holds the vault role for
+# connector secrets — it was narrowed to `secret:synthia-ragcore-*` rather than duplicated
+# (`build/infra/identity/managed-identities.json`), and `vw_connector_credential_ref_v1` is granted
+# to the Integrations principal alone. That withdrawal is what makes `SC-DEMO-020` provable: the
+# bypass test attempts the resolution from RagCore and observes Key Vault refuse it, which is a
+# fact about deployed authorization rather than about which code happens to exist.
+#
+# RagCore still resolves *its own* secrets — a database password, a gateway key — through
+# `ragcore.config.secrets`. The distinction that matters is whose system the secret opens.
 
 
 def graph_dependencies(container: Container) -> GraphDependencies | None:

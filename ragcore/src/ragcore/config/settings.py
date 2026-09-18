@@ -218,53 +218,70 @@ class RetrievalSettings(BaseSettings):
         return bool(self.endpoint)
 
 
-class IntegrationSettings(BaseSettings):
-    """Third-party target systems: where they are, never how to authenticate to them.
+class IntegrationsServiceSettings(BaseSettings):
+    """Where the **Integrations Service** is reached. The one outbound address left in this class.
 
-    **Every field here is an address.** Credentials for a third-party system are held per
-    organisation and per system as a Key Vault *reference* in
-    ``tenant_entitlement.credential_reference``, resolved at the point of use by
-    :class:`~ragcore.integrations.credentials.TenantCredentialResolver` (spec FR-EXT-016). A
-    credential in this class would be a platform-wide one — the same credential for every
-    organisation — which is the cross-organisation leak the per-tenant arrangement exists to
-    prevent.
+    **This replaced `IntegrationSettings`, and the replacement is the boundary** (T296, ADR-0007).
+    That class held third-party addresses — a ServiceNow instance, a Graph base URL, a list of MCP
+    servers — and RagCore no longer has any business knowing where those systems are. Knowing an
+    address is not itself an authorization, but it is the first thing a direct call needs, and code
+    that can name a destination is code someone can later point at it.
+
+    What is left is a **sibling platform service**, reached exactly like any other application call:
+    through Front Door, the WAF and APIM (spec §13.4). There is no internal address here and no
+    credential — the hop authenticates with managed identity on the workload audience, and APIM
+    re-derives identity on it.
+
+    **There is no per-organisation secret in this class and there is no longer one anywhere in
+    RagCore.** Connector credentials are resolved by the Integrations Service alone, against a vault
+    role RagCore's identity no longer holds (spec `FR-INTEG-017`, `SC-DEMO-020`).
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="SYNTHIA_INTEGRATION_", extra="forbid", frozen=True
+        env_prefix="SYNTHIA_INTEGRATIONS_", extra="forbid", frozen=True
     )
 
-    servicenow_instance_url: str = ""
-    """The system-of-record instance, for example ``https://example.service-now.com``."""
+    gateway_base_url: str = ""
+    """The **public edge** address of the gateway fronting the Integrations Service.
 
-    graph_base_url: str = "https://graph.microsoft.com/v1.0"
-    """Microsoft Graph. A well-known address rather than a deployment choice, so it defaults."""
-
-    mcp_server_urls: str = ""
-    """Comma-separated MCP server endpoints, in ``system=url`` form.
-
-    **An advertised capability is not a callable one** (spec FR-EXT-014). Listing a server here
-    makes it reachable for discovery and does nothing else: a capability becomes callable only once
-    it is registered in the governance catalogue and entitled to an organisation, neither of which
-    happens in configuration.
+    Empty means this process performs no synchronous integration call. Honest rather than
+    convenient: a default pointing somewhere would be a default that either fails confusingly or,
+    worse, succeeds against the wrong environment.
     """
 
-    request_timeout_seconds: float = Field(default=30.0, gt=0)
+    request_timeout_seconds: float = Field(default=15.0, gt=0)
+    """The bound on one synchronous hop.
 
-    @field_validator("servicenow_instance_url", "graph_base_url")
+    Sized for a call that now traverses two services rather than one, and still well inside the
+    fifteen-minute execution window — a timeout longer than the window would let a call outlive the
+    authority that permitted it.
+    """
+
+    @field_validator("gateway_base_url")
     @classmethod
-    def _must_be_https(cls, value: str) -> str:
-        """Refuse a plaintext third-party address at startup.
+    def _must_be_the_edge(cls, value: str) -> str:
+        """Refuse an address that is not the public edge.
 
         Raises:
-            ValueError: When set and not ``https``. These calls carry an organisation's credential.
+            ValueError: When set and not ``https``, or when it names an internal Container Apps
+                address. Refused **at startup** rather than at first call, so the failure names the
+                configuration instead of surfacing later as a puzzling 403 from a service that was
+                never actually reached.
         """
         if value and not value.startswith("https://"):
+            raise ValueError(f"the Integrations Service address must be https, got {value!r}.")
+        if ".internal." in value:
             raise ValueError(
-                f"an integration address must be https, got {value!r}. These calls carry an "
-                "organisation's credential."
+                "the Integrations Service address names an internal address. Every application "
+                "call traverses Front Door, the WAF and APIM; there is no direct "
+                "service-to-service route (spec §13.4)."
             )
         return value
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether a synchronous route to the Integrations Service exists for this process."""
+        return bool(self.gateway_base_url)
 
 
 class NotificationSettings(BaseSettings):
@@ -527,7 +544,7 @@ class Settings(BaseSettings):
     notifications: NotificationSettings = NotificationSettings()
     gateway: ModelGatewaySettings = ModelGatewaySettings()
     retrieval: RetrievalSettings = RetrievalSettings()
-    integrations: IntegrationSettings = IntegrationSettings()
+    integrations: IntegrationsServiceSettings = IntegrationsServiceSettings()
     cache: CacheSettings = CacheSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 

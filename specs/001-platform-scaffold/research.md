@@ -363,9 +363,14 @@ failure.
 
 **Rationale**: Manual `HttpClient` instantiation causes socket exhaustion and stale DNS; per-call
 bespoke retry causes inconsistent behaviour and hidden amplification. The timeout rule is specific to
-this platform: RagCore calls MCP servers, the system of record, Graph and SignalR inside a
-fifteen-minute execution window, and one call without a timeout can hold work past its expiry —
-turning a slow dependency into an expired approval.
+this platform: work happens inside a fifteen-minute execution window, and one call without a
+timeout can hold it past its expiry — turning a slow dependency into an expired approval.
+
+**Amended by ADR-0007 (T296).** RagCore no longer calls MCP servers, the system of record or Graph;
+those are the Integrations Service's, and it applies the same rule to them. RagCore's own outbound
+calls are the AI Gateway, its search index, SignalR and the Integrations Service through APIM. The
+rule did not change — **it now has to hold in two processes rather than one**, which is why each
+declares its own caller with its own explicit-timeout type rather than sharing a package.
 
 **Consequence**: retry policy must not be confused with the execution-retry rule. Transport-level retry
 of a *read* is fine; a failed side-effecting operation still does not re-fire (ADR-0002).

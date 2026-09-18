@@ -177,20 +177,22 @@ class TestTheAdaptersAreWhereTheProviderDetailLives:
     @pytest.mark.parametrize(
         "adapter",
         [
+            # THE CONNECTOR ENTRIES ARE ALL GONE (T288–T292, T296). ServiceNow, Graph, the MCP
+            # client, OneLogin, Duo and the per-organisation credential resolver relocated to the
+            # Integrations Service, and their absence — not their presence — is now the property
+            # that matters. It is asserted positively by
+            # `tests/architecture/test_no_connector_in_ragcore.py` and again at build time by
+            # `build/scripts/check-boundaries.sh`; listing them here would only assert that a
+            # deleted file is deleted.
+            #
+            # What remains below is every boundary RagCore still legitimately owns, and the list is
+            # now short enough to read as a claim: two model paths, one search index, one shared
+            # transport, one validation rule, one sibling-service client. **No customer system.**
             "integrations/model/gateway.py",
             "integrations/model/local.py",
-            # `integrations/servicenow/adapter.py` was HERE and has RELOCATED to the Integrations
-            # Service (ADR-0007, plan Stage 16). Its absence is now the property that matters:
-            # `build/scripts/check-boundaries.sh` fails the build if RagCore imports it back, and
-            # the adapter's own tests moved with it. The remaining connectors relocate in the
-            # following tasks and are removed from this list as each one does.
-            "integrations/graph/adapter.py",
-            "integrations/mcp/client.py",
-            "integrations/onelogin/adapter.py",
-            "integrations/duo/adapter.py",
-            "integrations/http.py",
-            "integrations/validation.py",
-            "integrations/credentials.py",
+            "egress/http.py",
+            "egress/validation.py",
+            "platform_clients/integrations.py",
             "retrieval/search.py",
         ],
     )

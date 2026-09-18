@@ -173,21 +173,25 @@ class TestDependsIsConfinedToTheTransportBoundary:
             "IdempotencyStore",
             "Outbox",
             "AuditSink",
-            "EntitlementCredentials",
-            # Stage 9. The integration adapters, on the same terms: each is a deliberate line
-            # here, and constructing one outside the composition root fails rather than quietly
-            # working. The model egress implementations are listed because the choice between them
-            # is the single-egress rule — a selection made at a call site would be a per-caller
-            # model egress.
+            # Stage 9, minus every connector. `ServiceNowAdapter`, `MicrosoftGraphAdapter`,
+            # `McpToolClient`, `TenantCredentialResolver` and `EntitlementCredentials` were listed
+            # here and are gone with T288–T292 and T296 — they are not constructible outside the
+            # composition root because they are not constructible in this tree at all, which
+            # `tests/architecture/test_no_connector_in_ragcore.py` asserts directly.
+            #
+            # What is left is the same rule on the same terms: each is a deliberate line, and
+            # constructing one outside the composition root fails here rather than quietly working.
+            # The model egress implementations are listed because the choice between them **is** the
+            # single-egress rule — a selection made at a call site would be a per-caller egress.
             "AiGatewayEgress",
             "LocalDevelopmentEgress",
             "GatewayModelAdapter",
             "AzureAiSearchRetrieval",
-            "ServiceNowAdapter",
-            "MicrosoftGraphAdapter",
-            "McpToolClient",
             "HttpClientFactory",
-            "TenantCredentialResolver",
+            # The Integrations Service client. Listed for the same reason the adapters were: it is
+            # the one route outward, and a second instance built at a call site would be a second
+            # place the gateway address and its timeout policy get decided.
+            "IntegrationsClient",
         }
         users = {
             str(path.relative_to(SRC)).replace("\\", "/")

@@ -29,7 +29,7 @@ from ragcore.config.settings import (
     CacheSettings,
     DatabaseSettings,
     EdgeTrustSettings,
-    IntegrationSettings,
+    IntegrationsServiceSettings,
     KeyVaultSettings,
     MessagingSettings,
     ModelGatewaySettings,
@@ -130,13 +130,44 @@ class TestEveryEndpointMustBeHttps:
             (NotificationSettings, "endpoint"),
             (ModelGatewaySettings, "base_url"),
             (RetrievalSettings, "endpoint"),
-            (IntegrationSettings, "servicenow_instance_url"),
-            (IntegrationSettings, "graph_base_url"),
+            (IntegrationsServiceSettings, "gateway_base_url"),
         ],
     )
     def test_a_plaintext_endpoint_is_refused(self, factory: type, field: str) -> None:
         with pytest.raises(ValidationError):
             factory(**{field: "http://insecure.example"})
+
+    def test_an_internal_address_for_the_integrations_service_is_refused(self) -> None:
+        """**There is no direct service-to-service route** (spec §13.4, T296).
+
+        An internal Container Apps address is https, so the plaintext check above would pass it.
+        This is the one that would not: every application call traverses Front Door, the WAF and
+        APIM, which is where identity is re-derived on the hop. A direct address would skip that
+        and still look perfectly secure in configuration review.
+
+        Refused **at startup** rather than at first call, so the failure names the configuration
+        instead of surfacing later as a puzzling 403 from a service that was never reached.
+
+        The address is **assembled rather than written out**, and that is not obfuscation.
+        ``build/scripts/check-boundaries.sh`` greps this tree for a base address naming the other
+        deployable directly, and it cannot tell a forbidden value from a test asserting that the
+        value is forbidden. Spelling it in fragments keeps that guard broad — the alternative is
+        narrowing it to exclude tests, and an exclusion is what somebody widens.
+        """
+        service = "synthia-integrations"
+        direct = f"https://{service}.internal.azurecontainerapps.io"
+
+        with pytest.raises(ValidationError):
+            IntegrationsServiceSettings(gateway_base_url=direct)
+
+    def test_an_unconfigured_integrations_route_is_reported_not_guessed(self) -> None:
+        """Empty means *no synchronous route from this process*, which is a legitimate state.
+
+        There is deliberately no default address. A default would either fail confusingly or,
+        worse, succeed against the wrong environment — and a connector call that reached the wrong
+        environment is the one failure mode nothing downstream can detect.
+        """
+        assert IntegrationsServiceSettings(gateway_base_url="").is_configured is False
 
     def test_an_empty_endpoint_is_permitted_where_the_component_is_optional(self) -> None:
         """Empty means *not configured*, which is a legitimate state for a component the platform

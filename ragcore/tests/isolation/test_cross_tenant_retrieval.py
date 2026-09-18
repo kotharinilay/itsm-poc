@@ -35,7 +35,7 @@ import pytest
 from ragcore.config.settings import RetrievalSettings
 from ragcore.domain.identifiers import EntraTenantId, TenantId
 from ragcore.domain.tenancy import TenantContext, TenantStatus
-from ragcore.integrations.validation import BoundaryValidationError
+from ragcore.egress.validation import BoundaryValidationError
 from ragcore.retrieval.search import (
     MAX_RESULTS,
     TENANT_FIELD,

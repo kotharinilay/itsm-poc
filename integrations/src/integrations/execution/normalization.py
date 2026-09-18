@@ -33,7 +33,12 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Mapping
 
-__all__ = ["BoundaryValidationError", "NormalizedResult", "normalize_case_result"]
+__all__ = [
+    "BoundaryValidationError",
+    "NormalizedResult",
+    "normalize_case_result",
+    "normalize_tool_result",
+]
 
 # Sized to hold a case record with generous room, and small enough that a runaway vendor response
 # cannot become a multi-megabyte row in an append-only execution record.
@@ -114,5 +119,50 @@ def normalize_case_result(raw: Mapping[str, object]) -> NormalizedResult:
             "provider response carried no case identifier. The platform would have nothing to "
             "reconcile the record against, and an unreconcilable write is worse than a failed one."
         )
+
+    return NormalizedResult(external_reference=external_reference, payload=payload)
+
+
+def normalize_tool_result(raw: Mapping[str, object]) -> NormalizedResult:
+    """Validate and reduce a generic tool response — MCP or native connector.
+
+    **Looser than the case contract on shape, identical on safety.** A case record has a known set
+    of fields; an arbitrary capability does not, and inventing one would reject every legitimate
+    connector that did not happen to match it. So the field allow-list is dropped here and the two
+    rules that carry the security weight are kept:
+
+    * the **size bound**, because an oversized body is either a contract change or an attack, and
+      either way it must not become a multi-megabyte row in an append-only record;
+    * the **forbidden-key filter**, because a credential or an endpoint echoed back by a provider
+      must not be carried inward — a destination comes from the registry, and a secret comes from
+      the vault.
+
+    **An external reference is optional here**, unlike a case. Many capabilities legitimately return
+    no identifier — a read, a check, a no-op — and demanding one would fail them at the boundary for
+    behaving correctly.
+
+    Args:
+        raw: The decoded provider body.
+
+    Returns:
+        The normalized result.
+
+    Raises:
+        BoundaryValidationError: When the body exceeds the size bound.
+    """
+    encoded = json.dumps(raw, default=str)
+    if len(encoded.encode("utf-8")) > _MAX_PAYLOAD_BYTES:
+        raise BoundaryValidationError(
+            f"provider response exceeds the {_MAX_PAYLOAD_BYTES} byte boundary limit"
+        )
+
+    payload = {key: value for key, value in raw.items() if not _FORBIDDEN_KEY.search(key)}
+
+    external_reference: str | None = None
+    for key in _EXTERNAL_REFERENCE_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            external_reference = candidate.strip()
+            break
 
     return NormalizedResult(external_reference=external_reference, payload=payload)

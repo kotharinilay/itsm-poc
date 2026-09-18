@@ -60,6 +60,8 @@ from ragcore.domain.governance import (
     CapabilityKind,
     ExecutionMethod,
     ExecutionTreatment,
+    IntegrationJobStatus,
+    IntegrationResultStatus,
     RiskTier,
     VerificationOutcome,
 )
@@ -852,6 +854,105 @@ class IdempotencyRecord(TenantScoped, Audited, Base):
 
 
 # ---------------------------------------------------------------------------
+# The Integrations Service seam (ADR-0007)
+# ---------------------------------------------------------------------------
+
+
+class IntegrationJob(TenantScoped, Audited, Attributed, Versioned, Base):
+    """The durable instruction handed to the Integrations Service.
+
+    **This is what lets the Service Bus command stay opaque** (spec §21.6.5, `FR-INTEG-014`).
+    RagCore writes the capability, its version and its parameters here in the same transaction as
+    the state change; the message carries only ``job_id``, correlation context and a routing kind.
+
+    ```text
+    The message causes work to happen.
+    The durable job record provides the instruction, the authority and the tenant context.
+    ```
+
+    **It lives in ``platform`` rather than in ``integration`` because RagCore owns it**, and the
+    Integrations Service reaches it through a **column-scoped grant**: ``SELECT`` on the row, and
+    ``UPDATE`` on the four ``result_*`` columns and nothing else (revision ``0022``). It cannot
+    alter ``catalogue_id``, ``catalogue_version``, ``parameters`` or ``tenant_id`` — a service able
+    to rewrite its own instruction could execute an operation other than the one governance
+    authorized, which is a Principle VIII hard failure. The refusal comes from PostgreSQL, not from
+    application restraint.
+
+    **The four result columns are how RagCore learns the outcome without reading the other
+    service's schema.** It holds no grant on ``integration``, and these columns exist so it needs
+    none: the coupling between the two stays one directed edge plus a queue, rather than a shared
+    table.
+    """
+
+    __tablename__ = "integration_job"
+
+    job_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+
+    work_item_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        # CASCADE for the same reason the session tables use it: erasure is a **hard delete**
+        # (spec FR-AUDIT-006), and an instruction left behind after the work item it belonged to
+        # was erased is one organisation's data surviving a deletion that reported success.
+        ForeignKey(_fk("work_item.work_item_id"), ondelete="CASCADE"),
+        nullable=False,
+    )
+    operation_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    """The operation within the work item. Part of the derived idempotency key, because one work
+    item may carry more than one operation and a key without it would make two distinct actions
+    look like retries of each other."""
+
+    catalogue_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    catalogue_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    """Bound at selection, so the far side can refuse a mismatch rather than silently running
+    whatever is current. An approval bound a version."""
+
+    parameters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    """The arguments, as **data**. The destination comes from the connector registry and never from
+    here (spec `FR-EXT-018`)."""
+
+    status: Mapped[IntegrationJobStatus] = mapped_column(
+        enums.INTEGRATION_JOB_STATUS, nullable=False, server_default="created"
+    )
+
+    result_status: Mapped[IntegrationResultStatus | None] = mapped_column(
+        enums.INTEGRATION_RESULT_STATUS, nullable=True
+    )
+    result_verification: Mapped[VerificationOutcome | None] = mapped_column(
+        enums.VERIFICATION_OUTCOME, nullable=True
+    )
+    """What the Integrations Service **observed**. RagCore draws the conclusion: a
+    ``client_attested`` outcome MUST NOT be presented to a user as confirmed resolution
+    (ADR-0004)."""
+
+    result_execution_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    result_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    """The execution window, from the authority record. Expiry is a normal outcome and produces no
+    execution (spec §29.5)."""
+
+    __table_args__ = (
+        Index("ix_integration_job_work_item_id", "work_item_id"),
+        Index("ix_integration_job_tenant_id", "tenant_id"),
+        Index(
+            "ix_integration_job_in_flight",
+            "expires_at",
+            postgresql_where=text("status IN ('created', 'dispatched')"),
+        ),
+        CheckConstraint(
+            "(result_status IS NULL AND result_recorded_at IS NULL) "
+            "OR (result_status IS NOT NULL AND result_recorded_at IS NOT NULL)",
+            name="ck_integration_job_result_is_whole",
+        ),
+        CheckConstraint("catalogue_version >= 1", name="ck_integration_job_version_starts_at_one"),
+        {"schema": PLATFORM_SCHEMA},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Ingestion — the twelfth bounded context
 # ---------------------------------------------------------------------------
 
@@ -950,6 +1051,7 @@ CONSENT: Final[Table] = _table("consent")
 AUDIT_EVENT: Final[Table] = _table("audit_event")
 OUTBOX_MESSAGE: Final[Table] = _table("outbox_message")
 IDEMPOTENCY_RECORD: Final[Table] = _table("idempotency_record")
+INTEGRATION_JOB: Final[Table] = _table("integration_job")
 INGESTION_RUN: Final[Table] = _table("ingestion_run")
 
 TABLES_BY_NAME: Final[dict[str, Table]] = {table.name: table for table in metadata.sorted_tables}

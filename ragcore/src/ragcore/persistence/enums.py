@@ -34,6 +34,8 @@ from ragcore.domain.governance import (
     CapabilityKind,
     ExecutionMethod,
     ExecutionTreatment,
+    IntegrationJobStatus,
+    IntegrationResultStatus,
     RiskTier,
     VerificationOutcome,
 )
@@ -111,6 +113,14 @@ EXECUTION_TREATMENT: Final = pg_enum(ExecutionTreatment, "execution_treatment")
 VERIFICATION_OUTCOME: Final = pg_enum(VerificationOutcome, "verification_outcome")
 """What the platform knows. ``client_attested`` is a claim, not a confirmed resolution."""
 
+INTEGRATION_JOB_STATUS: Final = pg_enum(IntegrationJobStatus, "integration_job_status")
+"""Where an instruction to the Integrations Service has got to. **Never an authority state** — the
+authority lives on the work item (ADR-0007)."""
+
+INTEGRATION_RESULT_STATUS: Final = pg_enum(IntegrationResultStatus, "integration_result_status")
+"""Whether the operation ran. The detail — unentitled, unreachable — lives on the execution record
+in the Integrations Service's own schema, not here."""
+
 EXECUTION_METHOD: Final = pg_enum(ExecutionMethod, "execution_method")
 """How a consequential action was performed, or ``none`` when none was."""
 
@@ -140,9 +150,15 @@ ALL_ENUM_TYPES: Final[tuple[SAEnum, ...]] = (
     RISK_TIER,
     INGESTION_RUN_STATE,
 )
-"""Every type the platform schema declares.
+"""Every type revision ``0001`` declares.
 
 Enumerated so the first migration creates them in one place and the final downgrade drops them in
 one place. A type left behind by an incomplete downgrade makes the next upgrade fail with
 ``type already exists`` — which is the failure ``test_up_down_consistency`` exists to catch.
+
+**`INTEGRATION_JOB_STATUS` and `INTEGRATION_RESULT_STATUS` are deliberately absent**, and that is
+not an oversight. They arrived with revision ``0022`` and are created and dropped there. Adding them
+to this tuple would make revision ``0001`` create them, and ``0022`` would then fail on an existing
+database with exactly the ``type already exists`` error this tuple exists to prevent — so a type
+belongs here only if the first migration is the one that declares it.
 """

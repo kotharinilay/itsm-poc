@@ -105,6 +105,39 @@ class ExecutionMethod(Enum):
     """No execution occurred. The operation was refused, expired, or cancelled before claim."""
 
 
+class IntegrationJobStatus(Enum):
+    """The lifecycle of one instruction handed to the Integrations Service (ADR-0007).
+
+    **Not an authority state.** The authority lives on the work item; this only tracks where the
+    instruction has got to, so an operator can tell a job that never left from one whose result
+    never came back — two stalls with different causes and different fixes.
+    """
+
+    CREATED = "created"
+    """Written, not yet announced. A job stuck here means the outbox never dispatched."""
+
+    DISPATCHED = "dispatched"
+    """Announced. A job stuck here means the far side never answered."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    """The execution window elapsed. A **normal outcome**, not an error (spec §29.5)."""
+
+
+class IntegrationResultStatus(Enum):
+    """Whether the operation ran, as RagCore records it on its own job row.
+
+    Deliberately coarser than the Integrations Service's own outcome enum. RagCore needs to know
+    *did this happen*; the detail — unentitled, unregistered, unreachable — belongs on the execution
+    record, and duplicating it here would create a second place the same fact is stated and a second
+    place it can be stated differently.
+    """
+
+    EXECUTED = "executed"
+    FAILED = "failed"
+
+
 class VerificationOutcome(Enum):
     """What the platform actually knows about an execution's outcome.
 

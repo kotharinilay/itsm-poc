@@ -16,6 +16,24 @@
 # to revisit silently.
 
 # ---------------------------------------------------------------------------------------------
+# Runtime base — DIGEST PIN
+# ---------------------------------------------------------------------------------------------
+# The tag is carried alongside for readability; the digest is what is resolved. Re-pinning is an
+# ordinary reviewed pull request opened by .github/workflows/base-image-digests.yml monthly, on a
+# High or Critical CVE, or on a base-image runtime patch. A digest never reaches production on a
+# green scan alone — it passes the full suite as well (plan Stage 10).
+#
+# The digest below is a placeholder and MUST be replaced with a resolved value before this image is
+# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
+# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
+# somebody looked. Built as committed, the build therefore FAILS — which is the intent.
+#
+# An ARG so that CI can prove the image builds and starts before a digest exists
+# (build/scripts/smoke-images.sh passes the bare tag as a CI-only override). BuildKit parses every
+# stage's FROM, so without the ARG not even `--target build` could run.
+ARG RUNTIME_BASE=mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:REPLACE_WITH_RESOLVED_DIGEST
+
+# ---------------------------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------------------------
 # The SDK stage is not the shipped image, so it is pinned by tag rather than by digest: what it
@@ -25,15 +43,17 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /source
 
-# Restore before copying the rest of the tree, so a source-only change does not re-download every
-# package. Central package management means the version list is one file.
+# Central package management means the version list is one file.
+#
+# THE API PROJECT, NOT THE SOLUTION. Restoring Synthia.sln needs every test project, and
+# .dockerignore excludes dotnet/tests/ — the production image runs no tests and its context should
+# not carry them. Restoring the solution therefore failed on a directory that was never sent, and
+# no image could be built at all. The API project's reference graph is exactly what gets published.
 COPY dotnet/Directory.Build.props dotnet/Directory.Packages.props dotnet/.editorconfig ./dotnet/
-COPY dotnet/Synthia.sln ./dotnet/
 COPY dotnet/src/ ./dotnet/src/
-COPY dotnet/tests/ ./dotnet/tests/
 
 WORKDIR /source/dotnet
-RUN dotnet restore Synthia.sln
+RUN dotnet restore src/Synthia.Api/Synthia.Api.csproj
 
 # -warnaserror here as well as in CI. An image is only allowed to exist if it would have passed the
 # merge gate, so a local `docker build` cannot produce something CI would refuse.
@@ -46,16 +66,8 @@ RUN dotnet publish src/Synthia.Api/Synthia.Api.csproj \
 # ---------------------------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------------------------
-# DIGEST PIN. The tag is carried alongside for readability; the digest is what is resolved.
-# Re-pinning is an ordinary reviewed pull request opened by .github/workflows/base-image-digests.yml
-# monthly, on a High or Critical CVE, or on a base-image runtime patch. A digest never reaches
-# production on a green scan alone — it passes the full suite as well (plan Stage 10).
-#
-# The digest below is a placeholder and MUST be replaced with a resolved value before this image is
-# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
-# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
-# somebody looked.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:REPLACE_WITH_RESOLVED_DIGEST AS runtime
+# The digest-pinned base declared at the top of this file.
+FROM ${RUNTIME_BASE} AS runtime
 
 # 1654 is the chiseled convention, and the image already defines the user. Naming it explicitly
 # means a base-image change that altered the default fails visibly rather than silently running as

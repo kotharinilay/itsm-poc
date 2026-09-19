@@ -19,6 +19,23 @@
 # would create a second way to apply them, which is the thing a single gated job exists to prevent.
 
 # ---------------------------------------------------------------------------------------------
+# Runtime base — DIGEST PIN
+# ---------------------------------------------------------------------------------------------
+# The tag is carried for readability; the digest is what resolves. Re-pinning is an ordinary
+# reviewed pull request opened by .github/workflows/base-image-digests.yml, and a digest never
+# reaches production on a green scan alone — it passes the full suite as well.
+#
+# The digest below is a PLACEHOLDER and MUST be replaced with a resolved value before this image is
+# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
+# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
+# somebody looked. Built as committed, the build therefore FAILS — which is the intent.
+#
+# An ARG so that CI can prove the image builds, starts and is hardened before a digest exists
+# (build/scripts/smoke-images.sh passes the bare tag as a CI-only override). BuildKit parses every
+# stage's FROM, so without the ARG not even `--target build` could run.
+ARG RUNTIME_BASE=python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST
+
+# ---------------------------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------------------------
 # Pinned by tag rather than digest, as in the RagCore builder: what it produces is reproducible from
@@ -35,7 +52,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
-WORKDIR /build
+# /app, THE SAME PATH THE RUNTIME USES. A virtual environment is not relocatable: every console
+# script carries an absolute shebang naming the interpreter where the venv was CREATED. Built at
+# /build and copied to /app, the entrypoint was `#!/build/.venv/bin/python` in an image with no
+# /build, and `exec uvicorn` failed on every start.
+WORKDIR /app
 
 # Manifest and lockfile first, so a source-only change re-resolves nothing.
 COPY integrations/pyproject.toml integrations/uv.lock ./
@@ -55,15 +76,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------------------------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------------------------
-# DIGEST PIN. The tag is carried for readability; the digest is what resolves. Re-pinning is an
-# ordinary reviewed pull request, and a digest never reaches production on a green scan alone — it
-# passes the full suite as well.
-#
-# The digest below is a PLACEHOLDER and MUST be replaced with a resolved value before this image is
-# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
-# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
-# somebody looked.
-FROM python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST AS runtime
+# The digest-pinned base declared at the top of this file.
+FROM ${RUNTIME_BASE} AS runtime
 
 # UID 10002, FIXED AND DOCUMENTED. Deliberately NOT 10001: RagCore uses that, and two services
 # sharing a UID would be indistinguishable to anything that authorizes by numeric identity — a
@@ -71,17 +85,24 @@ FROM python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST AS runtime
 # separate numbers.
 RUN groupadd --system --gid 10002 synthia \
     && useradd --system --no-log-init --uid 10002 --gid 10002 --home-dir /app --shell /usr/sbin/nologin synthia \
-    # Package-manager lists removed in the SAME layer that would otherwise keep them. Deleting them
-    # in a later layer removes them from the filesystem and leaves them in the image.
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (T269, constitution §Containers). The slim base
+    # ships pip, apt and dpkg; in the one container holding connector credentials, each is a way to
+    # install tooling next to a vault client. Removed in the SAME layer that would otherwise keep
+    # them — deleting in a later layer leaves them in the image.
+    #
+    # apt is purged through dpkg so the package database stays consistent, then the dpkg binaries
+    # are removed. /var/lib/dpkg/status is KEPT: it is what an image scanner reads to inventory the
+    # OS packages, and an image nobody can scan is not a hardened one.
+    && rm -rf /usr/local/bin/pip /usr/local/bin/pip3* /usr/local/lib/python3.12/site-packages/pip         /usr/local/lib/python3.12/site-packages/pip-*.dist-info /usr/local/lib/python3.12/ensurepip     && dpkg --purge --force-remove-essential --force-depends apt     && rm -rf /var/lib/apt /var/cache/apt /etc/apt     && rm -f /usr/bin/dpkg /usr/bin/dpkg-* /usr/sbin/dpkg-*
 
 WORKDIR /app
 
 # Only the resolved virtual environment and the source cross. No uv, no compiler, no package cache,
-# no lockfile — nothing that could install anything at runtime.
-COPY --from=build --chown=10002:10002 /build/.venv /app/.venv
-COPY --from=build --chown=10002:10002 /build/src /app/src
-COPY --from=build --chown=10002:10002 /build/workers /app/workers
+# no lockfile — nothing that could install anything at runtime. Same paths on both sides; see the
+# note on the builder's WORKDIR.
+COPY --from=build --chown=10002:10002 /app/.venv /app/.venv
+COPY --from=build --chown=10002:10002 /app/src /app/src
+COPY --from=build --chown=10002:10002 /app/workers /app/workers
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app/src \

@@ -1,0 +1,39 @@
+name: images
+
+# Every deployable image is BUILT, STARTED and INSPECTED — not merely described.
+#
+# Until this workflow existed no pipeline ran a runtime image, and three defects shipped behind that
+# gap: a .NET image that could not be built, two Python images whose entrypoint could not execute,
+# and a manifest configuring a setting the process did not read. build/scripts/smoke-images.sh is
+# the whole gate and is what `build/scripts/dev.sh images` runs locally.
+#
+# The runtime digest stays a placeholder until a person resolves and reviews one. The script asserts
+# that the committed Dockerfile REFUSES to build, then builds with the bare tag as a clearly
+# labelled CI-only override. Nothing built here is pushed or promoted.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'build/docker/**'
+      - '.dockerignore'
+      - 'build/scripts/smoke-images.sh'
+      - 'dotnet/**'
+      - 'ragcore/**'
+      - 'integrations/**'
+      - '.github/workflows/images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: build, start, inspect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build, start and inspect every image
+        run: bash build/scripts/smoke-images.sh

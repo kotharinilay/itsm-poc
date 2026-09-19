@@ -71,24 +71,7 @@ jobs:
       - name: Deployable boundaries
         run: bash build/scripts/check-boundaries.sh
 
-  image:
-    name: container build
-    runs-on: ubuntu-latest
-    needs: [lint-type-test]
-    steps:
-      - uses: actions/checkout@v4
-
-      # Build only — never pushed from a pull request. The production digest is pinned and promoted
-      # separately; a tag built here is a pointer somebody else could move.
-      #
-      # The runtime stage carries a PLACEHOLDER digest until one is resolved and reviewed, so this
-      # step builds the BUILD stage alone. That is deliberate: a plausible-looking digest invented
-      # to make CI green would be indistinguishable from a reviewed one, and the point of pinning is
-      # that somebody looked.
-      - name: Build (build stage)
-        run: |
-          docker build \
-            --file build/docker/integrations.Dockerfile \
-            --target build \
-            --tag synthia-integrations:ci \
-            .
+  # The container build moved to .github/workflows/images.yml, which builds, STARTS and inspects all
+  # three images through build/scripts/smoke-images.sh. The job that stood here built the build
+  # stage alone — and could not even do that: BuildKit parses every stage's FROM, and the runtime
+  # stage's placeholder digest failed the parse on every run.

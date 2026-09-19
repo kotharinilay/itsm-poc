@@ -80,21 +80,35 @@ jobs:
 
           repin build/docker/dotnet.Dockerfile  'mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled' "${{ steps.digests.outputs.dotnet_digest }}"
           repin build/docker/ragcore.Dockerfile 'python:3.12-slim-bookworm'                           "${{ steps.digests.outputs.ragcore_digest }}"
+          # The Integrations Service shares RagCore's base and is re-pinned with it. It was missing
+          # here, so its placeholder would never have been replaced by this workflow at all.
+          repin build/docker/integrations.Dockerfile 'python:3.12-slim-bookworm'                      "${{ steps.digests.outputs.ragcore_digest }}"
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
-      - name: Scan the resolved images
+      # BOTH base families are scanned. The scan used to cover the .NET runtime only, so a High in the
+      # Python base — which both RagCore and the Integrations Service run on — never reached the PR.
+      - name: Scan the resolved .NET runtime
         if: steps.repin.outputs.changed == '1'
-        id: scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ steps.digests.outputs.dotnet_tag }}@${{ steps.digests.outputs.dotnet_digest }}
           format: table
-          output: vulnerability-diff.txt
+          output: vulnerability-diff-dotnet.txt
           severity: HIGH,CRITICAL
           # Reported, not enforced, at this step. The PR carries the diff so a reviewer sees what
           # changed; the enforcing scan is the one on the pull request itself, alongside the full
           # suite. A scan that blocked here would just mean the PR never opens and nobody looks.
+          exit-code: '0'
+
+      - name: Scan the resolved Python base
+        if: steps.repin.outputs.changed == '1'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.digests.outputs.ragcore_tag }}@${{ steps.digests.outputs.ragcore_digest }}
+          format: table
+          output: vulnerability-diff-python.txt
+          severity: HIGH,CRITICAL
           exit-code: '0'
 
       - name: Open the re-pin pull request
@@ -111,7 +125,7 @@ jobs:
             | Image | Tag | Digest |
             |---|---|---|
             | .NET runtime | `${{ steps.digests.outputs.dotnet_tag }}` | `${{ steps.digests.outputs.dotnet_digest }}` |
-            | RagCore base | `${{ steps.digests.outputs.ragcore_tag }}` | `${{ steps.digests.outputs.ragcore_digest }}` |
+            | Python base (RagCore, Integrations) | `${{ steps.digests.outputs.ragcore_tag }}` | `${{ steps.digests.outputs.ragcore_digest }}` |
 
             Trigger: ${{ inputs.reason || 'monthly scheduled check' }}
 
@@ -123,7 +137,7 @@ jobs:
             <details><summary>Vulnerability diff</summary>
 
             ```
-            $(cat vulnerability-diff.txt 2>/dev/null || echo 'No scan output produced.')
+            $(cat vulnerability-diff-dotnet.txt vulnerability-diff-python.txt 2>/dev/null || echo 'No scan output produced.')
             ```
 
             </details>

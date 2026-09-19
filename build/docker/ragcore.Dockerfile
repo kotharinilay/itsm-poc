@@ -22,6 +22,24 @@
 # crosses.
 
 # ---------------------------------------------------------------------------------------------
+# Runtime base — DIGEST PIN
+# ---------------------------------------------------------------------------------------------
+# The tag is carried alongside for readability; the digest is what is resolved. Re-pinning is an
+# ordinary reviewed pull request opened by .github/workflows/base-image-digests.yml monthly, on a
+# High or Critical CVE, or on a base-image runtime patch. A digest never reaches production on a
+# green scan alone — it passes the full suite as well (plan Stage 10).
+#
+# The digest below is a placeholder and MUST be replaced with a resolved value before this image is
+# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
+# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
+# somebody looked. Built as committed, the build therefore FAILS — which is the intent.
+#
+# It is an ARG so that CI can prove the image builds, starts and is hardened BEFORE a digest exists
+# (build/scripts/smoke-images.sh passes the bare tag, labelled as a CI-only override). BuildKit
+# parses every stage's FROM, so without the ARG not even `--target build` could run.
+ARG RUNTIME_BASE=python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST
+
+# ---------------------------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------------------------
 # The builder is pinned by tag, not by digest, for the same reason as the .NET SDK stage: what it
@@ -38,7 +56,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
-WORKDIR /build
+# /app, THE SAME PATH THE RUNTIME USES. A virtual environment is not relocatable: every console
+# script (uvicorn, alembic) carries an absolute shebang naming the interpreter where the venv was
+# CREATED. Built at /build and copied to /app, the entrypoint was `#!/build/.venv/bin/python` in an
+# image with no /build — `exec uvicorn` failed and no replica or migration job could start.
+WORKDIR /app
 
 # The manifest and the lockfile first, so a source-only change does not re-resolve or re-download
 # anything. This is the layer that takes the time.
@@ -62,16 +84,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------------------------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------------------------
-# DIGEST PIN. The tag is carried alongside for readability; the digest is what is resolved.
-# Re-pinning is an ordinary reviewed pull request opened by .github/workflows/base-image-digests.yml
-# monthly, on a High or Critical CVE, or on a base-image runtime patch. A digest never reaches
-# production on a green scan alone — it passes the full suite as well (plan Stage 10).
-#
-# The digest below is a placeholder and MUST be replaced with a resolved value before this image is
-# built for a deployed environment. It is deliberately not a working digest: a plausible-looking one
-# invented here would be indistinguishable from a reviewed one, and the point of pinning is that
-# somebody looked.
-FROM python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST AS runtime
+# The digest-pinned base declared at the top of this file.
+FROM ${RUNTIME_BASE} AS runtime
 
 # UID 10001, FIXED AND DOCUMENTED. A high, static, numeric UID rather than a name: Container Apps
 # and every scanner compare numbers, and a name resolved against the image's own /etc/passwd tells
@@ -83,25 +97,36 @@ FROM python:3.12-slim-bookworm@sha256:REPLACE_WITH_RESOLVED_DIGEST AS runtime
 # five-digit UID is gigabytes of image for a file nothing reads.
 RUN groupadd --system --gid 10001 synthia \
     && useradd --system --no-log-init --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin synthia \
-    # The package manager's own lists are removed in the SAME layer that would otherwise keep them.
-    # Deleting them in a later layer removes them from the filesystem and leaves them in the image.
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (constitution §Containers). The slim base ships
+    # pip, apt and dpkg; each is a way to install something at runtime, and none of them runs here.
+    # Removed in the SAME layer that would otherwise keep them — deleting in a later layer removes
+    # them from the filesystem and leaves them in the image.
+    #
+    # apt is purged through dpkg so the package database stays consistent, then the dpkg binaries
+    # themselves are removed. /var/lib/dpkg/status is KEPT: it is what an image scanner reads to
+    # inventory the OS packages, and an image nobody can scan is not a hardened one.
+    && rm -rf /usr/local/bin/pip /usr/local/bin/pip3* /usr/local/lib/python3.12/site-packages/pip \
+        /usr/local/lib/python3.12/site-packages/pip-*.dist-info /usr/local/lib/python3.12/ensurepip \
+    && dpkg --purge --force-remove-essential --force-depends apt \
+    && rm -rf /var/lib/apt /var/cache/apt /etc/apt \
+    && rm -f /usr/bin/dpkg /usr/bin/dpkg-* /usr/sbin/dpkg-*
 
 WORKDIR /app
 
 # Only the resolved virtual environment and the source cross from the builder. No uv, no compiler,
-# no package cache, no lockfile — nothing that could install anything at runtime.
-COPY --from=build --chown=10001:10001 /build/.venv /app/.venv
-COPY --from=build --chown=10001:10001 /build/src /app/src
-COPY --from=build --chown=10001:10001 /build/workers /app/workers
+# no package cache, no lockfile — nothing that could install anything at runtime. The paths are the
+# same on both sides; see the note on the builder's WORKDIR for why that is load-bearing.
+COPY --from=build --chown=10001:10001 /app/.venv /app/.venv
+COPY --from=build --chown=10001:10001 /app/src /app/src
+COPY --from=build --chown=10001:10001 /app/workers /app/workers
 
 # The migration job runs from this same image (build/docker/migrate.job.yaml), as a different
 # principal, so the revisions and the provisioning script must be present. They are inert in an
 # application replica: that principal holds no DDL, so running them there would fail rather than
 # apply anything.
-COPY --from=build --chown=10001:10001 /build/migrations /app/migrations
-COPY --from=build --chown=10001:10001 /build/scripts /app/scripts
-COPY --from=build --chown=10001:10001 /build/alembic.ini /app/alembic.ini
+COPY --from=build --chown=10001:10001 /app/migrations /app/migrations
+COPY --from=build --chown=10001:10001 /app/scripts /app/scripts
+COPY --from=build --chown=10001:10001 /app/alembic.ini /app/alembic.ini
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app/src \

@@ -37,6 +37,7 @@ Usage: build/scripts/dev.sh <command>
   typecheck   Strict type checking (Python, web, desktop)
   boundaries  Cross-deployable boundary check, plus proof the guard fails correctly
   validate    Everything CI runs, in CI's order. Use this before pushing.
+  images      Build, start and inspect every container image (needs Docker)
   clean       Remove build output
 
 Single-tree shortcuts: dotnet | python (RagCore + Integrations) | web | desktop
@@ -110,6 +111,7 @@ case "${1:-validate}" in
   web)        check_web; report ;;
   desktop)    check_desktop; report ;;
   boundaries) check_boundaries; report ;;
+  images)     step "Container images"; run "build, start, inspect" bash build/scripts/smoke-images.sh; report ;;
   lint)
     run "ruff check"  bash -c "cd ragcore && uv run ruff check ."
     run "ruff format" bash -c "cd ragcore && uv run ruff format --check ."

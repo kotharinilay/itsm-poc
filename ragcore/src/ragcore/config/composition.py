@@ -271,7 +271,10 @@ def build_container(settings: Settings | None = None) -> Container:
         # publishes the job identifier, and `ragcore.persistence.integration_jobs` owns that.
         integrations=(
             IntegrationsClient(
-                IntegrationsClientSettings(gateway_base_url=resolved.integrations.gateway_base_url),
+                IntegrationsClientSettings(
+                    gateway_base_url=resolved.integrations.gateway_base_url,
+                    entra_scope=resolved.integrations.entra_scope,
+                ),
                 caller,
             )
             if resolved.integrations.is_configured

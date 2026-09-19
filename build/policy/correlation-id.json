@@ -1,0 +1,34 @@
+{
+  "$comment": [
+    "THE ONE RULE for a well-formed X-Correlation-Id, on all three deployables and on the queues.",
+    "A correlation identifier is untrusted: it correlates and authorizes nothing. What it must not do",
+    "is carry markup, whitespace or control characters into a header, a problem body or a log line.",
+    "Each stack implements the rule itself - no shared library crosses a deployable boundary - and",
+    "each stack's suite asserts its implementation against the vectors below:",
+    "ragcore/tests/unit/test_correlation_policy.py, integrations/tests/unit/test_correlation_policy.py",
+    "and dotnet/tests/Synthia.SharedKernel.Tests/CorrelationPolicyTests.cs.",
+    "The rules used to differ - RagCore accepted any printable string, .NET letters/digits/._-, the",
+    "Integrations Service hex only - so one journey's identifier was kept on one hop and replaced on",
+    "the next, and an integration command could be dead-lettered for an identifier RagCore accepted."
+  ],
+  "pattern": "[A-Za-z0-9._-]{1,128}",
+  "maxLength": 128,
+  "accept": [
+    "0b8f7c1e-2c7a-4d51-9a55-7d0c6d8e1f00",
+    "4bf92f3577b34da6a3ce929d0e0e4736",
+    "e1303da78ad04c099e2427f24c358714",
+    "req_abc.123",
+    "A"
+  ],
+  "reject": [
+    "",
+    "<script>",
+    "has space",
+    "line\nbreak",
+    "trailing-newline\n",
+    "tab\there",
+    "quote\"d",
+    "semi;colon",
+    "ünicode"
+  ]
+}

@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ragcore.domain.tenancy import TenantContext
 from ragcore.domain.work import WorkItemState
+from ragcore.graph.threads import checkpoint_thread_id
 from ragcore.persistence import models
 from ragcore.persistence.concurrency import rows_affected
 from ragcore.persistence.retention import RetentionClass, window_for
@@ -133,18 +134,25 @@ async def eligible_checkpoint_threads(
     own surface. A ``DELETE FROM langgraph.*`` issued from here would be Alembic reaching into a
     schema it explicitly does not own.
 
+    **The key is the one the run host wrote under** (:mod:`ragcore.graph.threads`), derived from the
+    work item's immutable organisation, requester and session. This used to return the work item's
+    own identifier, which is not a key any thread was ever written under — so every pass pruned
+    nothing, and conversations outlived their retention window indefinitely.
+
     Returns:
-        The work-item identifiers whose checkpoints are past their window.
+        The checkpoint thread keys whose work is past its window.
     """
     window = window_for(RetentionClass.GRAPH_CHECKPOINT, overrides)
     work = models.WORK_ITEM
-    statement = select(work.c.work_item_id).where(
+    statement = select(work.c.tenant_id, work.c.requested_by_oid, work.c.session_id).where(
         work.c.tenant_id == tenant.tenant_id.value,
         work.c.state.in_([state.value for state in COMPLETED_WORK_STATES]),
         work.c.updated_at <= now - window.duration,
     )
     rows = (await session.execute(statement)).all()
-    return [str(row.work_item_id) for row in rows]
+    return [
+        checkpoint_thread_id(row.tenant_id, row.requested_by_oid, row.session_id) for row in rows
+    ]
 
 
 async def prune_checkpoints(pruner: CheckpointPruner, thread_ids: list[str]) -> int:

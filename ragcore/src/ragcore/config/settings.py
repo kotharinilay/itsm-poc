@@ -23,7 +23,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, ValidationInfo, field_validator
+from pydantic import Field, PostgresDsn, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ragcore.config.secrets import SecretRef
@@ -278,6 +278,29 @@ class IntegrationsServiceSettings(BaseSettings):
     authority that permitted it.
     """
 
+    entra_scope: str = ""
+    """The token scope APIM validates on the workload audience: ``<workload app ID URI>/.default``.
+
+    **Required whenever an address is set.** APIM runs ``validate-azure-ad-token`` on this route and
+    requires the workload application role; a call carrying no bearer token is refused there with a
+    401, before it reaches the Integrations Service. An address with no scope is therefore a route
+    that can never succeed, and is refused at startup rather than on the first call.
+    """
+
+    @model_validator(mode="after")
+    def _an_address_needs_a_scope(self) -> IntegrationsServiceSettings:
+        """Refuse a configured route this process could not authenticate on.
+
+        Raises:
+            ValueError: When an address is set and no token scope is.
+        """
+        if self.gateway_base_url and not self.entra_scope.strip():
+            raise ValueError(
+                "SYNTHIA_INTEGRATIONS_ENTRA_SCOPE is required when the Integrations Service "
+                "address is set: APIM refuses a call on the workload audience with no token."
+            )
+        return self
+
     @field_validator("gateway_base_url")
     @classmethod
     def _must_be_the_edge(cls, value: str) -> str:
@@ -504,15 +527,27 @@ class Settings(BaseSettings):
     would mean the control exercised in testing is not the control running in production.
     """
 
-    database: DatabaseSettings
-    key_vault: KeyVaultSettings = KeyVaultSettings()
-    messaging: MessagingSettings = MessagingSettings()
-    notifications: NotificationSettings = NotificationSettings()
-    gateway: ModelGatewaySettings = ModelGatewaySettings()
-    retrieval: RetrievalSettings = RetrievalSettings()
-    integrations: IntegrationsServiceSettings = IntegrationsServiceSettings()
-    cache: CacheSettings = CacheSettings()
-    observability: ObservabilitySettings = ObservabilitySettings()
+    # EVERY GROUP IS BUILT BY A FACTORY, at construction, from its own prefix. Two reasons, both
+    # found by running the committed manifests rather than reading them:
+    #
+    # * `SYNTHIA_DB_DSN` is the one name the deployment uses — Container Apps, the migration job,
+    #   Alembic's `env.py` and the checkpoint provisioning script all set or read it. A required
+    #   `database` field with no factory is only satisfiable as `SYNTHIA_DATABASE__DSN`, so a
+    #   replica configured exactly as committed failed validation and never started.
+    # * An instance as a default (`= KeyVaultSettings()`) is built once, at IMPORT, and reads the
+    #   environment as it was then. A factory reads it when the settings are constructed.
+    #
+    # The nested form (`SYNTHIA_DATABASE__DSN`) still works: a value supplied for the field is
+    # used, and the factory runs only when none is.
+    database: DatabaseSettings = Field(default_factory=lambda: _database_from_environment())
+    key_vault: KeyVaultSettings = Field(default_factory=KeyVaultSettings)
+    messaging: MessagingSettings = Field(default_factory=MessagingSettings)
+    notifications: NotificationSettings = Field(default_factory=NotificationSettings)
+    gateway: ModelGatewaySettings = Field(default_factory=ModelGatewaySettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    integrations: IntegrationsServiceSettings = Field(default_factory=IntegrationsServiceSettings)
+    cache: CacheSettings = Field(default_factory=CacheSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     execution_window_minutes: int = Field(default=15, ge=1, le=15)
     """The execution validity window (constitution Principle III).
@@ -546,6 +581,17 @@ class Settings(BaseSettings):
         return tuple(SecretRef(name) for name in names if name)
 
 
+def _database_from_environment() -> DatabaseSettings:
+    """Build the database group from ``SYNTHIA_DB_*``.
+
+    Still **required**: with no DSN in the environment this raises, and the process does not
+    start. The factory changes where the value is read from, never whether it must exist.
+    """
+    # `DatabaseSettings()` reads `dsn` from the environment; mypy sees a required field and no
+    # argument for it. Narrow, and the documented pydantic-settings pattern.
+    return DatabaseSettings()  # type: ignore[call-arg]
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return the validated settings singleton.
@@ -556,7 +602,4 @@ def get_settings() -> Settings:
     Returns:
         The settings instance, constructed and validated on first call.
     """
-    # `Settings()` reads every field from the environment; mypy sees the required `database`
-    # field and no argument for it. The suppression is narrow and is the documented
-    # pydantic-settings pattern — widening it would hide a genuinely missing field.
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

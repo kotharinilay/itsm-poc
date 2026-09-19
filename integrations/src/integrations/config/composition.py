@@ -102,12 +102,11 @@ def build_container(secrets: SecretResolverPort | None = None) -> Container:
     registry = ConnectorRegistry(database)
     access_policy = AccessPolicy(catalogue, registry)
 
+    # Always registered. `build_engine` refuses to start without a DSN, so there is no configured
+    # process in which the store is absent — the guard that stood here protected a case that could
+    # not be reached, and made readiness look optional when it is not.
     readiness = ReadinessRegistry()
-    if resolved.persistence.dsn:
-        # Registered only when a store is actually configured. A probe against an unconfigured DSN
-        # would fail forever and hold every replica out of rotation, which is a worse failure than
-        # the missing configuration it was reporting.
-        readiness.register(ReadinessProbeAdapter(database))
+    readiness.register(ReadinessProbeAdapter(database))
 
     servicenow: ServiceNowAdapter | None = None
     if secrets is not None:

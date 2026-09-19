@@ -10,6 +10,7 @@ import pytest
 
 from integrations.api.health import ReadinessRegistry
 from integrations.config.settings import PersistenceSettings
+from integrations.persistence.engine import build_engine
 
 # No module-level asyncio mark: `asyncio_mode = "auto"` already collects the coroutine tests, and a
 # blanket mark would also attach to the synchronous ones below — which pytest warns about rather
@@ -74,3 +75,13 @@ def test_dsn_with_an_embedded_password_is_rejected() -> None:
 def test_dsn_without_a_credential_is_accepted() -> None:
     """The check rejects credentials, not connection strings."""
     assert PersistenceSettings(dsn="postgresql://host/db").dsn == "postgresql://host/db"
+
+
+def test_a_missing_dsn_stops_the_process_and_names_the_setting() -> None:
+    """The process must not start without its database — and must say which setting is missing.
+
+    It already failed to start, but on SQLAlchemy's "Could not parse SQLAlchemy URL", which names
+    neither the setting nor the variable an operator has to set.
+    """
+    with pytest.raises(ValueError, match="SYNTHIA_INTEGRATIONS_PERSISTENCE__DSN"):
+        build_engine(PersistenceSettings())

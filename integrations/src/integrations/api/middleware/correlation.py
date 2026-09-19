@@ -36,10 +36,15 @@ __all__ = ["CORRELATION_HEADER", "CorrelationMiddleware", "current_correlation_i
 
 CORRELATION_HEADER: Final = "X-Correlation-Id"
 
-# Deliberately narrow: hex, hyphen, 8-128 characters. Wide enough for a UUID or a W3C trace id,
-# tight enough that nothing a caller sends can carry a newline, a control character or a log-format
-# token into a structured log record.
-_WELL_FORMED: Final = re.compile(r"^[0-9a-fA-F-]{8,128}$")
+# THE ONE RULE, on all three deployables: ASCII letters, digits, '.', '_' and '-', 1-128 characters
+# (build/policy/correlation-id.json, asserted by each stack's suite). Wide enough for a UUID or a
+# W3C trace id, tight enough that nothing a caller sends can carry a newline, a control character
+# or a log-format token into a structured log record.
+#
+# It used to be hex only, while .NET accepted letters and '_' and RagCore accepted anything
+# printable — so one journey's identifier was kept on one hop and replaced on the next. Matched with
+# `fullmatch`: `^...$` with `match` also accepts a trailing newline.
+_WELL_FORMED: Final = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 _correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
@@ -89,7 +94,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
             The response, carrying the identifier the request was handled under.
         """
         inbound = request.headers.get(CORRELATION_HEADER, "")
-        correlation_id = inbound if _WELL_FORMED.match(inbound) else str(uuid.uuid4())
+        correlation_id = inbound if _WELL_FORMED.fullmatch(inbound) else str(uuid.uuid4())
 
         token = _correlation_id.set(correlation_id)
         try:

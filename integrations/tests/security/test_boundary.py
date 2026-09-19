@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -104,6 +105,28 @@ def test_delegated_credential_is_refused_on_this_audience() -> None:
         },
     )
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize("name", ["tenantId", "tenant_id", "X-Tenant-Id", "roles", "organisation"])
+def test_a_client_supplied_authority_parameter_is_refused_not_ignored(name: str) -> None:
+    """Refused with 400, as RagCore and the monolith refuse it.
+
+    It used to be silently ignored: the organisation here comes from durable state, so the value was
+    never honoured — but a boundary that quietly tolerates the attempt is one where nobody can tell
+    an attempt was made, and the three deployables answered the same request three different ways.
+    """
+    response = _client().get(
+        f"/api/workload/v1/integrations/catalogue?sessionId={uuid4()}&{name}=anything",
+        headers={
+            "X-Idp-Tenant-Id": "11111111-1111-1111-1111-111111111111",
+            "X-Idp-Principal-Id": "22222222-2222-2222-2222-222222222222",
+            "X-Idp-Credential-Class": "app",
+            "X-Idp-Client-Surface": "workload",
+        },
+    )
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert "anything" not in response.text
 
 
 def test_health_endpoints_disclose_nothing() -> None:

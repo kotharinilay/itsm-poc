@@ -45,7 +45,17 @@ def build_engine(persistence: PersistenceSettings) -> AsyncEngine:
 
     Returns:
         The engine.
+
+    Raises:
+        ValueError: When no DSN is configured. Named here, at startup, because the alternative was
+            SQLAlchemy's "Could not parse SQLAlchemy URL from given URL string" — a failure that
+            stops the process, as it should, while naming neither the setting nor its variable.
     """
+    if not persistence.dsn.strip():
+        raise ValueError(
+            "SYNTHIA_INTEGRATIONS_PERSISTENCE__DSN is not set. The Integrations Service cannot "
+            "start without its database: the job row is its only source of an instruction."
+        )
     return create_async_engine(
         persistence.dsn,
         poolclass=NullPool,

@@ -42,10 +42,11 @@ __all__ = ["EnvelopeError", "MessageEnvelope", "MessageKind"]
 # The closed field set. A message carrying anything else is refused.
 _PERMITTED_FIELDS: Final = frozenset({"jobId", "correlationId", "kind"})
 
-# Matches the correlation middleware's acceptance rule, so an identifier that was legal on the HTTP
-# hop is still legal on the queue. Two different rules would make one journey's identifier valid at
-# one boundary and rejected at the next.
-_WELL_FORMED_CORRELATION: Final = re.compile(r"^[0-9a-fA-F-]{8,128}$")
+# The correlation middleware's rule — and the platform's (build/policy/correlation-id.json) — so an
+# identifier that was legal on any HTTP hop is still legal on the queue. It used to be hex only here
+# while RagCore, which PUBLISHES these commands, accepted wider identifiers: a command carrying one
+# was dead-lettered, and authorized work never ran, for want of a log index.
+_WELL_FORMED_CORRELATION: Final = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 class MessageKind(Enum):
@@ -165,7 +166,7 @@ class MessageEnvelope:
     @staticmethod
     def _correlation_id(value: object) -> str:
         candidate = str(value)
-        if not _WELL_FORMED_CORRELATION.match(candidate):
+        if not _WELL_FORMED_CORRELATION.fullmatch(candidate):
             # Not merely tidiness: a correlation identifier is an index into telemetry, and one a
             # publisher can shape freely is an injection point into every log line carrying it.
             raise EnvelopeError("the correlation identifier is malformed")

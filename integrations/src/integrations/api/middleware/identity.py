@@ -43,6 +43,40 @@ _CREDENTIAL_CLASS_HEADER: Final = "X-Idp-Credential-Class"
 _SURFACE_HEADER: Final = "X-Idp-Client-Surface"
 
 _EXEMPT_PATHS: Final = frozenset({"/health/live", "/health/ready", "/health/startup"})
+
+_FORBIDDEN_CLIENT_FIELDS: Final = frozenset(
+    {
+        "tenant",
+        "tenantid",
+        "organisation",
+        "organization",
+        "orgid",
+        "role",
+        "roles",
+        "staffrole",
+        "audience",
+        "aud",
+        "principal",
+        "principalid",
+        "oid",
+        "actas",
+        "onbehalfof",
+        "impersonate",
+    }
+)
+"""Names a client MUST NOT supply. The same set RagCore's identity middleware refuses, compared the
+same way — case-insensitively, separators stripped, an ``X-`` prefix ignored — so ``tenantId``,
+``tenant_id`` and ``X-Tenant-Id`` are one entry. Restated rather than imported: the two services
+share no package (ADR-0007)."""
+
+
+def _is_forbidden(name: str) -> bool:
+    folded = name.lower().replace("-", "").replace("_", "")
+    return (
+        folded in _FORBIDDEN_CLIENT_FIELDS or folded.removeprefix("x") in _FORBIDDEN_CLIENT_FIELDS
+    )
+
+
 _REQUEST_STATE_KEY: Final = "workload_principal"
 
 
@@ -104,6 +138,23 @@ class IdentityMiddleware(BaseHTTPMiddleware):
         """
         if request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
+
+        # REFUSED, NOT IGNORED. A client-supplied organisation, role or audience establishes no
+        # authority here — the organisation comes from durable state — and it used to be silently
+        # dropped. RagCore and the monolith refuse the same request with a 400, and a boundary
+        # that quietly tolerates the attempt is one where nobody can tell an attempt happened.
+        for name in request.query_params:
+            if _is_forbidden(name):
+                return problem(
+                    status=400,
+                    title="Self-asserted authority",
+                    detail=(
+                        f"'{name}' MUST NOT be supplied by a client. The organisation is recovered "
+                        "from the durable object an identifier names, never from a request field."
+                    ),
+                    kind="self-asserted-authority",
+                    instance=request.url.path,
+                )
 
         principal_id = request.headers.get(_PRINCIPAL_HEADER, "")
         operator_tenant_id = request.headers.get(_TENANT_HEADER, "")

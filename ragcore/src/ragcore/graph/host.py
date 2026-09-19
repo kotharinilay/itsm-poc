@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Final
 from langchain_core.runnables import RunnableConfig
 
 from ragcore.graph.state import AgentState
+from ragcore.graph.threads import checkpoint_thread_id
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from langgraph.graph.state import CompiledStateGraph
@@ -124,15 +125,18 @@ class TurnEvent:
     label: str = ""
 
 
-def thread_config(session_id: str) -> RunnableConfig:
-    """The checkpointer thread for one session.
+def thread_config(context: RunContext) -> RunnableConfig:
+    """The checkpointer thread for one session, **derived from trusted identity**.
 
-    **The thread is the session**, which is what makes a suspension resumable by that conversation
-    and by nothing else. Derived rather than supplied: a caller-chosen thread identifier would let
-    one session resume another's suspended run, and a resumed run carries the authority context of
-    whichever work item it was suspended on.
+    The thread is the organisation, the requester and the session together — see
+    :mod:`ragcore.graph.threads`. Keyed on the session alone, the thread was whatever identifier a
+    caller put in the path: another organisation, or another user, naming the same session would
+    have resumed this one's conversation and the authority context it was suspended on.
     """
-    config: RunnableConfig = {"configurable": {"thread_id": session_id}}
+    thread_id = checkpoint_thread_id(
+        context.tenant.tenant_id.value, context.requester.value, context.session_id.value
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     return config
 
 
@@ -168,7 +172,7 @@ class RunHost:
         """
         try:
             async for update in self.graph.astream(
-                turn, config=thread_config(str(context.session_id)), context=context
+                turn, config=thread_config(context), context=context
             ):
                 for node, channels in update.items():
                     if node == "__interrupt__":

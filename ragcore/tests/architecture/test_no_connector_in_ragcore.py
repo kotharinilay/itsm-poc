@@ -172,9 +172,12 @@ def test_the_composition_root_binds_no_connector() -> None:
     every test kept passing, because a stand-in returns successfully.
     """
     from ragcore.config.composition import Container
-    from ragcore.config.settings import Settings
+    from ragcore.config.settings import DatabaseSettings, Settings
 
-    container = Container(settings=Settings.model_construct(), clock=None)  # type: ignore[arg-type]
+    # The database group is supplied, unvalidated, because its factory reads a DSN from the
+    # environment and this test is about the connector ports, not about configuration.
+    settings = Settings.model_construct(database=DatabaseSettings.model_construct())
+    container = Container(settings=settings, clock=None)  # type: ignore[arg-type]
 
     for port in ("case_system", "directory", "execution", "discovery"):
         assert getattr(container, port) is None, (

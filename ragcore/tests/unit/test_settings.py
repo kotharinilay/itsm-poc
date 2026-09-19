@@ -19,11 +19,13 @@ the reader's attention:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import BaseSettings
 
 from ragcore.config.settings import (
     CacheSettings,
@@ -63,11 +65,13 @@ def _settings(**overrides: Any) -> Settings:
 class TestAMissingRequiredSettingFailsAtConstruction:
     """The process does not start. That is the whole requirement (quickstart V17)."""
 
-    def test_the_database_dsn_is_required(self) -> None:
+    def test_the_database_dsn_is_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """There is no default and no fallback. A platform with no authority store is not a
         platform running in degraded mode; it is one that cannot do anything."""
+        monkeypatch.delenv("SYNTHIA_DB_DSN", raising=False)
+        monkeypatch.delenv("SYNTHIA_DATABASE__DSN", raising=False)
         with pytest.raises(ValidationError):
-            Settings()  # type: ignore[call-arg]
+            Settings()
 
     def test_a_malformed_dsn_is_refused(self) -> None:
         with pytest.raises(ValidationError):
@@ -314,3 +318,61 @@ class TestTheApplicationAndTheWorkspaceAgreeOnRetention:
         audit_days = policy["retention"]["contrastWith"]["auditRetentionYears"] * 365
 
         assert telemetry_days * 12 < audit_days
+
+
+MANIFESTS: Final = (
+    ROOT / "build" / "docker" / "containerapps" / "ragcore.yaml",
+    ROOT / "build" / "docker" / "migrate.job.yaml",
+)
+"""Every committed manifest that starts this image. Each one's environment is a contract with
+:class:`Settings`, and a name the settings do not read is a value the process silently ignores."""
+
+_ENV_NAME: Final = re.compile(r"^\s*-\s*name:\s*(SYNTHIA_[A-Z0-9_]+)\s*$", re.MULTILINE)
+
+
+def _names_settings_read() -> set[str]:
+    """Every flat environment name :class:`Settings` binds, derived from the model itself."""
+    names: set[str] = set()
+    for field_name, field in Settings.model_fields.items():
+        group = field.annotation
+        if isinstance(group, type) and issubclass(group, BaseSettings):
+            prefix = str(group.model_config.get("env_prefix", ""))
+            names.update(f"{prefix}{member}".upper() for member in group.model_fields)
+        else:
+            names.add(f"SYNTHIA_{field_name}".upper())
+    return names
+
+
+class TestTheCommittedManifestsConfigureThisProcess:
+    """A replica configured exactly as committed must start, and read every value it is given.
+
+    Found by running the manifests rather than reading them: they set ``SYNTHIA_DB_DSN`` while the
+    settings accepted only ``SYNTHIA_DATABASE__DSN``, so every deployed replica and the migration
+    job's checkpoint step failed validation. Every unit test passed, because every unit test built
+    the database group by hand.
+    """
+
+    def test_the_flat_database_name_satisfies_the_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("SYNTHIA_DATABASE__DSN", raising=False)
+        monkeypatch.setenv("SYNTHIA_DB_DSN", VALID_DSN)
+
+        assert str(Settings().database.dsn) == VALID_DSN
+
+    def test_a_group_reads_the_environment_at_construction_not_at_import(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A default instance is built once, at import; a factory sees the environment as it is."""
+        monkeypatch.setenv("SYNTHIA_DB_DSN", VALID_DSN)
+        monkeypatch.setenv("SYNTHIA_KEYVAULT_VAULT_URI", "https://vault.example")
+
+        assert Settings().key_vault.is_configured
+
+    @pytest.mark.parametrize("manifest", MANIFESTS, ids=lambda path: path.name)
+    def test_every_manifest_name_is_one_the_settings_read(self, manifest: Path) -> None:
+        declared = set(_ENV_NAME.findall(manifest.read_text(encoding="utf-8")))
+        assert declared, f"{manifest.name} declares no SYNTHIA_* variable; the scan found nothing"
+
+        unread = sorted(declared - _names_settings_read())
+        assert not unread, f"{manifest.name} sets names no setting reads: {unread}"

@@ -37,6 +37,7 @@ from ragcore.egress.http import (
     OutboundRequest,
     PermanentIntegrationError,
 )
+from ragcore.infrastructure.azure_credentials import azure_credential
 
 if TYPE_CHECKING:  # pragma: no cover — import-time typing only
     from collections.abc import Mapping
@@ -74,9 +75,12 @@ class IntegrationsClientSettings:
             traverses Front Door, the WAF and APIM; a value naming the container app directly is the
             bypass the boundary check exists to catch. Must be https — :class:`OutboundRequest`
             refuses anything else at construction.
+        entra_scope: The token scope APIM validates on the workload audience. Required: APIM runs
+            ``validate-azure-ad-token`` on this route, so a call without a token never arrives.
     """
 
     gateway_base_url: str
+    entra_scope: str
 
     def __post_init__(self) -> None:
         """Refuse a base URL that is not the edge.
@@ -94,6 +98,11 @@ class IntegrationsClientSettings:
             raise ValueError(
                 "the Integrations base URL names an internal address. Every application call "
                 "traverses Front Door, the WAF and APIM; there is no direct route (spec §13.4)."
+            )
+        if not self.entra_scope.strip():
+            raise ValueError(
+                "the Integrations client needs a token scope: APIM refuses an unauthenticated call "
+                "on the workload audience."
             )
 
 
@@ -118,16 +127,41 @@ class CaseOperationOutcome:
 class IntegrationsClient:
     """Calls the Integrations Service, through the gateway, as the workload principal."""
 
-    def __init__(self, settings: IntegrationsClientSettings, caller: ResilientHttpCaller) -> None:
+    def __init__(
+        self,
+        settings: IntegrationsClientSettings,
+        caller: ResilientHttpCaller,
+        credential: Any | None = None,  # noqa: ANN401 — the concrete type needs the SDK imported
+    ) -> None:
         """Bind the client.
 
         Args:
-            settings: The edge address.
+            settings: The edge address and the token scope.
             caller: The shared resilient caller, so this call obeys the same timeout and
                 classification policy as every other outbound call.
+            credential: An ``AsyncTokenCredential``. Omitted in every deployed process, which then
+                uses the one shared managed-identity credential; supplied by tests.
         """
         self._settings = settings
         self._caller = caller
+        self._credential = credential
+
+    async def _headers(self, correlation_id: CorrelationId) -> dict[str, str]:
+        """The headers every call carries: the journey, and RagCore's own workload token.
+
+        **The token is RagCore's, app-only, from its managed identity.** No user token is forwarded,
+        and no organisation is sent — the far side recovers that from the object named. APIM
+        validates the token and the workload application role, then re-derives the identity
+        contract on the hop. Without it every call was refused at the gateway with a 401.
+
+        The token is placed in a header and nowhere else: never logged, never returned.
+        """
+        credential = self._credential if self._credential is not None else azure_credential()
+        token = await credential.get_token(self._settings.entra_scope)
+        return {
+            _CORRELATION_HEADER: str(correlation_id),
+            "Authorization": f"Bearer {token.token}",
+        }
 
     def _url(self, path: str, query: Mapping[str, str] | None = None) -> str:
         base = self._settings.gateway_base_url.rstrip("/")
@@ -154,7 +188,7 @@ class IntegrationsClient:
             method="GET",
             url=self._url(CATALOGUE_PATH, {"sessionId": str(session_id)}),
             timeout_seconds=_READ_TIMEOUT_SECONDS,
-            headers={_CORRELATION_HEADER: str(correlation_id)},
+            headers=await self._headers(correlation_id),
         )
         response = await self._caller.send(SYSTEM, request)
         body = response.json()
@@ -196,7 +230,7 @@ class IntegrationsClient:
             method="POST",
             url=self._url(CASE_OPERATIONS_PATH),
             timeout_seconds=_WRITE_TIMEOUT_SECONDS,
-            headers={_CORRELATION_HEADER: str(correlation_id)},
+            headers=await self._headers(correlation_id),
             json_body={
                 "sessionId": str(session_id),
                 "catalogueId": catalogue_id,

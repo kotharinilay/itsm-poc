@@ -13,8 +13,10 @@ control characters into a log file, so it is bounded and screened before anythin
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from contextvars import ContextVar
+from typing import Final
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -47,19 +49,26 @@ class CorrelationIdFilter(logging.Filter):
         return True
 
 
+WELL_FORMED: Final = re.compile(rf"[A-Za-z0-9._-]{{1,{CORRELATION_ID_MAX_LENGTH}}}")
+"""The one rule for a well-formed correlation identifier, on all three deployables.
+
+Recorded in ``build/policy/correlation-id.json``, which the .NET and Integrations suites read as
+well. It used to be "any printable string" here — so ``<script>`` was echoed in a header and a
+problem body — while the Integrations Service accepted hex only, and would dead-letter a command
+whose identifier this service had accepted and carried. One journey, one identifier, one rule.
+Matched with ``fullmatch``: a pattern anchored with ``$`` also accepts a trailing newline.
+"""
+
+
 def _accepted(raw: str) -> str | None:
     """Screen a client-supplied identifier.
 
     Returns:
-        The identifier when it is safe to carry, or ``None`` when a fresh one should be minted.
+        The identifier when it is well formed, or ``None`` when a fresh one should be minted.
         Rejecting is silent and non-fatal: a bad correlation identifier is not worth failing a
         user's request over, and a minted one still correlates everything downstream of here.
     """
-    if not raw or len(raw) > CORRELATION_ID_MAX_LENGTH:
-        return None
-    if not all(character.isprintable() and character not in {"\n", "\r"} for character in raw):
-        return None
-    return raw
+    return raw if WELL_FORMED.fullmatch(raw) else None
 
 
 class CorrelationIdMiddleware:
@@ -87,10 +96,14 @@ class CorrelationIdMiddleware:
 
         async def send_with_header(message: Message) -> None:
             if message["type"] == "http.response.start":
-                headers = list(message.get("headers", []))
-                headers.append(
-                    (CORRELATION_HEADER.lower().encode(), correlation_id.encode("latin-1"))
-                )
+                # This middleware OWNS the header. An inner layer that also set it — a problem
+                # response, the SSE stream — is replaced rather than joined, so a response carries
+                # exactly one identifier. It used to carry two.
+                name = CORRELATION_HEADER.lower().encode()
+                headers = [
+                    (key, value) for key, value in message.get("headers", []) if key.lower() != name
+                ]
+                headers.append((name, correlation_id.encode("latin-1")))
                 message = {**message, "headers": headers}
             await send(message)
 

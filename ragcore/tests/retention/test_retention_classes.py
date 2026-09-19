@@ -30,6 +30,7 @@ from ragcore.domain.governance import ExecutionMethod
 from ragcore.domain.identifiers import EntraTenantId, TenantId
 from ragcore.domain.tenancy import TenantContext, TenantStatus
 from ragcore.domain.work import ApprovalState, SenderKind, SessionState, WorkItemState
+from ragcore.graph.threads import checkpoint_thread_id
 from ragcore.persistence import models
 from ragcore.persistence.retention import (
     PLATFORM_DEFAULTS,
@@ -220,6 +221,7 @@ async def organisation(sessions: async_sessionmaker[AsyncSession]) -> dict[str, 
         ),
         "session_id": session_id,
         "work_item_id": work_item_id,
+        "requester": requester,
     }
 
 
@@ -395,6 +397,19 @@ class TestAuditIsBeyondTheRuntimesReach:
         assert in_table == 1
 
 
+def _thread_of(organisation: dict[str, Any]) -> str:
+    """The checkpoint key the run host writes this organisation's conversation under.
+
+    The work item's own identifier is NOT a key any thread was written under, and these tests used
+    to assert it — which is how a sweeper that pruned nothing real passed for as long as it did.
+    """
+    return checkpoint_thread_id(
+        organisation["tenant"].tenant_id.value,
+        organisation["requester"],
+        organisation["session_id"],
+    )
+
+
 class RecordingPruner:
     """A checkpointer narrowed to its delete verb, recording what it was asked to remove.
 
@@ -430,7 +445,7 @@ class TestCheckpointsArePrunedThroughTheCheckpointer:
                 session, pruner, organisation["tenant"], datetime.now(UTC), None
             )
 
-        assert pruner.deleted == [str(organisation["work_item_id"])]
+        assert pruner.deleted == [_thread_of(organisation)]
         assert result.checkpoints_eligible == 1
         assert result.checkpoints_pruned == 1
 
@@ -518,7 +533,7 @@ class TestCheckpointsArePrunedThroughTheCheckpointer:
         async with sessions() as session, session.begin():
             await sweep_tenant(session, pruner, organisation["tenant"], datetime.now(UTC), None)
 
-        assert pruner.deleted == [str(organisation["work_item_id"])]
+        assert pruner.deleted == [_thread_of(organisation)]
 
 
 @pytest.mark.integration
@@ -586,5 +601,5 @@ class TestTheSweepIsSafeToRerun:
             async with sessions() as session, session.begin():
                 await sweep_tenant(session, pruner, organisation["tenant"], now, None)
 
-        thread = str(organisation["work_item_id"])
+        thread = _thread_of(organisation)
         assert pruner.deleted == [thread, thread]

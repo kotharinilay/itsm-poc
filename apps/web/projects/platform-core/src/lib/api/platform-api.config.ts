@@ -47,7 +47,22 @@ const SECRET_KEYS = [
  * review. It also enforces the single-origin rule while it is here.
  */
 export function assertConfigCarriesNoSecret(config: PlatformApiConfig): void {
-  for (const key of Object.keys(config)) {
+  assertNoSecretKeys(config);
+
+  assertAbsoluteHttpsOrigin(config.gatewayOrigin, 'gatewayOrigin');
+  assertAbsoluteHttpsOrigin(config.authAuthority, 'authAuthority');
+}
+
+/**
+ * Reject any key that names something a browser cannot keep.
+ *
+ * Separate from the origin checks because it applies to a **partial** configuration too: what the
+ * hosting tier supplies is merged field by field, so a secret in it would otherwise be dropped
+ * silently rather than refused. Dropping it is safe and says nothing; a tier that ships a client
+ * secret has made a mistake somebody needs to hear about.
+ */
+function assertNoSecretKeys(candidate: object): void {
+  for (const key of Object.keys(candidate)) {
     const normalised = key.toLowerCase().replace(/[^a-z]/g, '');
     if (SECRET_KEYS.some((forbidden) => normalised.includes(forbidden))) {
       throw new Error(
@@ -56,9 +71,65 @@ export function assertConfigCarriesNoSecret(config: PlatformApiConfig): void {
       );
     }
   }
+}
 
-  assertAbsoluteHttpsOrigin(config.gatewayOrigin, 'gatewayOrigin');
-  assertAbsoluteHttpsOrigin(config.authAuthority, 'authAuthority');
+/** Where the hosting tier puts the configuration it supplies (ADR-0009). */
+export const HOSTED_CONFIG_ELEMENT_ID = 'synthia-platform-config';
+
+/**
+ * The configuration this deployment was given, or the compiled fallback.
+ *
+ * **A bundle cannot carry its own environment.** The same image is promoted from one environment to
+ * the next by digest, so the gateway origin and the Entra client id cannot be baked in at build
+ * time — the build would be per-environment and the artefact reviewed in one would not be the one
+ * running in another. The hosting tier writes them into the document it serves
+ * (`apps/web/scripts/csp-host.mjs`) and this reads them back.
+ *
+ * **A JSON data block, never executable script.** `<script type="application/json">` is not run by
+ * the browser, so it needs no CSP nonce and cannot become an injection vector: the worst a bad
+ * value can do is fail the assertions below, loudly, at bootstrap.
+ *
+ * **The fallback is the development default, and it is deliberate.** Running `ng serve` or the
+ * reference host with no environment supplies no block, and the portal then points where the
+ * compiled config says — which for a developer is the local gateway.
+ *
+ * @param doc The document to read. Passed rather than reached for, so it is testable.
+ * @param fallback The compiled configuration, used when the tier supplied none.
+ * @returns The configuration to bootstrap with. Validated either way.
+ */
+export function readHostedConfig(doc: Document, fallback: PlatformApiConfig): PlatformApiConfig {
+  const element = doc.getElementById(HOSTED_CONFIG_ELEMENT_ID);
+  if (element === null || element.textContent === null || element.textContent.trim() === '') {
+    assertConfigCarriesNoSecret(fallback);
+    return fallback;
+  }
+
+  let supplied: Partial<PlatformApiConfig>;
+  try {
+    supplied = JSON.parse(element.textContent) as Partial<PlatformApiConfig>;
+  } catch (cause) {
+    // Loud, at bootstrap. A portal that silently fell back would point at the developer default
+    // in a deployed environment, which is the failure this whole mechanism exists to prevent.
+    throw new Error(
+      `The hosting tier supplied a malformed ${HOSTED_CONFIG_ELEMENT_ID} document: ${String(cause)}`,
+    );
+  }
+
+  // Checked before the merge, which keeps only the four known fields: a secret in the supplied
+  // document would otherwise be discarded quietly instead of refused.
+  assertNoSecretKeys(supplied);
+
+  const merged: PlatformApiConfig = {
+    gatewayOrigin: supplied.gatewayOrigin ?? fallback.gatewayOrigin,
+    authAuthority: supplied.authAuthority ?? fallback.authAuthority,
+    authClientId: supplied.authClientId ?? fallback.authClientId,
+    authScopes: supplied.authScopes ?? fallback.authScopes,
+  };
+
+  // The same checks a compiled configuration gets. A value that arrived over the wire deserves
+  // them more, not less.
+  assertConfigCarriesNoSecret(merged);
+  return merged;
 }
 
 function assertAbsoluteHttpsOrigin(value: string, field: string): void {

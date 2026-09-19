@@ -111,13 +111,34 @@ sed -i 's/<validate-azure-ad-token/<disabled-validate-azure-ad-token/' "$AUDIENC
 expect_rejected "an audience policy that validates no token"
 restore
 
-# 7 - a second Front Door origin.
+# 7 - an origin that is neither the gateway nor a portal bundle.
 #
-# A public route to a backend that looks, in the portal, like a routing entry.
+# A public route to a backend that looks, in the portal, like a routing entry. The guard holds an
+# allow-list by name (ADR-0009), so this plants a group the list does not contain — which is what a
+# backend origin would actually look like once somebody had named it something plausible.
 FRONTDOOR="build/infra/frontdoor/front-door.json"
 save "$FRONTDOOR"
-sed -i 's/"hostName": "${APIM_GATEWAY_HOSTNAME}",/"hostName": "${APIM_GATEWAY_HOSTNAME}",\n          "hostName": "${BACKEND_DIRECT_HOSTNAME}",/' "$FRONTDOOR"
-expect_rejected "a second Front Door origin host"
+sed -i 's/"name": "staff-portal",/"name": "backend-direct",/' "$FRONTDOOR"
+expect_rejected "a Front Door origin group that is not on the allow-list"
+restore
+
+# 7a - a portal route publishing an API path.
+#
+# The portal hosts exist to serve static files. One answering /api would reach the platform on a
+# host APIM never saw, which is the bypass the single gateway exists to prevent - and it is a
+# one-line edit to a routing entry that reviews as a convenience.
+save "$FRONTDOOR"
+sed -i 's|"patternsToMatch": \["/\*"\],|"patternsToMatch": ["/*", "/api/*"],|' "$FRONTDOOR"
+expect_rejected "a portal route publishing an /api path"
+restore
+
+# 7b - a portal origin reachable without Private Link.
+#
+# Then the portal container holds a public endpoint of its own, and Front Door - with its WAF - is
+# no longer the only way to reach it.
+save "$FRONTDOOR"
+sed -i 's/"privateLink": "${CONTAINER_APPS_ENVIRONMENT_RESOURCE_ID}"/"publicLink": "${CONTAINER_APPS_ENVIRONMENT_RESOURCE_ID}"/' "$FRONTDOOR"
+expect_rejected "a portal origin that does not reach its container app privately"
 restore
 
 # 8 - a service calling another by its internal address.

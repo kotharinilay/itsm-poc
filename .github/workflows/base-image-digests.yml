@@ -49,14 +49,19 @@ jobs:
           # not because they share a base family — they do not, and their hardening checks differ.
           dotnet_tag='mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled'
           ragcore_tag='python:3.12-slim-bookworm'
+          # The portal images (ADR-0009). A third base family, re-pinned with the others.
+          portal_tag='node:22-bookworm-slim'
 
           dotnet_digest="$(crane digest "$dotnet_tag")"
           ragcore_digest="$(crane digest "$ragcore_tag")"
+          portal_digest="$(crane digest "$portal_tag")"
 
           echo "dotnet_tag=$dotnet_tag"        >> "$GITHUB_OUTPUT"
           echo "dotnet_digest=$dotnet_digest"  >> "$GITHUB_OUTPUT"
           echo "ragcore_tag=$ragcore_tag"      >> "$GITHUB_OUTPUT"
           echo "ragcore_digest=$ragcore_digest" >> "$GITHUB_OUTPUT"
+          echo "portal_tag=$portal_tag"        >> "$GITHUB_OUTPUT"
+          echo "portal_digest=$portal_digest"  >> "$GITHUB_OUTPUT"
 
       - name: Re-pin the Dockerfiles
         id: repin
@@ -83,6 +88,7 @@ jobs:
           # The Integrations Service shares RagCore's base and is re-pinned with it. It was missing
           # here, so its placeholder would never have been replaced by this workflow at all.
           repin build/docker/integrations.Dockerfile 'python:3.12-slim-bookworm'                      "${{ steps.digests.outputs.ragcore_digest }}"
+          repin build/docker/portals.Dockerfile      'node:22-bookworm-slim'                           "${{ steps.digests.outputs.portal_digest }}"
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
@@ -111,6 +117,16 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '0'
 
+      - name: Scan the resolved portal base
+        if: steps.repin.outputs.changed == '1'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.digests.outputs.portal_tag }}@${{ steps.digests.outputs.portal_digest }}
+          format: table
+          output: vulnerability-diff-portal.txt
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
       - name: Open the re-pin pull request
         if: steps.repin.outputs.changed == '1'
         uses: peter-evans/create-pull-request@v7
@@ -126,6 +142,7 @@ jobs:
             |---|---|---|
             | .NET runtime | `${{ steps.digests.outputs.dotnet_tag }}` | `${{ steps.digests.outputs.dotnet_digest }}` |
             | Python base (RagCore, Integrations) | `${{ steps.digests.outputs.ragcore_tag }}` | `${{ steps.digests.outputs.ragcore_digest }}` |
+            | Portal base (customer, staff) | `${{ steps.digests.outputs.portal_tag }}` | `${{ steps.digests.outputs.portal_digest }}` |
 
             Trigger: ${{ inputs.reason || 'monthly scheduled check' }}
 
@@ -137,7 +154,7 @@ jobs:
             <details><summary>Vulnerability diff</summary>
 
             ```
-            $(cat vulnerability-diff-dotnet.txt vulnerability-diff-python.txt 2>/dev/null || echo 'No scan output produced.')
+            $(cat vulnerability-diff-dotnet.txt vulnerability-diff-python.txt vulnerability-diff-portal.txt 2>/dev/null || echo 'No scan output produced.')
             ```
 
             </details>

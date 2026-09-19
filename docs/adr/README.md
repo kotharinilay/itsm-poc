@@ -19,6 +19,7 @@ Each record distinguishes three things and never blurs them: **what the source r
 | [0006](./0006-desktop-renderer-origin-and-csp-nonce.md) | The desktop renderer origin: a privileged custom scheme, not `file://` | **Accepted** | The renderer is served over `app://renderer` so CSP, IPC sender validation and gateway `Origin` work as written; the remote allow-list stays HTTPS/WSS-only; a per-response nonce keeps `'unsafe-inline'` out of every directive |
 | [0007](./0007-integration-service-boundary.md) | The Integrations Service boundary | **Accepted** | Three bounded contexts deploy as one service parallel to RagCore. Partially withdraws ADR-0001's Divergence #1. Connector credentials leave the orchestrator; a durable job record carries the instruction so no authority travels in a message |
 | [0008](./0008-defer-certificate-based-gateway-to-backend-provenance.md) | Defer certificate-based gateway-to-backend provenance | **Accepted** | The APIM-to-backend client certificate, the forwarded certificate header, the backend hash allow-list and their middleware, rotation, expiry alerting and guards are **deferred in full, with no replacement**. FR-IDENT-012 is marked DEFERRED rather than silently unmet. Backends remain internal-only; APIM remains the trust boundary |
+| [0009](./0009-portal-delivery-one-origin-per-browser-surface.md) | Portal delivery: one public origin per browser surface | **Accepted** | The customer and staff portals each get their own Front Door endpoint, origin group and container app, over Private Link under one shared WAF. A static host cannot deliver the Stage 3 CSP, which needs a per-response nonce. Narrows the edge guard's "exactly one origin" rule to an allow-list, and adds the rule that **only the gateway origin may serve `/api`** |
 
 ## Open items these records do not close
 
@@ -33,6 +34,7 @@ Recorded so they are met as decisions rather than discovered mid-implementation.
 | Which ServiceNow operations are synchronous; the job-row result columns and their column-scoped `GRANT` | ADR-0007 §Unresolved | Before the Integrations contract is frozen |
 | Script signing for GA; the "destructive" taxonomy | ADR-0004 §Unresolved | Before endpoint execution expands beyond Alpha |
 | Whether the renderer bundle is served from an ASAR archive once packaging lands | ADR-0006 §Unresolved | Packaging |
+| **Portal host names and their CORS/`connect-src` reconciliation** | ADR-0009 §Unresolved | The first deployed environment (T227a) |
 | **How gateway-to-backend provenance is proved**, the mechanism having been deferred with no replacement | ADR-0008 §Unresolved | Before the platform carries production customer data |
 
 > ADR-0002's §Unresolved section still lists OQ-03, OQ-04 and OQ-05 as open. **ADR-0004 answers all

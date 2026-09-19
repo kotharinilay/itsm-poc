@@ -4,7 +4,7 @@ import {
   provideZoneChangeDetection,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
-import { providePlatformCore } from 'platform-core';
+import { providePlatformCore, readHostedConfig } from 'platform-core';
 import { routes } from './app.routes';
 import { CUSTOMER_PORTAL_CONFIG } from './platform.config';
 
@@ -24,6 +24,6 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes, withComponentInputBinding()),
-    providePlatformCore(CUSTOMER_PORTAL_CONFIG),
+    providePlatformCore(readHostedConfig(document, CUSTOMER_PORTAL_CONFIG)),
   ],
 };

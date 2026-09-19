@@ -22,6 +22,8 @@ on:
       - 'dotnet/**'
       - 'ragcore/**'
       - 'integrations/**'
+      # The portal images build the Angular bundle they serve (ADR-0009).
+      - 'apps/web/**'
       - '.github/workflows/images.yml'
   workflow_dispatch:
 

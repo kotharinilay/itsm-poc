@@ -307,21 +307,49 @@ class TestNoBackendIsReachableAroundTheGateway:
         ]
         assert not violations, f"a container app declares external ingress: {violations}"
 
-    def test_front_door_publishes_exactly_one_origin_and_it_is_the_gateway(self) -> None:
-        """A second origin would be a public route to a backend that looks, in the portal, like a
-        routing entry. It is the cheapest possible bypass of the entire trust boundary.
+    def test_front_door_publishes_the_gateway_and_the_two_portals_and_nothing_else(self) -> None:
+        """An origin that is neither the gateway nor a portal bundle would be a public route to a
+        backend that looks, in the portal, like a routing entry — the cheapest possible bypass of
+        the entire trust boundary.
+
+        **An allow-list by name, not a count** (ADR-0009). A count passes a definition that swapped
+        one origin for another, which is exactly the change worth catching.
         """
         file = ROOT / "build" / "infra" / "frontdoor" / "front-door.json"
         assert file.is_file(), f"the Front Door definition is missing: {file}"
         front_door = json.loads(file.read_text(encoding="utf-8"))
 
-        groups = front_door["originGroups"]
-        assert len(groups) == 1
-        origins = groups[0]["origins"]
-        assert len(origins) == 1
-        assert origins[0]["name"] == "apim-gateway"
-        # Private Link, so APIM itself has no public ingress at all.
-        assert "sharedPrivateLinkResource" in origins[0]
+        groups = {group["name"]: group for group in front_door["originGroups"]}
+        assert set(groups) == {"apim", "customer-portal", "staff-portal"}
+
+        origins = {group_name: group["origins"] for group_name, group in groups.items()}
+        assert [origin["name"] for origin in origins["apim"]] == ["apim-gateway"]
+        assert [origin["name"] for origin in origins["customer-portal"]] == ["customer-portal-app"]
+        assert [origin["name"] for origin in origins["staff-portal"]] == ["staff-portal-app"]
+
+        # Private Link everywhere, so no target holds a public endpoint of its own — and the link
+        # must NAME a resource, not merely be present as a key.
+        for group_origins in origins.values():
+            for origin in group_origins:
+                link = origin.get("sharedPrivateLinkResource", {})
+                assert link.get("privateLink"), (
+                    f"{origin['name']} is reachable without Private Link"
+                )
+
+    def test_only_the_gateway_origin_serves_an_api_path(self) -> None:
+        """The portals serve static files. One answering ``/api`` would reach the platform on a
+        host APIM never saw, which is the bypass the single gateway exists to prevent.
+        """
+        file = ROOT / "build" / "infra" / "frontdoor" / "front-door.json"
+        front_door = json.loads(file.read_text(encoding="utf-8"))
+
+        for route in front_door["routes"]:
+            if route["originGroup"] == "apim":
+                continue
+            for pattern in route["patternsToMatch"]:
+                assert not pattern.startswith("/api"), (
+                    f"edge route {route['name']!r} publishes {pattern!r} on a portal origin"
+                )
 
 
 # ---------------------------------------------------------------------------

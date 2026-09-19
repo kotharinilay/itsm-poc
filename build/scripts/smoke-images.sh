@@ -33,6 +33,7 @@ cd "$ROOT"
 
 PYTHON_BASE="python:3.12-slim-bookworm"
 DOTNET_BASE="mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled"
+NODE_BASE="node:22-bookworm-slim"
 UNREACHABLE_PG="unreachable.invalid"
 
 failures=0
@@ -53,17 +54,19 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-# $1 image name, $2 dockerfile, $3 runtime base tag
+# $1 image name, $2 dockerfile, $3 runtime base tag, $4.. extra build arguments
 build_image() {
   local image="$1" dockerfile="$2" base="$3"
+  shift 3
+  local extra=("$@")
 
-  if docker build -q -f "$dockerfile" -t "synthia-$image:placeholder" . >/dev/null 2>&1; then
+  if docker build -q -f "$dockerfile" "${extra[@]}" -t "synthia-$image:placeholder" . >/dev/null 2>&1; then
     bad "$image: built with the placeholder digest — the pin no longer refuses an unreviewed base"
   else
     ok "$image: refused as committed (placeholder digest)"
   fi
 
-  if docker build -q -f "$dockerfile" --build-arg "RUNTIME_BASE=$base" -t "synthia-$image:smoke" . >/dev/null; then
+  if docker build -q -f "$dockerfile" "${extra[@]}" --build-arg "RUNTIME_BASE=$base" -t "synthia-$image:smoke" . >/dev/null; then
     ok "$image: builds with the CI-only tag override"
     return 0
   fi
@@ -149,6 +152,39 @@ if build_image monolith build/docker/dotnet.Dockerfile "$DOTNET_BASE"; then
   start_and_probe monolith 8080 \
     -e "ReadDatabase__ConnectionString=Host=$UNREACHABLE_PG;Port=5432;Database=smoke;Username=smoke"
 fi
+
+# The browser surfaces (ADR-0009). One image per portal, and the check that matters beyond starting
+# is that the document carries the CSP: the image exists to send a policy no static host can.
+for portal in customer-portal staff-portal; do
+  echo "==> ${portal}"
+  if build_image "$portal" build/docker/portals.Dockerfile "$NODE_BASE" --build-arg "PORTAL=$portal"; then
+    start_and_probe "$portal" 8080
+
+    policy="$(curl -s -D - -o /dev/null "http://127.0.0.1:$(docker port "synthia-smoke-$portal-$$" 8080/tcp | head -1 | sed 's/.*://')/" 2>/dev/null \
+      | tr -d '\r' | grep -i '^content-security-policy:' || true)"
+    if printf '%s' "$policy" | grep -q "nonce-"; then
+      ok "$portal: serves the CSP baseline with a per-response nonce"
+    else
+      bad "$portal: the document carries no CSP nonce — the policy is not being sent"
+    fi
+
+    if printf '%s' "$policy" | grep -qE "unsafe-inline|unsafe-eval"; then
+      bad "$portal: the served policy contains a weakening token"
+    else
+      ok "$portal: the served policy carries no weakening token"
+    fi
+
+    # The node image ships npm and corepack; this one installs nothing at runtime.
+    if docker run --rm --entrypoint node "synthia-$portal:smoke" -e \
+        "const {existsSync}=require('node:fs');
+         const found=['/usr/local/bin/npm','/usr/local/bin/npx','/usr/local/bin/corepack','/usr/bin/apt-get','/usr/bin/dpkg'].filter(existsSync);
+         console.log(found.join(' ')); process.exit(found.length ? 1 : 0);" >/dev/null 2>&1; then
+      ok "$portal: no package manager in the runtime image"
+    else
+      bad "$portal: a package manager is present in the runtime image"
+    fi
+  fi
+done
 
 echo
 if [ "$failures" -gt 0 ]; then

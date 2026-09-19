@@ -76,34 +76,79 @@ class TestThePublicEdgeIsFrontDoorAndOnlyFrontDoor:
             "apim-to-backend",
         ]
 
-    def test_every_edge_route_targets_the_gateway_origin_group(
+    def test_every_edge_route_targets_a_declared_origin_group(
         self, front_door: dict[str, Any]
     ) -> None:
-        """That there is exactly one origin and it is APIM is asserted in
-        ``test_edge_trust_policy.py``. This is the other half, and the one a new route would break:
-        a route pointing somewhere else is a public path that skips the gateway, and in a portal it
-        looks like an ordinary routing entry.
+        """Which origin groups may exist is asserted in ``test_edge_trust_policy.py``. This is the
+        other half, and the one a new route would break: a route pointing at something undeclared
+        is a public path with no reviewed target, and in a portal it looks like an ordinary
+        routing entry.
         """
         groups = {group["name"] for group in front_door["originGroups"]}
 
-        assert len(groups) == 1
         for route in front_door["routes"]:
             assert route["originGroup"] in groups, (
                 f"edge route {route['name']!r} targets {route['originGroup']!r}, "
-                "which is not the gateway origin group"
+                "which is not a declared origin group"
             )
+
+    def test_each_route_sits_on_its_own_endpoint(self, front_door: dict[str, Any]) -> None:
+        """The API and the two portals are separate host names, and each serves one thing.
+
+        The isolation ADR-0009 buys is the browser's: separate origins mean separate storage,
+        cookies and script context for the customer and staff surfaces. A route attaching a portal
+        group to the API endpoint — or the gateway to a portal endpoint — would collapse that while
+        every other assertion here still passed.
+        """
+        endpoints = {endpoint["name"] for endpoint in front_door["endpoints"]}
+        assert endpoints == {"synthia-api", "synthia-customer-portal", "synthia-staff-portal"}
+
+        expected = {
+            "synthia-api": "apim",
+            "synthia-customer-portal": "customer-portal",
+            "synthia-staff-portal": "staff-portal",
+        }
+        for route in front_door["routes"]:
+            assert expected[route["endpoint"]] == route["originGroup"], (
+                f"route {route['name']!r} attaches {route['originGroup']!r} to "
+                f"{route['endpoint']!r}, which serves a different surface"
+            )
+
+    def test_one_waf_policy_covers_every_endpoint(self, front_door: dict[str, Any]) -> None:
+        """A public host with no WAF in front of it is the one an attacker picks.
+
+        One policy rather than one per endpoint: two policies drift, and the portal hosts would be
+        the pair nobody upgraded.
+        """
+        policies = front_door["securityPolicies"]
+        assert len(policies) == 1
+
+        covered = set(policies[0]["endpoints"])
+        declared = {endpoint["name"] for endpoint in front_door["endpoints"]}
+        assert covered == declared, f"endpoints with no WAF: {sorted(declared - covered)}"
 
     def test_the_edge_publishes_the_audience_prefixes_and_no_wildcard(
         self, front_door: dict[str, Any]
     ) -> None:
-        """A ``/*`` pattern would publish whatever APIM happens to expose today and whatever it is
-        given tomorrow — including an API somebody added for an internal purpose."""
-        patterns = [
-            pattern for route in front_door["routes"] for pattern in route["patternsToMatch"]
-        ]
+        """A ``/*`` pattern **on the gateway endpoint** would publish whatever APIM happens to
+        expose today and whatever it is given tomorrow — including an API somebody added for an
+        internal purpose.
 
-        assert patterns, "the edge publishes no route at all"
-        assert "/*" not in patterns
+        The portal endpoints do carry ``/*``, and that is not the same claim: behind them is a
+        directory of static files, and a single-page application must answer every deep link with
+        its index document. What they must never carry is an ``/api`` path, asserted in
+        ``test_edge_trust_policy.py`` and by ``check-edge-path.sh``.
+        """
+        gateway_patterns = [
+            pattern
+            for route in front_door["routes"]
+            if route["originGroup"] == "apim"
+            for pattern in route["patternsToMatch"]
+        ]
+        patterns = gateway_patterns
+
+        assert patterns, "the edge publishes no gateway route at all"
+        assert "/*" not in gateway_patterns
         for audience in AUDIENCES:
             assert any(
                 f"/api/{audience}".startswith(pattern.rstrip("*")) for pattern in patterns

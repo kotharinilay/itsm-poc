@@ -30,6 +30,26 @@
       "name": "synthia-api",
       "hostName": "${API_HOSTNAME}",
       "enabledState": "Enabled"
+    },
+    {
+      "name": "synthia-customer-portal",
+      "hostName": "${CUSTOMER_PORTAL_HOSTNAME}",
+      "enabledState": "Enabled",
+      "$comment": [
+        "THE CUSTOMER SURFACE GETS ITS OWN ORIGIN, and so does the staff surface (ADR-0009).",
+        "",
+        "A browser's security boundary is the origin. Sharing one between the two portals would",
+        "share localStorage, sessionStorage, cookies, service-worker scope and any script injected",
+        "into either - so a defect on the customer surface would reach a staff session's tokens.",
+        "Separate host names cost two more edge entries and buy the isolation the browser already",
+        "knows how to enforce."
+      ]
+    },
+    {
+      "name": "synthia-staff-portal",
+      "hostName": "${STAFF_PORTAL_HOSTNAME}",
+      "enabledState": "Enabled",
+      "$comment": "The staff surface. See the customer endpoint for why these are separate origins."
     }
   ],
 
@@ -37,9 +57,13 @@
     {
       "name": "apim",
       "$comment": [
-        "EXACTLY ONE ORIGIN GROUP, pointing at exactly one origin: APIM. There is no second route",
-        "to a backend, no 'internal' endpoint and no bypass for health. A backend origin added here",
-        "would be a path around the trust boundary that looks, in the portal, like a routing entry."
+        "THE ONLY ORIGIN THAT SERVES AN API, and it is APIM. There is no second route to a",
+        "backend, no 'internal' endpoint and no bypass for health. A backend origin added here",
+        "would be a path around the trust boundary that looks, in the portal, like a routing entry.",
+        "",
+        "The two portal groups below serve static files and nothing else: no application data",
+        "reaches a browser except through this group, and build/scripts/check-edge-path.sh enforces",
+        "both halves - the origin allow-list, and that no portal route matches an /api path."
       ],
       "loadBalancing": {
         "sampleSize": 4,
@@ -70,6 +94,82 @@
           }
         }
       ]
+    },
+    {
+      "name": "customer-portal",
+      "$comment": [
+        "THE CUSTOMER PORTAL BUNDLE. Static files: HTML, hashed JavaScript, hashed CSS, fonts.",
+        "",
+        "It holds no data and reaches no database. Everything the surface displays it fetches from",
+        "the API host, through APIM, with the identity contract derived there as for any other",
+        "client - so this origin is not a second way into the platform, it is the delivery of the",
+        "code that calls the first one.",
+        "",
+        "Private Link to a container app with INTERNAL ingress, exactly like APIM: the portal",
+        "container has no public FQDN of its own, so Front Door and its WAF cannot be stepped past.",
+        "The container serves the Stage 3 CSP baseline itself, with a per-response nonce, because",
+        "that policy cannot be expressed as a static edge header (ADR-0009, T346)."
+      ],
+      "loadBalancing": {
+        "sampleSize": 4,
+        "successfulSamplesRequired": 3,
+        "additionalLatencyInMilliseconds": 50
+      },
+      "healthProbe": {
+        "path": "/health/live",
+        "protocol": "Https",
+        "probeRequestType": "GET",
+        "intervalInSeconds": 30,
+        "$comment": "The portal host's own liveness endpoint - process-only, carries no identity contract and discloses nothing. The same path the Container App probes (build/docker/containerapps/customer-portal.yaml)."
+      },
+      "origins": [
+        {
+          "name": "customer-portal-app",
+          "hostName": "${CUSTOMER_PORTAL_ORIGIN_HOSTNAME}",
+          "httpsPort": 443,
+          "originHostHeader": "${CUSTOMER_PORTAL_ORIGIN_HOSTNAME}",
+          "enforceCertificateNameCheck": true,
+          "priority": 1,
+          "weight": 1000,
+          "sharedPrivateLinkResource": {
+            "privateLink": "${CONTAINER_APPS_ENVIRONMENT_RESOURCE_ID}",
+            "groupId": "managedEnvironments",
+            "requestMessage": "Front Door to the customer portal container app.",
+            "$comment": "Private Link to the Container Apps environment. Without it the portal container would need public ingress, which build/docker/containerapps/*.yaml forbids and check-edge-path.sh rejects."
+          }
+        }
+      ]
+    },
+    {
+      "name": "staff-portal",
+      "$comment": "The staff portal bundle. Same shape and same reasoning as the customer group above; separate because the browser origin is the isolation boundary between the two surfaces.",
+      "loadBalancing": {
+        "sampleSize": 4,
+        "successfulSamplesRequired": 3,
+        "additionalLatencyInMilliseconds": 50
+      },
+      "healthProbe": {
+        "path": "/health/live",
+        "protocol": "Https",
+        "probeRequestType": "GET",
+        "intervalInSeconds": 30
+      },
+      "origins": [
+        {
+          "name": "staff-portal-app",
+          "hostName": "${STAFF_PORTAL_ORIGIN_HOSTNAME}",
+          "httpsPort": 443,
+          "originHostHeader": "${STAFF_PORTAL_ORIGIN_HOSTNAME}",
+          "enforceCertificateNameCheck": true,
+          "priority": 1,
+          "weight": 1000,
+          "sharedPrivateLinkResource": {
+            "privateLink": "${CONTAINER_APPS_ENVIRONMENT_RESOURCE_ID}",
+            "groupId": "managedEnvironments",
+            "requestMessage": "Front Door to the staff portal container app."
+          }
+        }
+      ]
     }
   ],
 
@@ -91,15 +191,58 @@
         "shared edge cache keyed on URL is a cross-tenant leak waiting for two callers to request",
         "the same path (constitution Principle: tenant isolation at every layer)."
       ]
+    },
+    {
+      "name": "customer-portal",
+      "endpoint": "synthia-customer-portal",
+      "originGroup": "customer-portal",
+      "supportedProtocols": ["Https"],
+      "httpsRedirect": "Enabled",
+      "forwardingProtocol": "HttpsOnly",
+      "patternsToMatch": ["/*"],
+      "$comment": [
+        "A WILDCARD HERE, AND NOT ON THE API ENDPOINT. The difference is what sits behind each one:",
+        "this origin serves a directory of static files, and a single-page application must answer",
+        "every deep link with its index document. The API endpoint publishes the audience prefixes",
+        "and nothing else, because a wildcard there would publish whatever APIM is given tomorrow.",
+        "",
+        "The portal endpoints carry no /api route at all - check-edge-path.sh asserts it. Were one",
+        "added, a client could reach the platform on a host where APIM never saw the request, which",
+        "is the bypass the single gateway exists to prevent.",
+        "",
+        "CACHING IS DISABLED, and the reason is the nonce. Every document response carries a fresh",
+        "per-response CSP nonce, matched by the ngCspNonce attribute in the HTML; a cached document",
+        "would serve one user's nonce to everybody, which turns a per-response secret into a shared",
+        "constant and breaks style-src for every request the cache did not mint. The hashed asset",
+        "files are immutable and are cached by the browser on their own Cache-Control headers."
+      ]
+    },
+    {
+      "name": "staff-portal",
+      "endpoint": "synthia-staff-portal",
+      "originGroup": "staff-portal",
+      "supportedProtocols": ["Https"],
+      "httpsRedirect": "Enabled",
+      "forwardingProtocol": "HttpsOnly",
+      "patternsToMatch": ["/*"],
+      "$comment": "The staff bundle. Same reasoning as the customer route above, on its own origin."
     }
   ],
 
   "securityPolicies": [
     {
       "name": "waf",
-      "endpoints": ["synthia-api"],
+      "endpoints": ["synthia-api", "synthia-customer-portal", "synthia-staff-portal"],
       "patternsToMatch": ["/*"],
-      "wafPolicy": "${WAF_POLICY_RESOURCE_ID}"
+      "wafPolicy": "${WAF_POLICY_RESOURCE_ID}",
+      "$comment": [
+        "ONE WAF POLICY, EVERY ENDPOINT. The portals are listed here for the same reason the API",
+        "is: a public host with no WAF in front of it is the one an attacker picks.",
+        "",
+        "One policy rather than one per endpoint, deliberately. Two policies drift - a rule set",
+        "upgraded on the API and forgotten on the portals is a difference nobody sees until it is",
+        "read back months later, and the portal hosts would then be the weaker of the two."
+      ]
     }
   ],
 

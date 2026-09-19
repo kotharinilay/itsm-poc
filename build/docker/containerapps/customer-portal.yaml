@@ -1,0 +1,136 @@
+# The customer portal: the browser surface, delivered (ADR-0009, T344).
+#
+# WHAT RUNS HERE is a static file server that sets the Stage 3 Content-Security-Policy with a
+# per-response nonce (build/docker/portals.Dockerfile). It holds no data, reaches no database, has
+# no managed identity and resolves no secret — there is nothing in this container to steal but the
+# bundle every visitor is already given.
+#
+# WHY IT IS A CONTAINER APP and not a storage account: the baseline needs a nonce minted per
+# response and stamped into the document, which no static host and no edge header can do.
+#
+# SEPARATE FROM THE STAFF PORTAL, on its own host and its own origin. The browser's security
+# boundary is the origin; sharing one would share storage, cookies and any injected script between
+# a customer surface and a staff surface.
+apiVersion: 2024-03-01
+kind: containerapp
+
+metadata:
+  name: synthia-customer-portal
+  resourceGroup: ${RESOURCE_GROUP}
+
+identity:
+  # NO MANAGED IDENTITY BEYOND THE REGISTRY PULL, and that is the point. This component reads no
+  # secret, no database and no queue, so it holds no role that could be misused if it were
+  # compromised. It is the only deployable in the platform with nothing to grant.
+  type: UserAssigned
+  userAssignedIdentities:
+    ${REGISTRY_PULL_IDENTITY_RESOURCE_ID}: {}
+
+properties:
+  managedEnvironmentId: ${CONTAINER_APPS_ENVIRONMENT_ID}
+
+  configuration:
+    activeRevisionsMode: Single
+
+    ingress:
+      # INTERNAL ONLY, like every other container app here. Front Door reaches it over Private Link
+      # and its WAF is in front of every request; external ingress would be a public host with no
+      # WAF, which is the one an attacker would pick.
+      external: false
+      targetPort: 8080
+      transport: http
+      allowInsecure: false
+
+    # No secrets. Nothing here needs one.
+
+    registries:
+      - server: ${CONTAINER_REGISTRY}
+        identity: ${REGISTRY_PULL_IDENTITY_RESOURCE_ID}
+
+  template:
+    # The platform-wide drain. Nothing here holds a claim or a message: a replica stops accepting
+    # requests and finishes the ones in flight, which for a file server is milliseconds.
+    terminationGracePeriodSeconds: 25
+
+    containers:
+      - name: synthia-customer-portal
+        # Digest-pinned, never a floating tag. A tag is a pointer somebody else can move.
+        image: ${CONTAINER_REGISTRY}/synthia-customer-portal@${IMAGE_DIGEST}
+
+        resources:
+          # Small and explicit. Serving static files is I/O, not computation; an unbounded container
+          # takes the node down with it rather than failing by itself.
+          cpu: 0.25
+          memory: 0.5Gi
+
+        env:
+          # The image is built for one portal and sets this itself; stated here so a reader of the
+          # manifest can see which surface this app serves without opening the Dockerfile.
+          - name: SYNTHIA_PORTAL
+            value: customer-portal
+
+          # THE BUNDLE'S ENVIRONMENT, supplied here rather than compiled in (ADR-0009). The image is
+          # promoted between environments by digest, so a gateway origin baked into the build would
+          # make the artefact reviewed in one environment a different one from that running in the
+          # next. The server writes these into the document; `readHostedConfig` reads them back.
+          #
+          # None of them is a secret, and none may become one: everything shipped to a page is
+          # readable by whoever loads the page. A client id is public by definition in a browser
+          # flow; a client SECRET would be refused at bootstrap.
+          - name: SYNTHIA_GATEWAY_ORIGIN
+            value: ${API_ORIGIN}
+          - name: SYNTHIA_AUTH_AUTHORITY
+            value: ${ENTRA_AUTHORITY}
+          - name: SYNTHIA_AUTH_CLIENT_ID
+            value: ${CUSTOMER_PORTAL_CLIENT_ID}
+          - name: SYNTHIA_AUTH_SCOPES
+            value: ${PLATFORM_API_SCOPE}
+
+          # The CSP's connect-src is built from these, so the policy names exactly the origins this
+          # surface may reach — one gateway (spec FR-SURF-017), the realtime endpoint and Entra.
+          - name: SYNTHIA_SIGNALR_ORIGIN
+            value: ${SIGNALR_ORIGIN}
+
+        probes:
+          # Process-only liveness. It consults no dependency — there is none — so it reports this
+          # replica and nothing else.
+          - type: Liveness
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Readiness is the same check here, and that is honest rather than lazy: a file server
+          # with no dependency is ready exactly when its process is up. A readiness probe that
+          # checked the API would take the portal out of rotation during an API outage — and the
+          # portal is what renders the error the user needs to see.
+          - type: Readiness
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+        volumeMounts:
+          - volumeName: tmp
+            mountPath: /tmp
+
+    volumes:
+      # The root filesystem is read-only; /tmp is the one writable path, and nothing this process
+      # writes is expected to survive the replica.
+      - name: tmp
+        storageType: EmptyDir
+
+    scale:
+      minReplicas: 1
+      maxReplicas: 10
+      rules:
+        - name: http
+          http:
+            metadata:
+              concurrentRequests: "100"

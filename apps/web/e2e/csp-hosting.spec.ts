@@ -10,8 +10,8 @@ import {
  *
  * Until this existed the policy was built and unit-tested but never SENT: no hosting tier in the
  * repository set the header, so nothing had ever shown that the portals work under it. These
- * tests drive the production build through `scripts/csp-host.mjs` — the reference hosting tier —
- * and fail on any violation the browser reports.
+ * tests drive the production build through `scripts/csp-host.mjs` — the same server the portal
+ * image runs (ADR-0009) — and fail on any violation the browser reports.
  */
 
 interface Surface {
@@ -76,6 +76,24 @@ for (const surface of SURFACES) {
       expect(first.header).not.toBe('');
       expect(first.attribute).toBe(first.header);
       expect(second.header).not.toBe(first.header);
+    });
+
+    test('the document carries the environment the hosting tier supplied', async ({ request }) => {
+      // An image promoted by digest cannot carry its own environment (ADR-0009). The tier writes
+      // it in; `readHostedConfig` reads it back. A block that stopped arriving would leave a
+      // deployed portal pointing at the compiled development default — silently.
+      const body = await (await request.get(url)).text();
+      const block =
+        /<script type="application\/json" id="synthia-platform-config">(.*?)<\/script>/.exec(body);
+
+      expect(block, 'the document carries no platform config block').not.toBeNull();
+
+      const config = JSON.parse(block?.[1] ?? '{}') as Record<string, string>;
+      expect(config['gatewayOrigin']).toBe('https://api.synthia.example');
+      expect(config['authClientId']).toBe('11111111-1111-1111-1111-111111111111');
+
+      // It is a data block, not a script: nothing in it executes, so it needs no nonce.
+      expect(body).not.toContain('<script>');
     });
 
     test('the portal renders under the policy with no violation', async ({ page }) => {

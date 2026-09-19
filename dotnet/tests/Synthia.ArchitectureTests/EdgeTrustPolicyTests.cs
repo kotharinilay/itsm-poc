@@ -315,10 +315,14 @@ public sealed class EdgeTrustPolicyTests
     }
 
     [Fact]
-    public void Front_door_publishes_exactly_one_origin_and_it_is_the_gateway()
+    public void Front_door_publishes_the_gateway_and_the_two_portals_and_nothing_else()
     {
-        // A second origin here would be a public route to a backend that looks, in the portal, like
-        // a routing entry. It is the cheapest possible bypass of the entire trust boundary.
+        // An origin that is neither the gateway nor a portal bundle would be a public route to a
+        // backend that looks, in the portal, like a routing entry. It is the cheapest possible
+        // bypass of the entire trust boundary.
+        //
+        // An allow-list by name rather than a count (ADR-0009): a count passes a definition that
+        // swapped one origin for another, which is the change worth catching.
         FileInfo file = new(RepositoryPath("build", "infra", "frontdoor", "front-door.json"));
 
         Assert.True(file.Exists, "The Front Door definition is missing: " + file.FullName);
@@ -327,14 +331,61 @@ public sealed class EdgeTrustPolicyTests
 
         JsonElement originGroups = frontDoor.RootElement.GetProperty("originGroups");
 
-        Assert.Equal(1, originGroups.GetArrayLength());
+        Dictionary<string, JsonElement> groups = originGroups.EnumerateArray()
+            .ToDictionary(group => group.GetProperty("name").GetString()!, group => group);
 
-        JsonElement origins = originGroups[0].GetProperty("origins");
+        Assert.Equal(
+            ["apim", "customer-portal", "staff-portal"],
+            groups.Keys.Order(StringComparer.Ordinal));
 
-        Assert.Equal(1, origins.GetArrayLength());
-        Assert.Equal("apim-gateway", origins[0].GetProperty("name").GetString());
+        Dictionary<string, string> expectedOrigin = new(StringComparer.Ordinal)
+        {
+            ["apim"] = "apim-gateway",
+            ["customer-portal"] = "customer-portal-app",
+            ["staff-portal"] = "staff-portal-app",
+        };
 
-        // Private Link, so APIM has no public ingress at all.
-        Assert.True(origins[0].TryGetProperty("sharedPrivateLinkResource", out _));
+        foreach ((string groupName, JsonElement group) in groups)
+        {
+            JsonElement origins = group.GetProperty("origins");
+
+            Assert.Equal(1, origins.GetArrayLength());
+            Assert.Equal(expectedOrigin[groupName], origins[0].GetProperty("name").GetString());
+
+            // Private Link, so no target holds a public endpoint of its own — and the link must
+            // NAME a resource rather than merely be present as a key.
+            Assert.True(
+                origins[0].TryGetProperty("sharedPrivateLinkResource", out JsonElement link),
+                $"{groupName} is reachable without Private Link");
+            Assert.False(
+                string.IsNullOrWhiteSpace(link.GetProperty("privateLink").GetString()),
+                $"{groupName} declares a Private Link that names no resource");
+        }
+    }
+
+    [Fact]
+    public void Only_the_gateway_origin_serves_an_api_path()
+    {
+        // The portals serve static files. One answering /api would reach the platform on a host
+        // APIM never saw, which is the bypass the single gateway exists to prevent.
+        FileInfo file = new(RepositoryPath("build", "infra", "frontdoor", "front-door.json"));
+
+        using JsonDocument frontDoor = JsonDocument.Parse(File.ReadAllText(file.FullName));
+
+        foreach (JsonElement route in frontDoor.RootElement.GetProperty("routes").EnumerateArray())
+        {
+            if (route.GetProperty("originGroup").GetString() == "apim")
+            {
+                continue;
+            }
+
+            foreach (JsonElement pattern in route.GetProperty("patternsToMatch").EnumerateArray())
+            {
+                Assert.False(
+                    pattern.GetString()?.StartsWith("/api", StringComparison.Ordinal) ?? false,
+                    $"edge route {route.GetProperty("name").GetString()} publishes an /api path "
+                    + "on a portal origin");
+            }
+        }
     }
 }

@@ -29,6 +29,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `apps/web/projects/design-system/src/lib/a11y/*.ts` | Focus trap, live announcer, skip link. |
 | `apps/web/projects/design-system/src/lib/states/*.ts`, `status/*.ts` | Loading / empty / partial-failure state components and status indicator. |
 | `apps/web/e2e/a11y-scaffold.spec.ts`, `playwright.config.ts` | Playwright accessibility smoke test. |
+| `apps/web/e2e/csp-hosting.spec.ts`, `playwright.csp.config.ts`, `scripts/csp-host.mjs` | The CSP baseline sent and obeyed: the server the portal image runs, and the tests that drive the built portals through it. |
 
 ### apps/desktop — Electron shell
 
@@ -231,8 +232,10 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | File | Purpose |
 | ---- | ------- |
 | `build/docker/{dotnet,ragcore,integrations}.Dockerfile` | Container images; RagCore/Integrations run `uvicorn … create_app --factory`. |
+| `build/docker/portals.Dockerfile` | One image per browser portal (`--build-arg PORTAL`): builds the Angular bundle and serves it with the per-response-nonce CSP (ADR-0009). |
 | `build/docker/migrate.job.yaml` | Container Apps job running Alembic + checkpoint provisioning. |
 | `build/docker/containerapps/{monolith,ragcore,integrations}.yaml` | Container Apps definitions (env, probes, scaling, queue names). |
+| `build/docker/containerapps/{customer,staff}-portal.yaml` | Portal Container Apps: internal ingress, no secret, no managed identity beyond the registry pull. |
 | `build/infra/apim/apis.json`, `*.v1.xml`, `global.inbound.xml` | APIM API definitions and policies (JWT validation, `X-Idp-*` headers, routing per audience). |
 | `build/infra/ai-gateway/policy.xml`, `providers.json` | AI Gateway (APIM) policy and model provider routing. |
 | `build/infra/frontdoor/front-door.json` | Front Door in front of APIM. |
@@ -243,6 +246,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `build/contracts/**/*.openapi.json`, `approved-breaking-changes.json` | Published OpenAPI artifacts and the breaking-change allow-list. |
 | `build/scripts/openapi_validate.py`, `openapi_diff.py` | Validate and diff OpenAPI artifacts in CI. |
 | `build/scripts/check-*.sh`, `verify-*.sh` | Boundary, edge-path, architecture, contract and desktop-security guards. |
+| `build/scripts/smoke-images.sh`, `edge_front_door.py` | Builds, starts and inspects every image; answers the structural Front Door questions `check-edge-path.sh` asks. |
 | `build/scripts/dev.sh`, `dev.ps1` | Local development runner. |
 | `.github/workflows/*.yml` | CI per component plus boundaries, contracts, migrations, security. |
 

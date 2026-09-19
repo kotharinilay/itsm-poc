@@ -10,7 +10,8 @@
 #   2. The APIM global policy deletes every inbound copy of the identity contract.
 #   3. The APIM global policy checks this platform's Front Door identifier.
 #   4. Every audience has a gateway policy that validates a token.
-#   5. Front Door publishes exactly one origin, and it is APIM.
+#   5. Front Door publishes exactly three origins — the gateway and the two portal bundles — each
+#      over Private Link, and only the gateway one serves /api (ADR-0009).
 #   6. Neither deployable addresses the other by an internal address.
 #
 # WHAT THIS GUARD NO LONGER CHECKS, deliberately. The apim-to-backend hop used to carry a client
@@ -155,20 +156,44 @@ else
   pass "Every audience derives identity at the gateway."
 fi
 
-# ------------------------------------------------------ (6) Front Door fronts only the gateway
+# ------------------------------------- (6) Front Door fronts the gateway and the portals, only
 #
-# A second origin would be a public route to a backend that looks, in the portal, like a routing
-# entry. It is the cheapest possible bypass of the entire trust boundary.
+# An origin that is neither the gateway nor a portal bundle would be a public route to a backend
+# that looks, in the portal, like a routing entry. It is the cheapest possible bypass of the entire
+# trust boundary, so the check is an allow-list rather than a count (ADR-0009).
 if require_file "$FRONTDOOR" "The Front Door definition"; then
-  origin_count="$(grep -cE '^[[:space:]]*"hostName":' "$FRONTDOOR")"
-  if [ "$origin_count" -ne 2 ]; then
-    # Two: the endpoint's own hostname and the single origin's. Any more means another origin or
-    # another endpoint, and both are new public surface.
-    fail "The Front Door definition declares $origin_count host names; expected exactly 2 (one endpoint, one origin)"
-  elif ! grep -qF '"sharedPrivateLinkResource"' "$FRONTDOOR"; then
-    fail "The Front Door origin does not reach APIM over Private Link, so APIM holds a public endpoint"
+  # AN ALLOW-LIST BY NAME, not a count. The edge fronts the gateway and the two portal bundles
+  # (ADR-0009) — three origin groups, no more, and a fourth is the cheapest possible bypass
+  # whatever it is called. Counting host names would pass a definition that swapped one origin for
+  # another, which is precisely the change worth catching.
+  #
+  # ONLY THE GATEWAY GROUP SERVES AN API. The portal groups serve static files from container apps
+  # that hold no data, no secret and no identity; see the route check below, which is the half that
+  # stops one of them being given an /api path.
+  # The JSON is read with an interpreter rather than grep: "which origin group does this route
+  # target" is a structural question, and a grep that answered it would be answering a different,
+  # easier one. `python` or `python3`, whichever this machine has — CI is Linux, developers here
+  # are on Windows, and the guard must fail for a real reason on both.
+  PYTHON="$(command -v python3 || command -v python || true)"
+  if [ -z "$PYTHON" ]; then
+    fail "No python on PATH; the Front Door checks cannot read the definition"
+  fi
+
+  expected_groups="apim customer-portal staff-portal"
+  actual_groups="$("$PYTHON" "build/scripts/edge_front_door.py" groups "$FRONTDOOR")"
+  private="$("$PYTHON" "build/scripts/edge_front_door.py" public-origins "$FRONTDOOR")"
+  api_on_a_portal="$("$PYTHON" "build/scripts/edge_front_door.py" api-on-portal "$FRONTDOOR")"
+
+  if [ "$actual_groups" != "$expected_groups" ]; then
+    fail "The Front Door origin groups are '$actual_groups'; expected exactly '$expected_groups'"
+  elif [ -n "$private" ]; then
+    fail "A Front Door origin does not reach its target over Private Link, so that target holds a public endpoint" "$private"
+  elif [ -n "$api_on_a_portal" ]; then
+    # A portal host answering /api would be a public path to the platform on a host APIM never
+    # saw — the bypass the single gateway exists to prevent, wearing the costume of a routing entry.
+    fail "A portal route publishes an /api path, which would reach the platform without the gateway" "$api_on_a_portal"
   else
-    pass "Front Door fronts exactly one origin, and reaches it privately."
+    pass "Front Door fronts the gateway and the two portals, each privately, and only the gateway serves /api."
   fi
 fi
 

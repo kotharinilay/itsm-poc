@@ -125,6 +125,19 @@ cd apps/web && npx ng serve customer-portal    # or staff-portal, or desktop-ren
 cd apps/desktop && npm run start               # Electron, after `npm run build:renderer`
 ```
 
+**`ng serve` sends no Content-Security-Policy**, and it cannot: the baseline carries a per-response
+nonce (ADR-0009). To run a portal the way production does — the built bundle behind the same server
+the container uses — build first, then:
+
+```bash
+cd apps/web
+npm run build
+node scripts/csp-host.mjs customer-portal 4300    # or staff-portal
+```
+
+`npm run test:csp` does both and asserts the policy arrives, the nonce is fresh per response, and
+the portal renders with no violation.
+
 Each service answers `/health/live` and `/health/ready`; readiness goes unready when PostgreSQL is
 unreachable, liveness does not. **The workers are not runnable yet** — all seven `main()` functions
 raise by design until their container definitions land (tasks.md T324).
@@ -164,6 +177,12 @@ is validated at startup, and a missing required value stops the process rather t
 ```bash
 ./build/scripts/dev.sh images
 ```
+
+Five images: RagCore, the Integrations Service, the read-only monolith, and one per browser portal.
+The portal images are static file servers that set the CSP with a per-response nonce — the policy
+cannot be a static header, which is why the portals are container apps rather than a storage account
+(ADR-0009). Each portal has its own Front Door endpoint and origin, so the customer and staff
+surfaces are separate browser origins.
 
 **A committed Dockerfile does not build, and that is the control.** The runtime base is pinned by
 digest and the digest is a placeholder until somebody resolves and reviews one, so a production

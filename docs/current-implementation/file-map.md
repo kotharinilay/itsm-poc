@@ -10,9 +10,9 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | ---- | ------- |
 | `apps/web/projects/customer-portal/src/app/{app,app.config,app.routes,platform.config}.ts` | Customer portal shell, providers and API base config; mounts `customer-features` routes. |
 | `apps/web/projects/staff-portal/src/app/{app,app.config,app.routes,platform.config}.ts` | Staff portal shell and config; mounts `staff-features` routes. |
-| `apps/web/projects/desktop-renderer/src/app/app.ts`, `app.config.ts` | Renderer UI loaded inside the Electron desktop app. |
+| `apps/web/projects/desktop-renderer/src/app/app.ts`, `app.config.ts` | Renderer shell (layout, router outlet, bridge seam) loaded inside Electron; no feature behaviour. |
 | `apps/web/projects/desktop-renderer/src/app/desktop/desktop-bridge.ts`, `desktop-bridge.types.ts`, `desktop-bridge.service.ts` | Typed wrapper over the preload bridge (`window` API exposed by `apps/desktop`). |
-| `apps/web/projects/platform-core/src/lib/api/platform-api.client.ts`, `platform-api.config.ts`, `platform.interceptors.ts` | Base HTTP client, base URL config, correlation/auth/error interceptors. |
+| `apps/web/projects/platform-core/src/lib/api/platform-api.client.ts`, `platform-api.config.ts`, `platform.interceptors.ts` | Base HTTP client and base URL config; `correlationInterceptor`, `authInterceptor`, `problemDetailsInterceptor`. |
 | `apps/web/projects/platform-core/src/lib/api/customer-api.client.ts` | Calls RagCore customer routes and .NET `/views/*` customer routes. |
 | `apps/web/projects/platform-core/src/lib/api/staff-api.client.ts` | Calls RagCore staff routes and .NET `/views/*` staff routes. |
 | `apps/web/projects/platform-core/src/lib/api/message-stream.client.ts` | SSE reader for `POST /sessions/{id}/messages`. |
@@ -21,10 +21,11 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `apps/web/projects/platform-core/src/lib/auth/*.ts` | Auth session, access-token provider, role-based UI visibility. |
 | `apps/web/projects/platform-core/src/lib/realtime/*.ts` | Realtime connection abstraction and notification envelope type. |
 | `apps/web/projects/platform-core/src/lib/security/content-security-policy.ts`, `sanitization-policy.ts` | CSP builder and HTML sanitisation rules. |
-| `apps/web/projects/customer-features/src/lib/chat/chat-shell.ts` | Chat screen: starts a session, streams messages. |
+| `apps/web/projects/customer-features/src/lib/chat/chat-shell.ts` | Chat screen: sends a turn for an existing session over SSE and announces stream events. Does not start a session. |
 | `apps/web/projects/customer-features/src/lib/chat/feedback/feedback-control.ts` | Thumbs up/down control calling the feedback endpoints. |
-| `apps/web/projects/customer-features/src/lib/{consent,session,handoff}/*-shell.ts` | Consent, session history and hand-off screens (UI shells). |
-| `apps/web/projects/staff-features/src/lib/{queue,reporting,take-over}/*-shell.ts`, `staff-features.routes.ts` | Staff approval queue, reporting and take-over screens (UI shells) and their routes. |
+| `apps/web/projects/customer-features/src/lib/{consent,session}/*-shell.ts` | Consent prompt and session list: structural shells, no behaviour implemented. |
+| `apps/web/projects/customer-features/src/lib/handoff/handoff-shell.ts` | Hand-off notice telling the user a person will take the request. |
+| `apps/web/projects/staff-features/src/lib/{queue,reporting,take-over}/*-shell.ts`, `staff-features.routes.ts` | Approval queue, reporting and take-over screens: structural shells with no behaviour, plus their role-gated routes. |
 | `apps/web/projects/design-system/src/lib/a11y/*.ts` | Focus trap, live announcer, skip link. |
 | `apps/web/projects/design-system/src/lib/states/*.ts`, `status/*.ts` | Loading / empty / partial-failure state components and status indicator. |
 | `apps/web/e2e/a11y-scaffold.spec.ts`, `playwright.config.ts` | Playwright accessibility smoke test. |
@@ -33,13 +34,15 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 
 | File | Purpose |
 | ---- | ------- |
-| `apps/desktop/src/main/index.ts` | Electron main entry; wires window, protocol, IPC and security handlers. |
-| `apps/desktop/src/main/app-shell.ts`, `window.ts` | App lifecycle and `BrowserWindow` creation with locked-down web preferences. |
-| `apps/desktop/src/main/renderer-protocol.ts`, `csp.ts` | Custom protocol serving the renderer build; per-response CSP with nonce. |
-| `apps/desktop/src/main/navigation.ts`, `session-boundary.ts` | Blocks navigation/new windows; isolates the Electron session. |
-| `apps/desktop/src/main/ipc-guard.ts`, `apps/desktop/src/ipc-contracts/index.ts` | Validated IPC channel allow-list and message types. |
-| `apps/desktop/src/main/endpoint-execution-boundary.ts` | Boundary for local script execution (desktop instruction path). |
-| `apps/desktop/src/main/config.ts` | Desktop configuration loading. |
+| `apps/desktop/src/main/index.ts` | Electron main-process composition root; only wiring, decisions live in sibling modules. |
+| `apps/desktop/src/main/app-shell.ts` | Process-wide hardening and the IPC handler table (testable without Electron). |
+| `apps/desktop/src/main/window.ts` | Secure `BrowserWindow` switches, exported as data so tests can assert each. |
+| `apps/desktop/src/main/renderer-protocol.ts`, `csp.ts` | Serves the renderer bundle from the `app://renderer` scheme; applies the CSP from the main process via `onHeadersReceived`, with a nonce. |
+| `apps/desktop/src/main/navigation.ts` | Deny-by-default navigation and new-window allow-list. |
+| `apps/desktop/src/main/session-boundary.ts` | States and tests that the main process holds no token and takes no part in sign-in. |
+| `apps/desktop/src/main/ipc-guard.ts`, `apps/desktop/src/ipc-contracts/index.ts` | IPC sender and argument validation; the typed channel allow-list. |
+| `apps/desktop/src/main/endpoint-execution-boundary.ts` | Placeholder for endpoint script execution; executes nothing (FR-DEMO-016). |
+| `apps/desktop/src/main/config.ts` | Validated, frozen host config: the origins the desktop may reach (feeds navigation and CSP `connect-src`). |
 | `apps/desktop/src/preload/bridge.ts` | Preload script exposing the narrow renderer API via `contextBridge`. |
 | `apps/desktop/scripts/stage-renderer.mjs` | Copies the `desktop-renderer` build into the Electron package. |
 | `apps/desktop/tests/*.spec.ts` | Vitest checks for bridge surface, renderer contract and Electron security settings. |

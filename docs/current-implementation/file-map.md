@@ -56,7 +56,6 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `dotnet/src/Synthia.Api/Endpoints/StaffViewEndpoints.cs` | Seven staff `/views/*` GET routes with role requirements. |
 | `dotnet/src/Synthia.Api/Endpoints/CursorEnvelope.cs` | `{items, nextCursor}` response wrapper. |
 | `dotnet/src/Synthia.Api/Middleware/CorrelationMiddleware.cs` | Accepts/mints `X-Correlation-Id`, echoes it back. |
-| `dotnet/src/Synthia.Api/Middleware/GatewayProvenanceMiddleware.cs` | Rejects requests without an allow-listed APIM client certificate. |
 | `dotnet/src/Synthia.Api/Middleware/IdentityContextMiddleware.cs` | Builds the principal from `X-Idp-*`, rejects authority query params, admits the tenant; also holds `AudienceRouting`. |
 | `dotnet/src/Synthia.Api/Middleware/RequestScope.cs` | Scoped holder for principal, tenant scope and correlation id. |
 | `dotnet/src/Synthia.Api/Authorization/RoleFilter.cs` | `AcceptsRoles` / `AcceptsRolesOfCustomer` endpoint filters. |
@@ -65,7 +64,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `dotnet/src/Synthia.Api/Errors/*.cs` | RFC 9457 problem helpers, exception handler, JSON options. |
 | `dotnet/src/Synthia.Api/Contracts/ContractOpenApi.cs`, `ContractResponses.cs` | Per-audience OpenAPI documents (`customer`, `staff`) and response metadata. |
 | `dotnet/src/Synthia.Api/Health/HealthEndpoints.cs` | `/health/live`, `/health/ready` (Npgsql check). |
-| `dotnet/src/Synthia.Api/Configuration/*.cs` | Key Vault, edge trust, Container Apps options and required-secret validation. |
+| `dotnet/src/Synthia.Api/Configuration/*.cs` | Key Vault and Container Apps options, required-secret validation. |
 | `dotnet/src/Synthia.Api/Http/OutboundHttpDefaults.cs` | Default timeouts/resilience for outbound `HttpClient`s. |
 | `dotnet/src/Synthia.Api/appsettings.json` | Non-secret defaults (log levels, port, timeouts). |
 | `dotnet/src/Synthia.Persistence/SynthiaReadContext.cs` | EF Core context; every entity `ToView(...)`, global tenant query filter. |
@@ -89,7 +88,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `dotnet/src/Synthia.Observability/*.cs` | OpenTelemetry + Azure Monitor registration and tag names. |
 | `dotnet/Directory.Build.props`, `Directory.Packages.props`, `.editorconfig` | Shared build settings, central package versions, analyzers. |
 | `dotnet/tests/Synthia.ArchitectureTests/*.cs` | Enforces no write endpoints, no migrations, no RagCore reference, module isolation, identity/Azure rules. |
-| `dotnet/tests/Synthia.ContractTests/*.cs` | OpenAPI emission, cursor contract, provenance, config validation, secret binding. |
+| `dotnet/tests/Synthia.ContractTests/*.cs` | OpenAPI emission, API conventions, cursor contract, config validation, secret binding. |
 | `dotnet/tests/Synthia.AuthorizationTests/*.cs`, `Synthia.TenantIsolationTests/*.cs` | Role matrix and tenant scope / aggregate-leak tests. |
 | `dotnet/tests/Synthia.SharedKernel.Tests/{RoleIntersectionTests,VerdictTests}.cs` | Shared-kernel unit tests (other module test projects hold placeholders only). |
 
@@ -113,14 +112,14 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `ragcore/src/ragcore/api/health.py` | `/health/live`, `/health/ready`. |
 | `ragcore/src/ragcore/api/openapi.py` | Generates `/openapi.json` and per-audience contract documents. |
 | `ragcore/src/ragcore/api/schemas.py` | Base Pydantic model (camelCase) and `ProblemDetails`. |
-| `ragcore/src/ragcore/api/middleware/{correlation,provenance,identity,problems}.py` | Correlation id, APIM certificate check, identity-header guard, problem-detail handlers. |
+| `ragcore/src/ragcore/api/middleware/{correlation,identity,problems}.py` | Correlation id, identity-header guard, problem-detail handlers. No provenance layer (ADR-0008). |
 
 ### Configuration and infrastructure
 
 | File | Purpose |
 | ---- | ------- |
 | `ragcore/src/ragcore/config/composition.py` | Composition root: builds `Container`, decides which adapters are bound; `graph_dependencies`. |
-| `ragcore/src/ragcore/config/settings.py` | Pydantic settings (DB, gateway, retrieval, messaging, cache, edge trust, observability). |
+| `ragcore/src/ragcore/config/settings.py` | Pydantic settings (DB, AI gateway, retrieval, messaging, cache, Integrations edge address, observability). |
 | `ragcore/src/ragcore/config/secrets.py` | Resolves Key Vault secret references at startup (`KeyVaultSecretResolver`). |
 | `ragcore/src/ragcore/infrastructure/azure_credentials.py` | Single shared `DefaultAzureCredential`. |
 | `ragcore/src/ragcore/infrastructure/cache.py` | Redis transient cache (Entra auth) or `NullCache`. |
@@ -188,7 +187,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | ---- | ------- |
 | `ragcore/tests/conftest.py`, `tests/support/*.py` | Fixtures, fakes for ports, fake gateway and transport. |
 | `ragcore/tests/migrations/*.py` | Up/down consistency, model-vs-DDL match, schema isolation. |
-| `ragcore/tests/security/*.py` | Provenance, edge trust, Azure identity, secret binding, DB grants (incl. Integrations), leakage. |
+| `ragcore/tests/security/*.py` | Edge topology and trust policy, Azure identity, secret binding, DB grants (incl. Integrations), hard failures, leakage. |
 | `ragcore/tests/governance/*.py`, `authorization/*.py` | Gate paths, no elevation, fixtures excluded, feedback has no influence, mid-flight role change. |
 | `ragcore/tests/isolation/*.py` | Tenant isolation for DB and retrieval. |
 | `ragcore/tests/integration/*.py`, `messaging/*.py`, `idempotency/*.py`, `concurrency/*.py` | Persistence, outbox crash, trace continuity, command/result messages, duplicate triggers, optimistic locking. |
@@ -202,9 +201,9 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `integrations/src/integrations/api/app.py` | App factory: middleware, health and workload routers, OpenAPI path. |
 | `integrations/src/integrations/api/workload/routes.py` | `GET /catalogue`, `POST /case-operations`. |
 | `integrations/src/integrations/api/health.py` | `/health/live`, `/health/ready` with readiness registry. |
-| `integrations/src/integrations/api/middleware/{correlation,provenance,identity,problems}.py` | Same pipeline as RagCore; identity expects a workload (app) principal. |
+| `integrations/src/integrations/api/middleware/{correlation,identity,problems}.py` | Same pipeline as RagCore; identity expects a workload (app) principal. |
 | `integrations/src/integrations/config/composition.py` | Builds the container; `servicenow` bound only when a secret resolver is passed. |
-| `integrations/src/integrations/config/settings.py` | Settings (DSN, queues, edge trust, observability). |
+| `integrations/src/integrations/config/settings.py` | Settings (DSN, queues, observability). |
 | `integrations/src/integrations/catalogue/repository.py` | `CatalogueRepository` (capabilities, entitlement, registered version) and `TenantResolver`. |
 | `integrations/src/integrations/catalogue/registry.py` | `ConnectorRegistry.binding_for`: binding + connector endpoint. |
 | `integrations/src/integrations/policy/checks.py` | `AccessPolicy.evaluate`: entitled → registered → version → binding. |
@@ -239,7 +238,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `build/infra/frontdoor/front-door.json` | Front Door in front of APIM. |
 | `build/infra/identity/managed-identities.json` | Managed identities and Azure role assignments per service. |
 | `build/infra/messaging/queues.json` | Service Bus queues (`synthia-triggers`, `synthia-integration-commands`, `synthia-integration-results`) and queue-scoped roles. |
-| `build/infra/monitoring/*.json` | Telemetry settings and gateway-certificate expiry alert. |
+| `build/infra/monitoring/telemetry.json` | Telemetry settings. |
 | `build/policy/{azure-identity,edge-trust,openapi-disclosure}.json` | Machine-checked policies used by tests and guard scripts. |
 | `build/contracts/**/*.openapi.json`, `approved-breaking-changes.json` | Published OpenAPI artifacts and the breaking-change allow-list. |
 | `build/scripts/openapi_validate.py`, `openapi_diff.py` | Validate and diff OpenAPI artifacts in CI. |
@@ -251,8 +250,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 
 | File | Purpose |
 | ---- | ------- |
-| `docs/adr/0001`–`0007*.md` | Architecture decisions (ownership split, approval placement, migrations, script integrity, third-party systems, desktop CSP, integration boundary). |
+| `docs/adr/0001`–`0008*.md` | Architecture decisions (ownership split, approval placement, migrations, script integrity, third-party systems, desktop CSP, integration boundary, deferred gateway provenance). |
 | `docs/architecture/integrations-service-delta.md` | Changes introduced by the Integrations Service split. |
-| `docs/runbooks/rotate-gateway-certificate.md` | Rotating the APIM→Container Apps client certificate. |
 | `docs/current-implementation/*.md` | This documentation set. |
 | `specs/001-platform-scaffold/{spec,plan,tasks,data-model}.md`, `contracts/` | Reference specification, plan, task list and intended contracts (not the source of truth for what is built). |

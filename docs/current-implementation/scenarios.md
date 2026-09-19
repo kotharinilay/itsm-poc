@@ -8,7 +8,9 @@ Three HTTP services are implemented. Table/view details are in [database.md](dat
 | .NET read API ("monolith") | `dotnet/src/Synthia.Api/Program.cs` | 8080 | `synthia_monolith` |
 | Integrations Service (FastAPI) | `integrations.api.app:create_app` | 8000 | `synthia_integrations` |
 
-**Common request pipeline.** Every service runs, in order: correlation (`X-Correlation-Id`, minted if absent) → gateway provenance (APIM client-certificate thumbprint allow-list; `/health/*` exempt) → identity (reads the APIM-set `X-Idp-Tenant-Id`, `X-Idp-Principal-Id`, `X-Idp-Roles`, `X-Idp-Credential-Class`, `X-Idp-Client-Surface`; rejects tenant/role/audience in the query). Audience comes from the path prefix: `/api/customer/`, `/api/staff/`, `/api/workload/`. Errors are RFC 9457 problem documents.
+**Common request pipeline.** Every service runs, in order: correlation (`X-Correlation-Id`, minted if absent) → identity (reads the APIM-set `X-Idp-Tenant-Id`, `X-Idp-Principal-Id`, `X-Idp-Roles`, `X-Idp-Credential-Class`, `X-Idp-Client-Surface`; rejects tenant/role/audience in the query). Audience comes from the path prefix: `/api/customer/`, `/api/staff/`, `/api/workload/`. Errors are RFC 9457 problem documents.
+
+**No backend gateway-provenance check.** The client-certificate check between APIM and the services was removed (ADR-0008, no replacement). A service cannot tell an `X-Idp-*` set by APIM from one sent by any caller that reaches it directly. What prevents that today is internal-only Container Apps ingress plus APIM deleting inbound `X-Idp-*` headers at the edge.
 
 **Tenant admission.**
 - RagCore: `deps.get_tenant` → `TenantRegistry.admit_end_user` → `SELECT … FROM platform.tenant_mapping WHERE entra_tid = :tid`. Runs only on routes that declare `TenantDep`.
@@ -112,8 +114,8 @@ sequenceDiagram
   participant R as RagCore
   participant DB as PostgreSQL
   C->>G: POST /api/customer/v1/sessions
-  G->>R: + client cert, X-Idp-* headers, X-Correlation-Id: CORR-3001
-  R->>R: provenance → identity → get_principal
+  G->>R: + X-Idp-* headers, X-Correlation-Id: CORR-3001
+  R->>R: correlation → identity → get_principal
   R->>DB: SELECT tenant_mapping WHERE entra_tid = e000…0001  (Read)
   DB-->>R: tenant_id a000…0001, status active
   R-->>C: 201 {"sessionId": "new uuid4"}   (no INSERT)
@@ -132,7 +134,7 @@ sequenceDiagram
 | Start session | `start_session` depends on `PrincipalDep` + `TenantDep`. DB: **Read** `platform.tenant_mapping`. Returns `uuid4()`; nothing is written. |
 | Send message | `send_message` builds `RunContext(tenant, requester=b000…0001, correlation_id=CORR-3001, session_id=c000…1001, work_item_id=None)`, truncates content to 8 000 chars. Because `app.state.run_host` is `None`, it streams a single `done` frame. DB: **Read** `tenant_mapping` only. Response header echoes `X-Correlation-Id: CORR-3001`. |
 | Negotiate | `negotiate` uses `PrincipalDep` only. DB: None. Group is always `user:<principal oid>`; no body or query accepted. No SignalR call is made — it only returns the URL/group. |
-| Azure | API Management (edge; provenance and identity headers). No other Azure call. |
+| Azure | API Management (edge; sets the identity headers). No other Azure call. |
 
 ---
 
@@ -147,8 +149,8 @@ sequenceDiagram
   participant N as .NET API
   participant DB as PostgreSQL (views only)
   C->>G: GET /api/customer/v1/views/sessions?limit=20&sort=-createdAt
-  G->>N: + client cert, X-Idp-* headers
-  N->>N: CorrelationMiddleware → GatewayProvenanceMiddleware → IdentityContextMiddleware
+  G->>N: + X-Idp-* headers
+  N->>N: CorrelationMiddleware → IdentityContextMiddleware
   N->>DB: SELECT vw_tenant_v1 WHERE entra_tid = e000…0001 (IgnoreQueryFilters) (Read)
   N->>DB: SELECT vw_session_summary_v1 WHERE tenant_id = a000…0001 AND requester_oid = b000…0001 (Read)
   N-->>C: 200 {"items":[{sessionId c000…1001, state "conversational", …}],"nextCursor":null}
@@ -264,7 +266,7 @@ sequenceDiagram
   participant KV as Key Vault
   participant SN as System of record
   W->>G: GET /api/workload/v1/integrations/catalogue?sessionId=c000…1001
-  G->>I: + client cert, X-Idp-* (app credential)
+  G->>I: + X-Idp-* (app credential)
   I->>DB: SELECT tenant_id FROM vw_session_summary_v1 WHERE session_id=… (Read)
   I->>DB: SELECT vw_governance_catalogue_v1 LEFT JOIN vw_tenant_entitlement_v1 (Read)
   I-->>W: 200 {"items":[{catalogueId "synthia.reference.noop", catalogueVersion 1, kind "action", entitled false, available true, isReferenceFixture true}],"nextCursor":null}
@@ -301,7 +303,7 @@ Covers the 13 RagCore stub routes. All return `501` with `application/problem+js
 POST /api/staff/v1/approvals/a1000000-0000-4000-8000-000000004001/verdict
   X-Idp-Roles: technician, X-Correlation-Id: CORR-3001
   body {"verdict":"approved","note":"ok"}
-    ↓ provenance → identity → get_principal (audience=staff)
+    ↓ correlation → identity → get_principal (audience=staff)
     ↓ staff/routes.py::record_verdict
     ↓ DB: None
   501 {"type": ".../not-implemented", "status": 501, "correlationId": "CORR-3001", …}
@@ -323,13 +325,13 @@ Body validation still runs, so a malformed body returns 422, not 501. Azure: API
 
 | Request | Service | Behaviour | DB | Azure |
 | ------- | ------- | --------- | -- | ----- |
-| `GET /health/live` | all three | 200, no checks; exempt from provenance/identity | None | None |
+| `GET /health/live` | all three | 200, no checks; exempt from identity | None | None |
 | `GET /health/ready` | RagCore | `engine.connect()` + `SELECT 1`; 503 if unreachable | Read (`SELECT 1`) | None |
 | `GET /health/ready` | .NET | `AddNpgSql` check tagged `ready` against `ReadDatabase:ConnectionString` | Read (`SELECT 1`) | None |
 | `GET /health/ready` | Integrations | `ReadinessRegistry.all_ready()`; `SELECT 1` registered only when a DSN is configured | Read (`SELECT 1`) | None |
-| `GET /openapi.json`, `/docs`, `/redoc` | RagCore | Generated from `app.routes`; behind gateway provenance | None | None |
+| `GET /openapi.json`, `/docs`, `/redoc` | RagCore | Generated from `app.routes` | None | None |
 | `GET /openapi/customer.json`, `/openapi/staff.json` | .NET | Mapped only when `ASPNETCORE_ENVIRONMENT=Development` | None | None |
-| `GET /api/workload/v1/integrations/openapi.json` | Integrations | Generated; behind provenance | None | None |
+| `GET /api/workload/v1/integrations/openapi.json` | Integrations | Generated | None | None |
 
 ---
 
@@ -446,7 +448,7 @@ Endpoints covered by scenarios: 44
 Database tables: 20   (platform 16, integration 4)
 Database views: 13
 Azure components referenced by code: 8
-  API Management (edge gateway provenance, AI Gateway model egress, Integrations client base URL),
+  API Management (edge identity headers, AI Gateway model egress, Integrations client base URL),
   Key Vault, Service Bus, Entra ID managed identity (DefaultAzureCredential),
   Azure Monitor / Application Insights, AI Search, Cache for Redis, SignalR Service
   (PostgreSQL is reached by DSN; "Azure Database for PostgreSQL" appears only in build/infra and build/policy.)

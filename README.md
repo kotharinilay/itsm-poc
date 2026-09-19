@@ -85,6 +85,12 @@ On Windows, `pwsh ./build/scripts/dev.ps1 setup` is the equivalent. Run `dev.sh 
 command list. Every command it exposes is the same command CI runs — there is no gate you can only
 discover by pushing.
 
+**Coding agents.** `.mcp.json` registers the [Serena](https://github.com/oraios/serena) MCP server
+(pinned release, launched through `uv`) for semantic code navigation across C#, TypeScript and Python.
+Claude Code asks you to approve it on first open. Project settings and the onboarding memories live
+in `.serena/` — start from `mem:core`. Personal overrides go in `.serena/project.local.yml`, which is
+ignored.
+
 ## Validation gates
 
 A change merges only when **all** of these pass, with no new suppressions:

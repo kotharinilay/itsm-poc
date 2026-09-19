@@ -28,7 +28,11 @@ export const STATIC_DIRECTIVES: readonly string[] = Object.freeze([
   "child-src 'none'",
   "worker-src 'self'",
   "form-action 'self'",
-  "base-uri 'none'",
+  // 'self', not 'none': the renderer bundle is an Angular document and carries `<base href="/">`,
+  // which 'none' forbids outright. Same value as the browser portals — a control that differs by
+  // surface is one that was only ever exercised on one of them. See platform-core's
+  // content-security-policy.ts for why 'self' still refuses the attack that matters.
+  "base-uri 'self'",
   "object-src 'none'",
   "manifest-src 'self'",
   // Belt and braces alongside the navigation allow-list: even a permitted navigation must be to

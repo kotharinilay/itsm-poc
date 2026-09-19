@@ -62,7 +62,18 @@ export function buildCspHeader(origins: CspOrigins, options: CspOptions): string
     `connect-src 'self' ${origins.gatewayOrigin} ${origins.signalROrigin} ${origins.authAuthority}`,
     `frame-ancestors 'none'`,
     `form-action 'self'`,
-    `base-uri 'none'`,
+    // 'self', NOT 'none', and the difference was found by sending the policy rather than reviewing
+    // it. Every Angular document carries `<base href="/">`, which `base-uri 'none'` forbids
+    // outright: both portals and the desktop renderer reported a violation on first paint. The
+    // alternative — deleting the tag — makes a deep link resolve `main-<hash>.js` against
+    // `/sessions/`, which 404s, so it would need the hosting tier to rewrite every asset URL.
+    //
+    // 'self' still refuses a <base> pointing at another origin, which is the attack: re-pointing
+    // relative script loads at somewhere an attacker controls. It permits a same-origin one, which
+    // needs injection into the document first — and injection is already what `script-src 'self'`,
+    // the nonce and Angular's sanitisation exist to stop. Deviation from plan Stage 3, recorded
+    // there with this reasoning.
+    `base-uri 'self'`,
     `object-src 'none'`,
     'upgrade-insecure-requests',
   ];

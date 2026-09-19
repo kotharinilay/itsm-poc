@@ -92,6 +92,10 @@ check_web() {
   # The axe-core sweep across all three surfaces (T049). It ran in neither CI nor this script: the
   # workflow step was conditional on a script that did not exist, so it printed a notice instead.
   run "accessibility sweep" bash -c "cd apps/web && npm run test:a11y"
+  # The CSP baseline SENT, against the built portals behind the reference hosting tier. It was
+  # unit-tested and never delivered, which is how a directive that blocks Angular's own <base>
+  # tag survived in it.
+  run "content security policy" bash -c "cd apps/web && npm run test:csp"
 }
 
 check_desktop() {

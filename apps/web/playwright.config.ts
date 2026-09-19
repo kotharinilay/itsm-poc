@@ -11,6 +11,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // The CSP hosting check runs against the BUILT portals behind the reference host, not against
+  // `ng serve` — it has its own configuration (playwright.csp.config.ts).
+  testIgnore: ['csp-hosting.spec.ts'],
   fullyParallel: true,
   reporter: process.env['CI'] === undefined ? 'list' : 'github',
   use: { ...devices['Desktop Chrome'] },

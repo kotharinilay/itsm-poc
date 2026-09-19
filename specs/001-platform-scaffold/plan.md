@@ -651,7 +651,7 @@ font-src 'self';
 connect-src 'self' https://{gateway-origin} wss://{signalr-origin} https://login.microsoftonline.com;
 frame-ancestors 'none';
 form-action 'self';
-base-uri 'none';
+base-uri 'self';
 object-src 'none';
 upgrade-insecure-requests
 ```
@@ -660,6 +660,26 @@ upgrade-insecure-requests
 endpoint, and the Entra authority. **A surface that needs a directive loosened states why in review** —
 particularly `script-src`, where `'unsafe-eval'` would be required by a JIT Angular build and is the
 reason the build is AOT.
+
+> **`base-uri` was `'none'` here until 2026-09-19, and is now `'self'`.** Stated in review, as the
+> paragraph above requires, with the evidence that produced it.
+>
+> The policy had never been *sent*: it was built and unit-tested, and no hosting tier in the
+> repository set the header. Served for the first time against the production build, both portals
+> and the desktop renderer reported the same violation on first paint — every Angular document
+> carries `<base href="/">`, and `'none'` forbids the element outright.
+>
+> Deleting the tag is the alternative and costs more than it saves: asset URLs are relative, so a
+> deep link resolves `main-<hash>.js` against `/sessions/` and 404s (observed, not predicted). Every
+> hosting tier would then have to rewrite asset URLs, in every environment.
+>
+> `'self'` still refuses a `<base>` pointing at **another origin**, which is the attack — re-pointing
+> relative script loads at somewhere an attacker controls. What it permits is a same-origin `<base>`,
+> which requires injecting markup into the document first, and that is what `script-src 'self'`, the
+> per-response nonce and Angular's sanitisation already exist to prevent.
+>
+> **One value on every surface and in every environment.** A directive that is strict in production
+> and relaxed locally is one nobody exercises before it ships.
 
 **Testing.** Unit tests on the project-supported runner; ESLint library-boundary rules; axe-core
 accessibility sweep; a test asserting no authorization decision exists in a presentation component.

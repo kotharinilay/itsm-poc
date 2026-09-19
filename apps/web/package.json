@@ -16,6 +16,7 @@
     "test:architecture": "node --test \"projects/platform-core/no-authz.spec.ts\"",
     "e2e": "playwright test",
     "test:a11y": "playwright test",
+    "test:csp": "playwright test -c playwright.csp.config.ts",
     "e2e:install": "playwright install chromium"
   },
   "prettier": {

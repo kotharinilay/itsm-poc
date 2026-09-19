@@ -286,7 +286,7 @@ describe('Content Security Policy', () => {
     ["default-src 'self'", 'the default denies'],
     ["frame-ancestors 'none'", 'the host cannot be framed'],
     ["object-src 'none'", 'no plugins'],
-    ["base-uri 'none'", 'the base tag cannot be hijacked'],
+    ["base-uri 'self'", 'a base tag cannot point at another origin'],
     ["form-action 'self'", 'a form cannot post off-origin'],
     ['upgrade-insecure-requests', 'no downgrade'],
   ])('sets %s (%s)', (directive) => {

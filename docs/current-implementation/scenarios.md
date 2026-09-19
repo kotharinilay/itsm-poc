@@ -68,7 +68,10 @@ Three HTTP services are implemented. Table/view details are in [database.md](dat
 | Workload | GET | `/api/workload/v1/integrations/catalogue` | Integrations | `workload/routes.py::read_catalogue` | Capability set for the org behind a session/work item |
 | Workload | POST | `/api/workload/v1/integrations/case-operations` | Integrations | `workload/routes.py::create_case` | Synchronous system-of-record operation |
 
-**Implementation vs specification.** Staff verdict/takeover/messages/cancel, consent, instruction/result, answers, claim/outcome and the sample flows are registered and published in OpenAPI but return `501` with a problem body. `POST /sessions` does not create a `chat_session` row (the spec defers the work record to the triage gate; the code also persists no session).
+**Implementation vs specification.**
+- *Deferred by the spec (501 is correct):* staff verdict, consent, instruction/result and workload claim/outcome. FR-DEMO-016 says the scaffold MUST NOT implement approval or consent workflows, real endpoint execution or desktop script execution, and FR-DEMO-018 requires those paths to refuse rather than proceed. `answers` is also 501 because no run host is built (see above).
+- *Open tasks (spec requires, code not yet built):* sample flows (T241, T242, T245, T246), staff take-over and cancel (T208, T209), worker process wiring (T324).
+- `POST /sessions` does not create a `chat_session` row. The spec defers the work record to the triage gate; the code also persists no session.
 
 ## B. Shared sample values
 

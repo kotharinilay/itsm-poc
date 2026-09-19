@@ -308,7 +308,6 @@ def _settings(vault_uri: str = "", secret_name: str = "") -> Any:  # noqa: ANN40
     """Settings for a test, with no environment read and no vault unless one is asked for."""
     from ragcore.config.settings import (
         DatabaseSettings,
-        EdgeTrustSettings,
         KeyVaultSettings,
         ObservabilitySettings,
         Settings,
@@ -318,8 +317,4 @@ def _settings(vault_uri: str = "", secret_name: str = "") -> Any:  # noqa: ANN40
         database=DatabaseSettings(dsn="postgresql://synthia@localhost:5432/synthia"),  # type: ignore[arg-type]
         key_vault=KeyVaultSettings(vault_uri=vault_uri),
         observability=ObservabilitySettings(connection_string_secret_name=secret_name),
-        # The application refuses to start without a gateway certificate allow-list, and these
-        # tests are about a DIFFERENT startup failure. Supplying it keeps the assertion pointed at
-        # the unresolvable secret rather than at whichever check happens to run first.
-        edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints="0" * 64),
     )

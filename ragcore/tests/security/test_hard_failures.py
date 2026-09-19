@@ -482,7 +482,7 @@ class TestTenantContextDerivedFromAnUntrustedClientField:
         constructors — or one of them being named for a request. Both are asserted above.
 
         The end-to-end proof that a self-supplied identity header is refused is
-        ``tests/security/test_gateway_provenance.py``.
+        ``tests/security/test_edge_trust_policy.py``.
         """
         assert not any(
             name.startswith("from_request") or name.startswith("from_header")

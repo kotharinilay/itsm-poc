@@ -26,13 +26,6 @@ internal sealed class ArchitectureApiFactory : WebApplicationFactory<Program>
                 "Host=architecture-tests.invalid;Port=5432;Database=synthia;Username=reader;Password=unused",
             ["Observability__ServiceName"] = "synthia-monolith-architecture-tests",
             ["Observability__DeploymentEnvironment"] = "test",
-
-            // Required, and with no empty state: a process that cannot prove gateway provenance
-            // does not start. These tests only walk the routing table, but they walk it on a
-            // genuinely booted application — so they configure it the way a deployment must.
-            // A syntactically valid hash belonging to no real certificate, and not a credential.
-            ["EdgeTrust__GatewayCertificateThumbprints"] =
-                "1111111111111111111111111111111111111111111111111111111111111111",
         };
 
         foreach (KeyValuePair<string, string?> pair in settings)

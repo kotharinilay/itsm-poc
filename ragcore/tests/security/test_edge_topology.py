@@ -2,7 +2,7 @@
 
     client → Front Door + WAF → APIM → Container Apps (internal ingress) → RagCore / .NET
 
-``test_edge_trust_policy.py`` asserts the **controls** on that chain — provenance, the closed
+``test_edge_trust_policy.py`` asserts the **controls** on that chain — the closed
 identity contract, no token parsing, no direct service-to-service route. This file asserts the
 **shape**: that every hop is configured to exist, that traffic can only enter at the front, and that
 what APIM routes where is a reviewable fact rather than a sentence in a document.
@@ -168,9 +168,11 @@ class TestTheWafProtectsThePublicEdge:
     ) -> None:
         """Defence in depth for requirement 7, and **deliberately not the control**.
 
-        APIM deletes every inbound copy of the contract unconditionally and the backends refuse a
-        request that cannot prove provenance. What this rule adds is that an attempt is *visible* at
-        the outermost layer, in the WAF log, before it has consumed anything further in.
+        APIM deletes every inbound copy of the contract unconditionally. The backend-side half —
+        refusing a request that could not prove gateway provenance — is deferred (ADR 0008) and was
+        not replaced, so this rule now sits behind one control rather than two. What it adds is
+        that an attempt is *visible* at the outermost layer, in the WAF log, before it has consumed
+        anything further in.
 
         **It matches one header rather than all five, by design.** A caller forging identity sends
         the tenant, and matching the whole set here would put a second copy of the contract in a
@@ -459,38 +461,40 @@ class TestNoBackendSharedSecretExists:
         }
 
         for backend in apis["backends"]:
-            credentials = backend["credentials"]
+            credentials = backend.get("credentials") or {}
             assert not forbidden & set(credentials), (
                 f"{backend['id']} holds a shared secret: {sorted(forbidden & set(credentials))}"
             )
 
-    def test_every_backend_credential_is_the_certificate_entity(self, apis: dict[str, Any]) -> None:
-        """Referenced by entity id, never by thumbprint: a thumbprint changes on rotation and a
-        reference by thumbprint silently stops attaching a certificate at all."""
+    def test_no_backend_holds_a_credential_at_all(self, apis: dict[str, Any]) -> None:
+        """APIM presents nothing on the backend connection, and that is the *deferred* state.
+
+        The client certificate this test used to pin is deferred in full (ADR 0008) and nothing
+        replaced it. This asserts the absence rather than leaving it unstated, because the failure
+        mode of a deferral is somebody quietly filling the gap with the first thing to hand — a
+        shared secret, an API key, a bearer header — and calling it equivalent.
+        """
         for backend in apis["backends"]:
-            credentials = backend["credentials"]
+            assert "credentials" not in backend, (
+                f"{backend['id']} declares a backend credential. Gateway-to-backend provenance is "
+                "deferred (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) "
+                "and re-introducing one requires that decision to be revisited first."
+            )
 
-            assert credentials["type"] == "client-certificate"
-            assert credentials["certificateId"] == "{{gateway-client-certificate-id}}"
+    def test_no_azure_resource_exemption_remains_for_the_backend_hop(self) -> None:
+        """The exemption existed only because the hop used a client certificate.
 
-            # Checked against the FIELDS, never the whole object: the prose in that object explains
-            # why a thumbprint reference is wrong, and a guard that punished its own explanation
-            # would get the explanation deleted.
-            fields = {key: value for key, value in credentials.items() if key != "$comment"}
-            assert "thumbprint" not in json.dumps(fields).lower()
-
-    def test_the_mutual_tls_hop_is_a_named_exemption_rather_than_a_habit(self) -> None:
-        """Managed identity is the default everywhere it is supported. This hop is the single
-        exception, and it carries a provider limitation, an owner and a review date."""
+        With the certificate deferred, the platform is back to managed identity everywhere it is
+        supported and there is nothing left to exempt. A new entry here means somebody introduced
+        a standing credential; it needs the same review the old one had.
+        """
         policy = _load(ROOT / "build" / "policy" / "azure-identity.json")
         exemptions = [entry for entry in policy["exemptions"] if "resource" in entry]
 
-        assert len(exemptions) == 1, "the exemption list has grown; each entry needs review"
-        exemption = exemptions[0]
-
-        assert exemption["resource"] == "containerapps-ingress"
-        assert exemption["storedIn"] == "keyvault"
-        assert exemption["owner"] and exemption["reviewBy"]
+        assert exemptions == [], (
+            "an Azure identity exemption has appeared. Each one is a credential with a lifecycle "
+            f"living outside managed identity: {[e['resource'] for e in exemptions]}"
+        )
 
     def test_no_api_requires_a_subscription_key(self, apis: dict[str, Any]) -> None:
         """A subscription key is a shared secret distributed to clients. It grants nothing this
@@ -522,10 +526,17 @@ class TestCorrelationOriginatesAtTheEdge:
 
     def test_correlation_is_established_before_anything_can_refuse_the_request(self) -> None:
         """A refusal a user can quote is one somebody can find. Established after the refusal paths
-        would leave the most interesting requests uncorrelated."""
-        policy = GLOBAL_POLICY.read_text(encoding="utf-8")
+        would leave the most interesting requests uncorrelated.
 
-        assert policy.index("X-Correlation-Id") < policy.index("authentication-certificate")
+        Anchored on the rate limiter, which is the last inbound element that can refuse a request.
+        It previously anchored on the client certificate APIM attached; that element is gone with
+        the deferred mechanism (ADR 0008), and an assertion whose anchor has vanished would pass
+        vacuously rather than fail.
+        """
+        policy = GLOBAL_POLICY.read_text(encoding="utf-8")
+        inbound = policy[policy.index("<inbound>") : policy.index("</inbound>")]
+
+        assert inbound.index("X-Correlation-Id") < inbound.index("<rate-limit-by-key")
 
     def test_the_identifier_is_echoed_on_the_response(self) -> None:
         policy = GLOBAL_POLICY.read_text(encoding="utf-8")

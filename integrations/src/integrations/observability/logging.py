@@ -33,6 +33,9 @@ __all__ = ["CorrelationFilter", "configure_logging"]
 _REDACT_KEYS: Final = frozenset(
     {
         "authorization",
+        # Retained deliberately after ADR 0008 deferred gateway-to-backend certificate provenance.
+        # Nothing sets or reads this header any more, so the entry is inert — but a redaction list
+        # is a backstop, and narrowing one costs nothing to keep and something to get wrong.
         "x-client-certificate-sha256",
         "credential",
         "credential_reference",

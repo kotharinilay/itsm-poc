@@ -1,9 +1,9 @@
 <!--
   CUSTOMER API (/api/customer/v1) - APIM policy.
 
-  Runs after the global policy, which has already proved edge provenance, deleted every inbound
-  copy of the identity contract, and attached the gateway client certificate. This policy does the
-  one thing left: derive identity, exactly once, and state it in the closed contract.
+  Runs after the global policy, which has already proved edge provenance and deleted every inbound
+  copy of the identity contract. This policy does the one thing left: derive identity, exactly
+  once, and state it in the closed contract.
 
   THE ROLE ON THIS AUDIENCE IS ALWAYS end_user, and that is the whole point of a separate policy
   per audience. Any person acting on a customer surface is an end user - including staff - and

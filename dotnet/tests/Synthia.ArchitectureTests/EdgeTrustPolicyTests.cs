@@ -19,8 +19,14 @@ namespace Synthia.ArchitectureTests;
 /// <b>Structural, not runtime.</b> These read source and configuration rather than deploying
 /// anything, so the rule holds in CI without an Azure subscription, and a failure names the file
 /// and the construct instead of surfacing as a 403 in an environment somebody has to reproduce.
-/// The behavioural half lives in <c>Synthia.ContractTests.GatewayProvenanceTests</c>, which poses
-/// the attack against the real pipeline.
+/// </para>
+/// <para>
+/// <b>There is no behavioural half any more.</b> It lived in
+/// <c>Synthia.ContractTests.GatewayProvenanceTests</c> and posed the attack against the real
+/// pipeline. That mechanism is deferred
+/// (<c>docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md</c>) and nothing
+/// replaced it, so the assertion stopped being true and the file was removed rather than softened
+/// into one that passes.
 /// </para>
 /// </remarks>
 public sealed class EdgeTrustPolicyTests
@@ -99,76 +105,6 @@ public sealed class EdgeTrustPolicyTests
         Assert.Equal(
             declared.Order(StringComparer.Ordinal),
             implemented.Order(StringComparer.Ordinal));
-    }
-
-    [Fact]
-    public void The_provenance_header_this_service_reads_is_the_one_the_policy_names()
-    {
-        // Two ends of one wire. If APIM stamps a header this service does not read, every request
-        // is refused; if this service reads a header APIM does not stamp, nothing is checked. The
-        // second failure is silent, which is why it is asserted rather than trusted.
-        using JsonDocument policy = Policy();
-
-        string declared = policy.RootElement
-            .GetProperty("gatewayCertificate")
-            .GetProperty("forwardedAs")
-            .GetString() ?? string.Empty;
-
-        // Asserted against the declaration in source rather than against the constant, because
-        // this suite has no InternalsVisibleTo into Synthia.Api - by design. Its rules are about
-        // what somebody wrote, and a compiled constant loses the distinction between a value that
-        // was declared here and one that arrived from somewhere else.
-        AssertDeclaredInProduction(
-            $"public const string ForwardedClientCertificateHeader = \"{declared}\";",
-            "GatewayProvenanceMiddleware.cs");
-    }
-
-    [Fact]
-    public void The_exempt_paths_this_service_serves_are_the_ones_the_policy_names()
-    {
-        // The exemption list is the softest part of the whole arrangement - it is the one place
-        // where "served without provenance" is the correct answer - so it is the part most worth
-        // pinning to a file two people have to agree on.
-        using JsonDocument policy = Policy();
-
-        List<string> declared = StringsFrom(
-            policy.RootElement.GetProperty("provenanceExempt").GetProperty("pathPrefixes"));
-
-        // One prefix, and the service declares that one. More than one in the policy would mean a
-        // second exemption nobody had implemented - which reads, in the file, as though it were
-        // already enforced.
-        Assert.Single(declared);
-
-        AssertDeclaredInProduction(
-            $"public const string ExemptPathPrefix = \"{declared[0]}\";",
-            "GatewayProvenanceMiddleware.cs");
-    }
-
-    [Fact]
-    public void The_allow_list_setting_name_matches_the_policy()
-    {
-        // A deployment sets the name the policy documents. A rename on one side and not the other
-        // produces a process that fails to start, which is the good failure - but only if somebody
-        // notices before the pipeline is written against the wrong name.
-        using JsonDocument policy = Policy();
-
-        string declared = policy.RootElement
-            .GetProperty("gatewayCertificate")
-            .GetProperty("allowListSetting")
-            .GetProperty("dotnet")
-            .GetString() ?? string.Empty;
-
-        string[] parts = declared.Split("__");
-
-        Assert.Equal(2, parts.Length);
-
-        AssertDeclaredInProduction(
-            $"public const string SectionName = \"{parts[0]}\";",
-            "EdgeTrustOptions.cs");
-
-        AssertDeclaredInProduction(
-            $"public string {parts[1]} {{ get; init; }}",
-            "EdgeTrustOptions.cs");
     }
 
     // ----------------------------------------------------------------------------------------
@@ -271,180 +207,16 @@ public sealed class EdgeTrustPolicyTests
     }
 
     [Fact]
-    public void Every_container_app_serving_ingress_requires_a_client_certificate()
-    {
-        // The application half. Internal ingress alone admits everything already inside the VNet -
-        // a compromised sidecar, a misconfigured job, a second container app - and each of those
-        // could otherwise mint any tenant and any role it liked.
-        //
-        // `accept` is specifically not enough: it forwards a certificate when one is offered and
-        // nothing when one is not, so an unauthenticated caller looks exactly like a correctly
-        // configured one that has not been given a certificate yet.
-        //
-        // SCOPED TO APPS THAT SERVE INGRESS. A worker - a Service Bus consumer, a sweep - dials OUT
-        // over AMQP as a managed identity and accepts no inbound request, so there is no connection
-        // for a client certificate to appear on. Requiring it there would fail the first correctly
-        // written worker manifest, and a rule that fires on correct code is one that gets skipped.
-        DirectoryInfo manifests = new(RepositoryPath("build", "docker", "containerapps"));
-
-        List<string> violations = [];
-
-        foreach (FileInfo manifest in manifests.GetFiles("*.yaml", SearchOption.AllDirectories))
-        {
-            List<string> code = File.ReadAllLines(manifest.FullName)
-                .Select(line => line.Split('#')[0].Trim())
-                .ToList();
-
-            if (!code.Contains("ingress:"))
-            {
-                continue;
-            }
-
-            if (!code.Contains("clientCertificateMode: require"))
-            {
-                violations.Add(manifest.Name);
-            }
-        }
-
-        Assert.True(
-            violations.Count == 0,
-            "A container app serving ingress does not require a gateway client certificate:\n  "
-            + string.Join("\n  ", violations));
-    }
-
-    [Fact]
-    public void The_gateway_certificate_is_referenced_in_a_way_that_survives_rotation()
-    {
-        // A KEY VAULT CERTIFICATE'S THUMBPRINT CHANGES WHEN IT IS ROTATED, and an APIM policy that
-        // identifies it by thumbprint silently fails to resolve the new one - it stops attaching a
-        // client certificate at all. There is no error at the gateway; it surfaces as every backend
-        // call losing provenance at the same moment.
-        //
-        // Asserted rather than reviewed because the broken spelling is the one that looks more
-        // precise, and because it works perfectly until the day it does not.
-        string xml = File.ReadAllText(RepositoryPath("build", "infra", "apim", "global.inbound.xml"));
-
-        Assert.DoesNotContain("<authentication-certificate thumbprint=", xml, StringComparison.Ordinal);
-        Assert.Contains("<authentication-certificate certificate-id=", xml, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Rotation_is_deliberate_and_expiry_is_monitored()
-    {
-        // THESE TWO ARE ADOPTED TOGETHER OR NOT AT ALL.
-        //
-        // Pinning the Key Vault version stops an automatic four-hour sync from rotating the
-        // certificate out from under a backend allow-list that pins the leaf hash - which would be
-        // an unattended, total outage with no deployment behind it.
-        //
-        // But pinning the version also means nothing renews the certificate on our behalf any more,
-        // which turns expiry from a background concern into the residual risk of the whole design.
-        // A policy declaring one without the other is declaring half a control.
-        using JsonDocument policy = Policy();
-        JsonElement certificate = policy.RootElement.GetProperty("gatewayCertificate");
-        JsonElement rotation = certificate.GetProperty("rotation");
-
-        Assert.Equal("pinned-version", rotation.GetProperty("strategy").GetString());
-        Assert.True(rotation.GetProperty("automaticSyncDisabled").GetBoolean());
-
-        string runbook = rotation.GetProperty("runbook").GetString() ?? string.Empty;
-
-        Assert.True(
-            File.Exists(RepositoryPath(runbook.Split('/'))),
-            $"The rotation runbook is missing: {runbook}. Rotation here is a sequenced manual "
-            + "release - widen the allow-list, then switch the certificate - and the order IS the "
-            + "control. An unwritten sequence is one somebody performs backwards under pressure.");
-
-        JsonElement expiry = certificate.GetProperty("expiryMonitoring");
-
-        Assert.True(expiry.GetProperty("required").GetBoolean());
-        Assert.True(expiry.GetProperty("alertLeadTimeDays").GetInt32() >= 30);
-    }
-
-    [Fact]
-    public void Expiry_monitoring_is_provisioned_and_not_merely_declared()
-    {
-        // A POLICY THAT DECLARES MONITORING WITHOUT INFRASTRUCTURE PROVIDING IT IS WORSE THAN
-        // NEITHER, because the declaration is what stops somebody checking. This asserts the
-        // alerting exists as committed infrastructure, not as an intention.
-        using JsonDocument policy = Policy();
-        JsonElement expiry = policy.RootElement
-            .GetProperty("gatewayCertificate")
-            .GetProperty("expiryMonitoring");
-
-        string definedIn = expiry.GetProperty("definedIn").GetString() ?? string.Empty;
-        FileInfo alerts = new(RepositoryPath(definedIn.Split('/')));
-
-        Assert.True(alerts.Exists, $"The expiry alerting is missing: {definedIn}");
-
-        using JsonDocument alerting = JsonDocument.Parse(File.ReadAllText(alerts.FullName));
-
-        List<string> eventTypes = [];
-        List<string> severitiesWithoutActionGroup = [];
-
-        foreach (JsonElement subscription in alerting.RootElement.GetProperty("eventSubscriptions").EnumerateArray())
-        {
-            eventTypes.AddRange(
-                StringsFrom(subscription.GetProperty("filter").GetProperty("includedEventTypes")));
-
-            JsonElement destination = subscription.GetProperty("destination").GetProperty("properties");
-
-            // An alert nobody is paged by is a dashboard.
-            if (!destination.TryGetProperty("actionGroups", out JsonElement groups)
-                || groups.GetArrayLength() == 0)
-            {
-                severitiesWithoutActionGroup.Add(subscription.GetProperty("name").GetString() ?? "?");
-            }
-        }
-
-        Assert.Contains("Microsoft.KeyVault.CertificateNearExpiry", eventTypes);
-        Assert.Contains("Microsoft.KeyVault.CertificateExpired", eventTypes);
-
-        Assert.True(
-            severitiesWithoutActionGroup.Count == 0,
-            "An expiry alert reaches no action group, so it notifies nobody:\n  "
-            + string.Join("\n  ", severitiesWithoutActionGroup));
-    }
-
-    [Fact]
-    public void The_paging_lead_time_is_recorded_separately_from_the_earliest_notice()
-    {
-        // TWO LEAD TIMES, BECAUSE AZURE GIVES US NO CHOICE. The certificate near-expiry event is
-        // fixed at 30 days and exposes no setting; only the KEY near-expiry event is configurable.
-        // So the earliest we can be TOLD is 45 days, by a Key Vault lifetime action, over email -
-        // and the earliest we can be WOKEN is 30.
-        //
-        // Both are recorded because collapsing them to the friendlier number would be a lie an
-        // operator plans around: email is the weaker mechanism, and one holiday period consumes the
-        // whole difference. The 30-day page is the real deadline.
-        using JsonDocument policy = Policy();
-        JsonElement expiry = policy.RootElement
-            .GetProperty("gatewayCertificate")
-            .GetProperty("expiryMonitoring");
-
-        int paging = expiry.GetProperty("pagingLeadTimeDays").GetInt32();
-
-        Assert.True(paging >= 30);
-        Assert.True(expiry.GetProperty("alertLeadTimeDays").GetInt32() >= paging);
-
-        // At least one channel must actually page, and the expiry channel must be among them.
-        List<JsonElement> channels = [.. expiry.GetProperty("channels").EnumerateArray()];
-
-        Assert.Contains(channels, channel => channel.GetProperty("pages").GetBoolean());
-
-        Assert.Contains(
-            channels,
-            channel => channel.GetProperty("leadTimeDays").GetInt32() == 0
-                && channel.GetProperty("pages").GetBoolean());
-    }
-
-    [Fact]
     public void The_gateway_deletes_every_inbound_copy_of_the_contract()
     {
-        // THE OTHER END OF THE ANTI-SPOOFING CONTROL. This service refuses a request that cannot
-        // prove provenance; APIM deletes any inbound copy of the contract before validating
-        // anything. Neither is sufficient alone, and this asserts the half that lives outside the
-        // application - where no compiler and no test would otherwise look.
+        // THE ANTI-SPOOFING CONTROL AT THE EDGE, and now the only one of its kind. APIM deletes
+        // any inbound copy of the contract before validating anything, so a caller arriving from
+        // the internet cannot smuggle one through the gateway.
+        //
+        // The backend-side half - refusing a request that could not prove gateway provenance - is
+        // deferred (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md) and
+        // was not replaced, which makes this deletion load-bearing in a way it was not before.
+        // It lives outside the application, where no compiler and no other test would look.
         using JsonDocument policy = Policy();
 
         List<string> headers = StringsFrom(
@@ -465,13 +237,6 @@ public sealed class EdgeTrustPolicyTests
             missing.Count == 0,
             "The APIM global policy does not delete an inbound copy of:\n  "
             + string.Join("\n  ", missing));
-
-        // The forwarded certificate is the more dangerous of the two: a caller who could set it
-        // would be asserting gateway provenance itself, which every other control rests on.
-        Assert.Contains(
-            "<set-header name=\"X-Forwarded-Client-Cert\" exists-action=\"delete\" />",
-            xml,
-            StringComparison.Ordinal);
     }
 
     [Fact]

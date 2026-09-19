@@ -56,15 +56,11 @@ def _comparator() -> Any:  # noqa: ANN401 — a module object
 def app() -> Any:  # noqa: ANN401 — FastAPI, imported lazily
     """The application, built with settings that need no environment and no vault."""
     from ragcore.api.app import create_app
-    from ragcore.config.settings import DatabaseSettings, EdgeTrustSettings, Settings
+    from ragcore.config.settings import DatabaseSettings, Settings
 
     return create_app(
         settings=Settings(
             database=DatabaseSettings(dsn="postgresql://synthia@localhost:5432/synthia"),  # type: ignore[arg-type]
-            # The real application refuses to start without a gateway certificate allow-list, and
-            # the document must come from the real application: one emitted from a differently
-            # configured app describes something that does not run. A valid digest, no certificate.
-            edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints="0" * 64),
         )
     )
 

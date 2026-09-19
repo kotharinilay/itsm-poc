@@ -362,7 +362,7 @@ synthia/
 │   ├── src/integrations/
 │   │   ├── api/                         # FastAPI transport ONLY. No business policy
 │   │   │   ├── workload/                # catalogue read; inert system-of-record operations
-│   │   │   ├── middleware/              # correlation, identity (header contract), problems, provenance
+│   │   │   ├── middleware/              # correlation, identity (header contract), problems
 │   │   │   ├── health.py                # /health/live · /health/ready · /health/startup
 │   │   │   └── openapi.py               # emitted from the running service, never hand-written
 │   │   ├── application/                 # use cases + PORTS (Protocols) adapters implement
@@ -1139,9 +1139,13 @@ Customer API (Front Door + WAF → APIM → RagCore)
 ```
 
 Proves that a synchronous service-to-service call routes **through APIM** and that no direct route
-exists. The negative half is the point: a request presented straight to a deployable fails, **including
-one carrying a well-formed but self-supplied gateway header contract** — the shape a real bypass takes
-(spec `SC-DEMO-003a`, `SC-DEMO-003b`).
+exists (spec `SC-DEMO-003a`).
+
+> **The negative half is narrower than it was.** It used to include a request carrying a well-formed
+> but self-supplied gateway header contract — the shape a real bypass takes. That is `SC-DEMO-003b`,
+> which is **deferred** along with the mechanism that made it fail (see *Deferred* below and
+> [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md)). What is proved here now is that a direct request carrying **no**
+> contract fails. A complete forgery from inside the environment is not refused.
 
 **Components.** Sample-flow endpoints on all three audiences; the outbox dispatcher; the Service Bus
 consumer; the workload claim and outcome path; the SignalR notification client; the .NET read modules
@@ -1182,8 +1186,9 @@ tests against the emitted OpenAPI documents; a negative suite for the gateway by
    (`SC-DEMO-005`).
 6. A request scoped to one organisation returns 0 rows belonging to another, including after the
    asynchronous hop (`SC-DEMO-006`).
-7. A direct-to-deployable request fails across every audience, including one carrying a self-supplied
-   gateway header (`SC-DEMO-003b`).
+7. A direct-to-deployable request carrying **no** identity contract fails across every audience.
+   (`SC-DEMO-003b` — the self-supplied-contract case — is **deferred**; see *Deferred* below. It is
+   not a gate of this stage and must not be signed off as one.)
 8. The emitted OpenAPI documents for all three audiences match what the services accept, with 0
    hand-maintained divergences (`SC-DEMO-011`).
 9. A repository scan finds 0 committed secrets and 0 credential-bearing connection strings
@@ -1236,16 +1241,16 @@ every Azure resource; Key Vault by reference at the point of use; typed HTTP cli
 resilience policy and an **explicit timeout on every outbound call**; no secret in any log, span or
 error body.
 
-**Security.** Gateway provenance enforced before identity, refusing rather than sanitising. The service
-**MUST NOT parse a token** and consumes only the closed header contract. It MUST NOT trust an identity
-header a caller supplied. Its managed identity holds the Key Vault role for connector secrets; the
+**Security.** The service **MUST NOT parse a token** and consumes only the closed header contract. It
+MUST NOT trust an identity header a caller supplied. **No gateway-provenance layer runs before
+identity** — that control is deferred (see *Deferred* below), and none may be added in its place. Its managed identity holds the Key Vault role for connector secrets; the
 same role is **removed from RagCore** in this stage, not in Stage 16 — the removal is what makes
 `FR-DEMO-026` provable, and doing it early means nothing can quietly depend on it.
 
 **Testing.** Configuration validation; health and readiness; contract emission and its five gates;
 architecture dependency — `integrations ↛ ragcore`, `ragcore ↛ integrations` as an import,
-`domain` purity, composition-root exclusivity; security — no token parsing, provenance refusal, no
-secret in logs.
+`domain` purity, composition-root exclusivity; security — no token parsing, no secret in logs, and
+**no backend credential on the APIM hop**.
 
 **Validation gates.** The service starts, fails fast on invalid configuration, answers both health
 endpoints, is reachable through APIM and **not** by any direct address, and emits a contract that
@@ -1341,9 +1346,10 @@ more**. Integrations runs its **own transactional outbox** for result publicatio
 
 **Testing.** Integration and end-to-end across three deployables; idempotency and concurrency at both
 boundaries; security — every prohibition in the dependency graph shown unreachable. **The direct-path
-refusal proof (`FR-DEMO-004a`, `SC-DEMO-003a`, `SC-DEMO-003b`) is extended to the third deployable and
-is the single most important test in this stage**, because the new RagCore → Integrations edge is
-exactly the shape a bypass takes.
+refusal proof (`FR-DEMO-004a`, `SC-DEMO-003a`) is extended to the third deployable and is the single
+most important test in this stage**, because the new RagCore → Integrations edge is exactly the shape
+a bypass takes. Its `SC-DEMO-003b` half — the self-supplied contract — is **deferred** and is not
+extended, because there is no longer a control for it to exercise (see *Deferred* below).
 
 **Validation gates.** All ten flows pass against a deployed environment. A gate nobody has seen fail is
 a gate whose failure mode is silence: `build/scripts/verify-*-guard.sh` plants each violation class and
@@ -1371,6 +1377,49 @@ task for any of them is invented. Each will need its own specification pass.
 
 **Blocked on.** Product definitions for UC-01–UC-12; and, before any use case touches the desktop path,
 the endpoint-execution open items in ADR-0004 — script signing and the destructive taxonomy.
+
+## Deferred from Active Implementation
+
+**Deferred is not "not done yet".** Everything in this section was removed from the active
+architecture by an explicit decision. None of it is a scaffold gap, none of it should appear on a
+backlog, and none of it may be picked up as leftover work — each entry names the decision that must
+be revisited first.
+
+### Certificate-based gateway-to-backend provenance
+
+**Decision:** [ADR-0008 — Defer certificate-based gateway-to-backend provenance](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+**Status:** Deferred, with **no replacement mechanism of any kind**.
+
+The APIM-to-backend hop was to carry a second, application-level control alongside its network one:
+APIM presenting a client certificate, Container Apps ingress requiring and validating it, and each
+backend refusing any request whose forwarded certificate hash was not allow-listed. It is removed in
+full from this plan.
+
+**No longer part of any stage, prerequisite, gate or provisioning step:**
+
+| Removed from | What was there |
+|---|---|
+| Architecture and security controls | APIM client certificate; ingress `clientCertificateMode: require`; the forwarded certificate header; backend hash validation and its refusal middleware |
+| Azure prerequisites | Issuing the gateway client certificate into Key Vault; registering the APIM certificate entity; the APIM identity's Key Vault role assignment |
+| Deployment requirements | `EdgeTrust__GatewayCertificateThumbprints`, `SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS`, `SYNTHIA_INTEGRATIONS_EDGE_TRUST__GATEWAY_CERTIFICATE_THUMBPRINTS` |
+| Monitoring requirements | Certificate near-expiry and expiry alerting, and the action group they paged |
+| Operational procedures | The order-sensitive certificate rotation runbook |
+| Acceptance criteria | `SC-DEMO-003b`; the certificate half of `SC-DEMO-003`; `FR-IDENT-012` |
+
+**What this does *not* relax.** Backends remain internal-only with no public FQDN and external
+ingress remains prohibited and guarded. APIM remains the API trust boundary and still deletes every
+inbound copy of the `X-Idp-*` contract. Managed identity, Azure RBAC, Key Vault, tenant isolation,
+authorization, correlation, audit and every other control stand unchanged.
+
+**The consequence this plan must not obscure.** The hop now rests on network placement alone, which
+`FR-IDENT-012` states is not sufficient proof. A caller inside the environment can present a forged
+identity contract to a backend and be believed. `FR-IDENT-012` and `SC-DEMO-003b` are marked
+**DEFERRED** in `spec.md` for that reason rather than quietly left as unmet active requirements.
+
+**Re-entry.** Requires the architecture and security decision in ADR-0008 to be revisited and
+explicitly approved, and that ADR superseded. Until then, a change introducing a backend credential,
+an ingress client-certificate requirement, a provenance middleware or a trusted header on this hop is
+out of scope by construction.
 
 ## Complexity Tracking
 
@@ -1413,3 +1462,4 @@ Carried from ADR-0007 §Unresolved. Neither blocks Stage 15; both block parts of
 | **Which system-of-record operations are synchronous.** §22.3 lists six write classes and classifies all of them `AUTO`; §22.5 makes only case creation clearly blocking | The Integrations contract surface, and therefore contract freeze | Stage 15, before the contract is frozen |
 | **The job row's result columns and the `GRANT` expressing their column scope** | `FR-INTEG-020`, `FR-DEMO-025` — the protection is enforced at the database permission boundary, so it is provable only once the DDL exists | Stage 16, first migration |
 | **OQ-06 — the latency re-baseline.** Stages 15–17 restore gateway hops to the tool path that ADR-0001 removed | Nothing. No performance figure is an acceptance criterion | After Stage 17, measured |
+| **How gateway-to-backend provenance is proved.** Deferred with no replacement by ADR-0008; the hop rests on network placement alone, which `FR-IDENT-012` states is insufficient | `FR-IDENT-012`, `SC-DEMO-003b` — both marked DEFERRED rather than met | Before the platform carries production customer data |

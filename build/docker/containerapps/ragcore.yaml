@@ -31,23 +31,16 @@ properties:
       # boundary; no application API is reachable by a path that bypasses the gateway
       # (constitution Principle I). External ingress here would be exactly that path.
       #
-      # This is the NETWORK half of the apim-to-backend hop in build/policy/edge-trust.json, and it
-      # is not sufficient alone: it admits anything already inside the VNet. The application half
-      # is the client certificate below.
+      # This is the NETWORK half of the apim-to-backend hop in build/policy/edge-trust.json.
+      # **It is not sufficient alone** — it admits anything already inside the VNet — and the
+      # application half that used to narrow it to APIM (a required client certificate) is
+      # DEFERRED: see docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md.
+      # No replacement was introduced. Do not add one here without revisiting that decision.
       external: false
       targetPort: 8000
       transport: http
       allowInsecure: false
 
-      # GATEWAY PROVENANCE. `require` means ingress rejects a connection that presents no client
-      # certificate, and republishes the one it validated as X-Forwarded-Client-Cert. Because
-      # ingress sets that header itself, a caller cannot forge it - which is what lets
-      # GatewayProvenanceMiddleware treat the hash in it as evidence rather than as input.
-      #
-      # `accept` would be worse than useless here: it forwards a certificate when one is offered
-      # and nothing when one is not, so every unauthenticated caller would look identical to a
-      # correctly configured one that had simply not been given a certificate yet.
-      clientCertificateMode: require
 
     secrets:
       # Key Vault references, resolved through the managed identity at revision start. The values
@@ -152,29 +145,10 @@ properties:
           - name: SYNTHIA_REDIS_IDENTITY_OBJECT_ID
             value: ${MANAGED_IDENTITY_OBJECT_ID}
 
-          # The SHA-256 hashes of the gateway client certificates this replica will accept,
-          # comma-separated. NOT a secret: it is the hash of a public certificate, and holding it
-          # gets an attacker nothing without the private key APIM holds.
-          #
-          # Comma-separated because rotation is an OVERLAP, and the order is the control: this
-          # value widens to accept both certificates BEFORE APIM is cut over to the new one, and
-          # narrows again afterwards. Doing those two in the other order is a total outage of every
-          # audience, with no deployment behind it to point at.
-          #
-          # Automatic Key Vault sync is deliberately disabled for exactly that reason - it would
-          # change the certificate on Azure's four-hour schedule while this list still pinned the
-          # old hash. Rotation is a reviewed release: docs/runbooks/rotate-gateway-certificate.md.
-          #
-          # Required: an empty value fails the process at start (see build/policy/edge-trust.json),
-          # because the alternative is a service that accepts forged identity and looks perfectly
-          # healthy doing it.
-          - name: SYNTHIA_EDGE_GATEWAY_CERTIFICATE_THUMBPRINTS
-            value: ${GATEWAY_CERTIFICATE_THUMBPRINTS}
-
         probes:
-          # These paths sit OUTSIDE every audience prefix, which is what lets them be served without
-          # gateway provenance: the probe comes from the Container Apps infrastructure on the
-          # internal network, does not traverse APIM, and carries no certificate. A probe published
+          # These paths sit OUTSIDE every audience prefix, which is what lets them be served
+          # anonymously: the probe comes from the Container Apps infrastructure on the internal
+          # network, does not traverse APIM, and carries no identity. A probe published
           # under /api/... would have to be both publicly routed by Front Door and answerable
           # unauthenticated from the inside - a contradiction, not a configuration.
 

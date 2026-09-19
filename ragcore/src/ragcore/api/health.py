@@ -1,10 +1,9 @@
-"""The two probes Container Apps calls, and the only surface served without gateway provenance.
+"""The two probes Container Apps calls, and the platform's only anonymous surface.
 
 **Outside every audience prefix, deliberately.** These paths sit at ``/health/*`` rather than under
 ``/api/workload/v1`` because of where the caller is: the probe comes from the Container Apps
 infrastructure, on the internal network, and does not traverse Front Door or APIM. It therefore
-carries no bearer token, no ``X-Idp-*`` contract and no gateway client certificate, and it has
-nothing it could carry instead.
+carries no bearer token and no ``X-Idp-*`` contract, and it has nothing it could carry instead.
 
 A probe published inside an audience prefix would be a hole in the trust boundary shaped exactly
 like the thing the boundary exists to prevent: a path under ``/api/`` that is routed publicly by
@@ -77,8 +76,8 @@ async def ready(request: Request) -> HealthStatus:
     Raises:
         HTTPException: 503 when the database cannot be reached. The body names the dependency and
             nothing else — no DSN, no driver message, no stack. A probe response is one of the few
-            things served without gateway provenance, so what it may disclose is narrow by
-            construction (spec 13.6).
+            things served anonymously, so what it may disclose is narrow by construction
+            (spec 13.6).
     """
     container: Container | None = getattr(request.app.state, "container", None)
 

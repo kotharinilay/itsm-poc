@@ -2,15 +2,15 @@
 
 Spec §13.4, `FR-INTEG-011`, `FR-INTEG-012`, ADR-0007.
 
-**Two halves, and neither is sufficient alone.** `test_boundary.py` asserts the *runtime* half — a
-request arriving without gateway provenance is refused by the service itself. This file asserts the
-*configuration* half: that APIM is configured to front this service at all, that reaching it
-requires an application role the generic workload role does not grant, and that nothing declares a
-direct route.
+**This file asserts the *configuration* half**: that APIM is configured to front this service at
+all, that reaching it requires an application role the generic workload role does not grant, and
+that nothing declares a direct route.
 
-The runtime half alone would pass on a deployment where APIM never routed here. The configuration
-half alone would pass on a service that accepted anything. Together they say: the only declared path
-in is through the gateway, and the service refuses everything else.
+**The runtime half is gone.** `test_boundary.py` used to assert that a request arriving without
+gateway provenance was refused by the service itself. That mechanism is deferred
+(`docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md`) and nothing replaced it,
+so the two halves no longer meet: this file can say the only *declared* path in is through the
+gateway, but nothing now says the service refuses an undeclared one.
 
 **Structural rather than deployed**, like every other guard over `build/infra`. It reads committed
 configuration, so the routing holds in CI without an Azure subscription — which matters because a
@@ -140,16 +140,24 @@ def test_the_role_check_matches_this_services_path_prefix_and_not_a_substring() 
     assert ".Contains(" not in matched
 
 
-def test_the_backend_is_internal_and_authenticated_by_certificate() -> None:
-    """Internal ingress plus a client certificate: the two halves of "not publicly reachable".
+def test_the_backend_is_internal_and_holds_no_credential() -> None:
+    """Internal ingress, and **only** internal ingress.
 
-    Internal-only ingress means the address is not routable from outside. The certificate means that
-    being *inside* is not enough either — which is what makes a compromised sibling container unable
-    to call this service directly.
+    This test used to assert two halves of "not publicly reachable": internal-only ingress meaning
+    the address is not routable from outside, and a client certificate meaning that being *inside*
+    was not enough either. The second half is deferred (ADR 0008) and nothing replaced it, so a
+    compromised sibling container inside the environment **can** now reach this service directly.
+
+    The absence of a credential is pinned rather than simply dropped, so the gap cannot be quietly
+    filled with a shared secret or key instead of being decided properly.
     """
     backend = _backend()
 
-    assert backend["credentials"]["type"] == "client-certificate"
+    assert "credentials" not in backend, (
+        "the Integrations backend declares a credential. Gateway-to-backend provenance is deferred "
+        "(docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md); re-introducing "
+        "one requires that decision to be revisited."
+    )
     assert backend["containerApp"] == "build/docker/containerapps/integrations.yaml"
 
 
@@ -209,10 +217,12 @@ def every_path_is_ours(document: dict[str, Any]) -> bool:
 def test_no_committed_configuration_names_this_backends_address_outside_the_registry() -> None:
     """The address lives in one named value, resolved at deployment, and nowhere else.
 
-    Knowing an internal address grants nothing on its own — ingress is internal-only and requires a
-    certificate. But an address written into application configuration is the one thing a direct
-    call cannot be constructed without, so it stays a deployment-resolved named value rather than a
-    literal anybody can copy.
+    Ingress is internal-only, so knowing the address is not by itself enough to reach it from
+    outside. **It is, however, enough from inside**, now that the certificate requirement on this
+    hop is deferred (ADR 0008) — which makes this rule carry more weight than it used to, not less.
+    An address written into application configuration is the one thing a direct call cannot be
+    constructed without, so it stays a deployment-resolved named value rather than a literal
+    anybody can copy.
     """
     named = _registry()["namedValues"]
 

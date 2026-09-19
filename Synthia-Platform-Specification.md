@@ -531,6 +531,21 @@ PostgreSQL / approved platform capability
 
 The Gateway origin is protected by two independent controls: a network control limiting origin traffic to the Front Door backend path, and an application-level check of the platform's Front Door identifier. **Neither control is sufficient alone.** Application services accept application traffic only from the approved Gateway path.
 
+#### 10.3.1 Gateway-to-service provenance — DEFERRED
+
+**The Gateway-to-service hop currently carries one control, not two.** This is stated here because the paragraph above would otherwise be read as describing the whole chain.
+
+A mechanism existed to give that hop its second, application-level control: the Gateway presented a client certificate, the container platform's ingress validated it and republished its hash, and each service refused any request whose forwarded hash it did not recognise. **That mechanism is deferred in full and removed from the active architecture.** See [ADR-0008](docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+
+1. **It is intentionally not part of the current implementation.** Its removal is a decision, not an omission or an unfinished task.
+2. **No replacement mechanism is introduced by this change.** Not a shared secret, an API key, a bearer header, an application-generated provenance token, nor service-tag or IP-based trust. The absence is deliberate and is asserted by tests.
+3. **Application services remain internal-only and are not publicly exposed.** No application service publishes external ingress; the prohibition is unchanged and still guarded.
+4. **The Gateway remains the API trust boundary** and the platform's single point of identity derivation. It still deletes every inbound copy of the `X-Idp-*` contract before validation (§11.5), so no contract can be smuggled in from outside the platform.
+5. **Implementing any such mechanism requires a future architecture and security decision.** ADR-0008 records the re-entry condition: the decision is revisited and explicitly approved, and that ADR superseded, before work begins.
+6. **No acceptance criterion depends on this mechanism.** `SC-DEMO-003b` is marked deferred alongside it, and `FR-IDENT-012` is marked deferred rather than represented as met.
+
+**The residual risk, stated rather than implied.** A caller positioned inside the services' own network can reach a service directly and assert any organisation and any role, because services consume the `X-Idp-*` contract as authoritative and can no longer tell a Gateway-stamped contract from a supplied one. Tenant isolation, authorization and audit all operate downstream of that contract and will faithfully enforce decisions taken from a forged identity.
+
 ### 10.4 Agentic threat model
 
 | Threat | Vector | Control |

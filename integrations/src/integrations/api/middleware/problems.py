@@ -173,7 +173,7 @@ _TITLES: Final[dict[int, str]] = {
 UNIVERSAL_PROBLEM_STATUSES: Final[tuple[int, ...]] = (401, 403, 404, 422, 500)
 """Declared on every operation, because every operation can produce each of them.
 
-401 and 403 come from the provenance and identity middleware before routing; 404 is how an object
+401 and 403 come from the identity middleware before routing; 404 is how an object
 belonging to another organisation is reported; 422 is a body that did not match; 500 is the
 catch-all handler.
 """

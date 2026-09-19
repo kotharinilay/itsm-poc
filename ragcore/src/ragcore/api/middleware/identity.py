@@ -5,11 +5,13 @@ same closed header contract (constitution Principle I). This middleware reads th
 nothing else. There is no JWT library imported here and no public key to rotate, because there is
 no token to validate at this tier.
 
-**This middleware does not decide whether the contract is trustworthy** —
-:mod:`ragcore.api.middleware.provenance` does, and runs first. The separation is intentional: one
-module answers "did this come from the gateway", the other answers "did the client claim authority
-it may not claim", and collapsing them would make it possible to satisfy the second while skipping
-the first.
+**This middleware does not decide whether the contract is trustworthy, and nothing in this process
+currently does.** The backend-side control that answered "did this come from the gateway" was
+certificate-based and is **deferred** (ADR 0008); no replacement was introduced. This module
+answers only the narrower question, "did the client claim authority it may not claim". What stands
+between a direct caller and the exemption below is now APIM's unconditional deletion of every
+inbound copy of the contract, plus internal-only ingress — see the note on
+:func:`_self_asserted_field`.
 
 **Any request supplying tenant or role is rejected outright** (spec FR-IDENT-002). Not ignored —
 *rejected*. The distinction matters: silently ignoring a ``tenant_id`` query parameter leaves a
@@ -122,15 +124,20 @@ class IdentityHeaderMiddleware:
 def _self_asserted_field(scope: Scope) -> str | None:
     """Return the first forbidden field a client supplied, or ``None``.
 
-    Gateway-derived headers are exempt by name, and that exemption is only sound because
-    :class:`~ragcore.api.middleware.provenance.GatewayProvenanceMiddleware` runs *outside* this one
-    and has already refused anything that cannot prove it arrived through APIM. By the time a
-    request reaches here, an ``X-Idp-*`` header is APIM's or the request does not exist.
+    Gateway-derived headers are exempt by name. **What that exemption rests on is currently
+    narrower than it once was, and the narrowing is recorded rather than hidden.**
 
-    Two independent controls stand behind that, because neither is sufficient alone (spec 10.3):
-    APIM deletes every inbound copy of the contract before validation, and Container Apps ingress
-    republishes the client certificate this process checks. Removing either one turns the exemption
-    below into an open door.
+    It rests on exactly two things: APIM deletes every inbound copy of the contract before
+    validation, so no caller-supplied ``X-Idp-*`` survives the edge; and the container app serves
+    internal ingress only, with no public FQDN, so the only callers that reach this process at all
+    are APIM and whatever else is already inside the environment.
+
+    The second of those is **network placement**, and network placement admits everything already
+    inside the VNet. The certificate check that used to close that gap — proving the connection
+    itself came from APIM — is deferred (ADR 0008), and no replacement was introduced. A caller
+    positioned inside the environment can therefore reach this middleware with an ``X-Idp-*``
+    contract of its own choosing, and this exemption will honour it. That is a known, accepted
+    consequence of the deferral, not an oversight in this function.
     """
     headers: Iterable[tuple[bytes, bytes]] = scope.get("headers", [])
     for raw_name, _ in headers:

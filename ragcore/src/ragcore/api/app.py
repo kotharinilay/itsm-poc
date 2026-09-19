@@ -10,12 +10,17 @@ list below runs in the order it reads:
 
 1. **Correlation** outermost, so even a request the next layer refuses is correlatable and its
    refusal echoes an identifier a user can quote.
-2. **Gateway provenance** next, refusing anything that cannot prove it arrived through APIM. It runs
-   *before* identity because identity is only meaningful once provenance holds: the ``X-Idp-*``
-   contract is trusted precisely and only because APIM set it, and a request that did not come
-   through APIM must be refused before any of it is read.
-3. **Identity** last, rejecting self-asserted authority *before* routing — so no endpoint, and no
+2. **Identity** last, rejecting self-asserted authority *before* routing — so no endpoint, and no
    dependency, ever sees a request carrying a client-supplied tenant or role.
+
+**There is no backend-side gateway-provenance layer**, and its absence is deliberate rather than
+an omission. The certificate-based mechanism that once sat between correlation and identity is
+**deferred** — see ``docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md``. No
+replacement was introduced. This process therefore cannot itself distinguish an ``X-Idp-*``
+contract that APIM set from one supplied by a caller that reached it directly; what prevents that
+caller is the network placement alone (internal-only ingress, no public FQDN) plus APIM deleting
+every inbound copy of the contract at the edge. That is a weaker guarantee than the deferred
+mechanism provided, and it is recorded as such in the ADR rather than papered over here.
 
 **Migrations do not run here.** Nothing in this module touches DDL. Migrations run as a gated job
 before revision activation (plan §Stage 7), and the checkpointer's ``setup()`` runs from that same
@@ -40,10 +45,6 @@ from ragcore.api.health import router as health_router
 from ragcore.api.middleware.correlation import CorrelationIdMiddleware
 from ragcore.api.middleware.identity import IdentityHeaderMiddleware
 from ragcore.api.middleware.problems import install_problem_handlers
-from ragcore.api.middleware.provenance import (
-    GatewayProvenanceMiddleware,
-    require_thumbprints,
-)
 from ragcore.api.openapi import install_contract_openapi
 from ragcore.api.staff.routes import router as staff_router
 from ragcore.api.workload.routes import router as workload_router
@@ -74,26 +75,15 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
     Returns:
         The application, with middleware, problem handlers and all three audience routers.
     """
-    # Settings are resolved HERE rather than only inside the lifespan, because gateway provenance
-    # is configured on the middleware and middleware is bound when the application is built. That
-    # ordering is deliberate: an allow-list read at request time would make an unconfigured process
-    # start cleanly and fail per request, and a security control that degrades into a 403 storm is
-    # one that gets switched off under pressure. The lifespan still owns the container.
+    # Settings are resolved HERE rather than only inside the lifespan so that the application can
+    # be built from an explicit settings object without touching the environment. The lifespan
+    # still owns the container.
     resolved_settings = (
         settings
         if settings is not None
         else container.settings
         if container is not None
         else get_settings()
-    )
-
-    # Parsed and checked HERE, before anything else is built. `add_middleware` only records the
-    # class and its arguments — Starlette constructs the stack on first use — so a check that lived
-    # solely in the middleware constructor would fire when the application started *serving*
-    # rather than when it was *built*, and the gap between those two moments is exactly where a
-    # misconfigured process can look healthy.
-    accepted_thumbprints = require_thumbprints(
-        resolved_settings.edge_trust.gateway_certificate_thumbprints
     )
 
     @asynccontextmanager
@@ -180,25 +170,20 @@ def create_app(*, settings: Settings | None = None, container: Container | None 
     )
 
     # Read bottom-up: Starlette wraps each added middleware around the ones added before it, so
-    # the running order is correlation, then provenance, then identity — every request is
-    # correlated before anything refuses it, and nothing reads the identity contract until the
-    # request has proved it came through the gateway that set it.
+    # the running order is correlation, then identity — every request is correlated before
+    # anything refuses it.
     #
-    # The allow-list is resolved HERE, at construction, not per request. A process that cannot
-    # prove provenance must not start (see GatewayProvenanceUnconfiguredError), and `create_app`
-    # is where that failure becomes a container that does not start rather than a 403 storm.
+    # Nothing sits between them. The certificate-based gateway-provenance layer that used to is
+    # deferred (ADR 0008); no replacement was added, and one must not be added here without that
+    # decision being revisited.
     app.add_middleware(IdentityHeaderMiddleware)
-    app.add_middleware(
-        GatewayProvenanceMiddleware,
-        accepted_thumbprints=accepted_thumbprints,
-    )
     app.add_middleware(CorrelationIdMiddleware)
 
     install_problem_handlers(app)
 
     # Outside every audience prefix, and outside the trust boundary with it: the probes come from
     # the Container Apps infrastructure on the internal network, not through APIM, so they carry no
-    # certificate and no identity. See ragcore.api.health.
+    # identity. See ragcore.api.health.
     app.include_router(health_router)
 
     app.include_router(customer_router)

@@ -18,6 +18,7 @@ Each record distinguishes three things and never blurs them: **what the source r
 | [0005](./0005-third-party-target-systems.md) | Third-party target systems: OneLogin, Duo and the extensible set | **Accepted**, relocated by 0007 | They are target systems reached as MCP servers, not identity providers; the set is open. **0007 moves their adapters out of RagCore, so this record's paths are stale** |
 | [0006](./0006-desktop-renderer-origin-and-csp-nonce.md) | The desktop renderer origin: a privileged custom scheme, not `file://` | **Accepted** | The renderer is served over `app://renderer` so CSP, IPC sender validation and gateway `Origin` work as written; the remote allow-list stays HTTPS/WSS-only; a per-response nonce keeps `'unsafe-inline'` out of every directive |
 | [0007](./0007-integration-service-boundary.md) | The Integrations Service boundary | **Accepted** | Three bounded contexts deploy as one service parallel to RagCore. Partially withdraws ADR-0001's Divergence #1. Connector credentials leave the orchestrator; a durable job record carries the instruction so no authority travels in a message |
+| [0008](./0008-defer-certificate-based-gateway-to-backend-provenance.md) | Defer certificate-based gateway-to-backend provenance | **Accepted** | The APIM-to-backend client certificate, the forwarded certificate header, the backend hash allow-list and their middleware, rotation, expiry alerting and guards are **deferred in full, with no replacement**. FR-IDENT-012 is marked DEFERRED rather than silently unmet. Backends remain internal-only; APIM remains the trust boundary |
 
 ## Open items these records do not close
 
@@ -32,6 +33,7 @@ Recorded so they are met as decisions rather than discovered mid-implementation.
 | Which ServiceNow operations are synchronous; the job-row result columns and their column-scoped `GRANT` | ADR-0007 §Unresolved | Before the Integrations contract is frozen |
 | Script signing for GA; the "destructive" taxonomy | ADR-0004 §Unresolved | Before endpoint execution expands beyond Alpha |
 | Whether the renderer bundle is served from an ASAR archive once packaging lands | ADR-0006 §Unresolved | Packaging |
+| **How gateway-to-backend provenance is proved**, the mechanism having been deferred with no replacement | ADR-0008 §Unresolved | Before the platform carries production customer data |
 
 > ADR-0002's §Unresolved section still lists OQ-03, OQ-04 and OQ-05 as open. **ADR-0004 answers all
 > three** and is the later record. Read ADR-0004 as governing.

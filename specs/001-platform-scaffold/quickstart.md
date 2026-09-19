@@ -95,18 +95,28 @@ satisfy `FR-DEMO-019`, however green it looks.
 **Expected**: the view read succeeds; the base-table read is refused by PostgreSQL, not by application
 code.
 
-### V2c — The service boundary, and the bypass that must fail (SC-DEMO-003a, SC-DEMO-003b)
+### V2c — The service boundary, and the bypass that must fail (SC-DEMO-003a)
 
 *Flow **B3**. The negative half is the point.*
 
 1. `POST /api/customer/v1/sample-flows/service-hop` through APIM. Confirm the callee reports an
    app-only caller carrying no customer-organisation authority.
-2. Send the same request **directly to the container**, bypassing the edge and gateway.
-3. Send it again directly, this time carrying a **well-formed, self-supplied gateway header
-   contract** — the shape a real bypass takes.
+2. Send the same request **directly to the container**, bypassing the edge and gateway, carrying
+   **no** identity contract.
 
-**Expected**: step 1 succeeds; steps 2 and 3 both fail. A pass on step 3 means the deployable is
-trusting a header it should only ever accept from APIM, which is the whole vulnerability.
+**Expected**: step 1 succeeds; step 2 fails.
+
+> **Step 3 has been withdrawn, and you should know why before you skip it.**
+>
+> It used to read: *send it again directly, this time carrying a well-formed, self-supplied gateway
+> header contract — the shape a real bypass takes*, and it had to fail. That is `SC-DEMO-003b`,
+> which is **deferred** along with the control that made it fail — see
+> [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+>
+> **If you run it today it will succeed.** That is the documented, accepted consequence of the
+> deferral, not a finding to raise: the deployable trusts a header it can no longer verify came
+> from APIM. Do not record it as a passed check, and do not "fix" it by adding a shared secret or a
+> trusted header — ADR-0008 must be superseded first.
 
 ### V3 — Staff approval survives the client (SC-EXEC-001)
 

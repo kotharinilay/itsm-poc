@@ -33,9 +33,7 @@
     "review date. That is deliberately more friction than adding a connection string, because the",
     "exemption is the thing that needs review, not the credential."
   ],
-
   "policyVersion": "1.0.0",
-
   "rule": {
     "statement": "Azure SDK clients authenticate as a managed identity in deployed environments. Application-owned Azure credentials — client secrets, shared access keys, SAS tokens, account keys, passwords — are rejected except where a provider explicitly does not support managed identity, and every such exception is named below.",
     "appliesTo": [
@@ -45,14 +43,12 @@
     ],
     "localDevelopment": "DefaultAzureCredential resolves a developer identity locally through the same code path, so there is no separate local branch to get wrong. A credential type that only works on a laptop is still a violation: the rule is about what the code can express, not about where it happens to run."
   },
-
   "credentialChain": {
     "dotnet": "DefaultAzureCredential",
     "python": "DefaultAzureCredential",
     "constructedOnce": true,
     "$comment": "One credential instance per process, shared by every client. A client that constructs its own is how a second, weaker auth path appears next to the first."
   },
-
   "resources": [
     {
       "id": "postgresql",
@@ -149,7 +145,6 @@
       ]
     }
   ],
-
   "exemptions": [
     {
       "$comment": [
@@ -164,48 +159,8 @@
         "They are not Azure resources, and their credentials are already governed by",
         "tenant_entitlement.credential_reference, which holds a Key Vault reference and never a value."
       ]
-    },
-    {
-      "resource": "containerapps-ingress",
-      "name": "Azure Container Apps ingress — gateway provenance",
-      "providerLimitation": "Container Apps built-in authentication (Easy Auth), which is what would validate a managed-identity token at the ingress layer, is documented only for external ingress-enabled apps. These backends are internal-only by design, and validating the token in application code instead is prohibited by constitution Principle I — services MUST NOT parse an access token. Mutual TLS is the mechanism Container Apps documents for this case, with no such restriction.",
-      "credentialType": "client certificate (mutual TLS), presented by APIM and validated by ingress",
-      "storedIn": "keyvault",
-      "owner": "nkothari@synoptek.com",
-      "reviewBy": "2027-09-16",
-      "$comment": [
-        "WHAT IS ACTUALLY EXEMPTED HERE IS NARROW, and worth stating precisely so the review has",
-        "something to review. No component holds a standing secret: the private key is in Key Vault,",
-        "APIM reads it as a managed identity, and the backends hold only a public SHA-256 hash. The",
-        "exemption is therefore not 'a credential lives outside the vault' — it is that this",
-        "credential has a LIFECYCLE and an EXPIRY, which a managed identity would not.",
-        "",
-        "That residual is managed rather than accepted: rotation is a sequenced release",
-        "(docs/runbooks/rotate-gateway-certificate.md) and expiry is alerted 45 days ahead",
-        "(expiryMonitoring in build/policy/edge-trust.json). Both are asserted by the edge trust",
-        "tests on each stack, so removing either one fails the build.",
-        "",
-        "REVISIT THIS WHEN Container Apps documents Easy Auth for internal ingress. At that point",
-        "APIM's authentication-managed-identity policy plus an ingress-injected principal check",
-        "would remove the certificate entirely, and this entry with it. The backend middleware is",
-        "already shaped for that swap: it compares a platform-injected header against an allow-list,",
-        "and only the header name and the allow-list contents would change.",
-        "",
-        "ON THE REVIEW DATE. It is a reminder, not a deadline, and the distinction is worth stating",
-        "because every other date in this file could be read as one. This exemption's exit condition",
-        "is EXTERNAL - it ends when Microsoft documents that feature - so no date predicts it. The",
-        "date answers 'when will somebody next look at this', and twelve months is a placeholder",
-        "chosen in the absence of a better anchor.",
-        "",
-        "THERE IS A BETTER ANCHOR ONCE THE CERTIFICATE EXISTS: re-set this to roughly a month before",
-        "its first expiry. Whoever performs that rotation is already reading",
-        "docs/runbooks/rotate-gateway-certificate.md and already has the context loaded, so the",
-        "review costs them almost nothing - whereas a date landing in an arbitrary week is an",
-        "interruption, and an interruption is what gets deferred."
-      ]
     }
   ],
-
   "forbiddenEverywhere": {
     "$comment": "Matched against production source and committed configuration on ALL THREE deployables, irrespective of resource. These are the shapes an application-owned Azure credential actually takes. Each enforcer reads these lists from here rather than restating them, so a token added below binds every stack at once.",
     "credentialTypes": [

@@ -28,7 +28,6 @@ from pydantic import ValidationError
 from ragcore.config.settings import (
     CacheSettings,
     DatabaseSettings,
-    EdgeTrustSettings,
     IntegrationsServiceSettings,
     KeyVaultSettings,
     MessagingSettings,
@@ -173,25 +172,6 @@ class TestEveryEndpointMustBeHttps:
         """Empty means *not configured*, which is a legitimate state for a component the platform
         works without. It is not the same as a plaintext one, which is a defect."""
         assert RetrievalSettings(endpoint="").is_configured is False
-
-
-class TestTheEdgeTrustAllowListIsRequiredAndValidated:
-    """The one setting with no defensible empty state.
-
-    An unconfigured vault fails loudly on the first secret it needs. An unconfigured allow-list
-    fails *silently*, by accepting forged identity, and produces a service that looks healthy.
-    """
-
-    @pytest.mark.parametrize("malformed", ["deadbeef", "x" * 64, "ab:cd:ef"])
-    def test_a_malformed_thumbprint_is_refused(self, malformed: str) -> None:
-        with pytest.raises(ValidationError):
-            EdgeTrustSettings(gateway_certificate_thumbprints=malformed)
-
-    def test_an_overlap_of_two_thumbprints_is_accepted(self) -> None:
-        """Rotation is an overlap: both hashes sit here while APIM is cut over, so there is no
-        instant at which neither is accepted."""
-        both = f"{'a' * 64},{'b' * 64}"
-        assert EdgeTrustSettings(gateway_certificate_thumbprints=both)
 
 
 class TestNoSettingDecidesAnything:

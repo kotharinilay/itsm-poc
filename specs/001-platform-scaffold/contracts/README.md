@@ -84,9 +84,15 @@ pagination always has a deterministic order.
      identity is derived.
 
    A direct route — pod to pod, container to container, or by any internal address that bypasses the
-   gateway — MUST NOT exist. The scaffold proves this by attempting one and observing it fail,
-   including a request carrying a well-formed but self-supplied gateway header contract, which is the
-   shape a real bypass takes (spec `FR-DEMO-004a`, `SC-DEMO-003a`, `SC-DEMO-003b`).
+   gateway — MUST NOT exist. The scaffold proves this by attempting one and observing it fail
+   (spec `FR-DEMO-004a`, `SC-DEMO-003a`).
+
+   > **The stronger half of this rule is deferred.** It used to include a request carrying a
+   > well-formed but self-supplied gateway header contract — the shape a real bypass takes. That is
+   > `SC-DEMO-003b`, deferred with the control that made it fail
+   > ([ADR-0008](../../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md)).
+   > A service reached directly, from inside the environment, with a complete forged contract, is
+   > now believed. No route is *declared* to make that reachable, and none may be added.
 5. **Every audience emits its own OpenAPI document from the running service.** A merged document is
    prohibited: it would let a customer-facing client discover the staff and workload surfaces. CI
    publishes versioned artifacts and contract tests validate the emitted documents rather than

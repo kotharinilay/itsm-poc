@@ -77,12 +77,12 @@ WebApplication app = builder.Build();
 // record of a request carry its identifier — including the record of the request failing.
 // Authentication runs before tenant resolution and authorization.
 //
-// GATEWAY PROVENANCE RUNS BEFORE IDENTITY, and the order is not interchangeable. The identity
-// contract is trusted precisely and only because APIM set it; a request that did not come through
-// APIM must be refused before any part of that contract is read.
+// THERE IS NO BACKEND-SIDE GATEWAY-PROVENANCE STAGE between correlation and identity. The
+// certificate-based one that used to sit there is deferred (ADR 0008) and no replacement was
+// introduced, so this process cannot itself prove a request arrived through APIM. What remains is
+// APIM's deletion of every inbound copy of the contract, and internal-only ingress.
 app.UseExceptionHandler();
 app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<GatewayProvenanceMiddleware>();
 app.UseMiddleware<IdentityContextMiddleware>();
 
 app.MapSynthiaHealth();

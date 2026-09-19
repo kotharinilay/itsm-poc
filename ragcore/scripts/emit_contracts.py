@@ -26,7 +26,7 @@ from ragcore.api.openapi import (
     audience_document,
     disclosure_findings,
 )
-from ragcore.config.settings import DatabaseSettings, EdgeTrustSettings, Settings
+from ragcore.config.settings import DatabaseSettings, Settings
 
 PLACEHOLDER_DSN = "postgresql://synthia@localhost:5432/synthia"
 """Emission builds the app but never connects. The DSN satisfies validation and is used for nothing.
@@ -35,19 +35,11 @@ It is a local hostname with no password, so it is neither a secret nor a hint ab
 """
 
 
-PLACEHOLDER_CERTIFICATE_HASH = "0" * 64
-"""Satisfies the gateway allow-list so the app starts. Matches no certificate; not a secret."""
-
-
 def _app_for_emission() -> object:
     """Build the application with settings that need no environment and no vault."""
     settings = Settings(
         database=DatabaseSettings(dsn=PLACEHOLDER_DSN),  # type: ignore[arg-type]
         # Emission builds the real application, and the real application refuses to start without a
-        # gateway certificate allow-list. A placeholder is supplied rather than the check relaxed:
-        # a document emitted from a differently-configured app is a document describing something
-        # that does not run. The value is a syntactically valid digest matching no certificate.
-        edge_trust=EdgeTrustSettings(gateway_certificate_thumbprints=PLACEHOLDER_CERTIFICATE_HASH),
     )
     return create_app(settings=settings)
 

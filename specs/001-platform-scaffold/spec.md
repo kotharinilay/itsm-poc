@@ -763,13 +763,35 @@ Every one is exercised against **inert reference fixtures** and reaches no real 
   **The audience is NOT among them.** It is fixed by the route the gateway matched, because the surface
   decides which authorization model applies (FR-SURF-005). An audience carried as a header would be an
   authority field a client could write — the self-promotion FR-IDENT-002 exists to prevent.
-- **FR-IDENT-012**: A service MUST be able to distinguish a header contract set by the gateway from one
-  supplied by a caller, and MUST refuse any request on an audience path that cannot prove gateway
-  provenance. **Network placement alone MUST NOT be treated as that proof**: an internal-only service is
-  reachable by everything already inside its network boundary, and for a service that consumes the
-  contract as authoritative, reachability *is* the ability to assert any organisation and any role. The
-  request MUST be refused rather than sanitised — stripping the headers and continuing returns success
-  to an attacker and leaves the attempt indistinguishable from an ordinary unauthenticated call.
+- **FR-IDENT-012**: **DEFERRED — not implemented, and not satisfied by anything else.** See
+  [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+
+  *The requirement, retained verbatim so that what is owed stays legible:* A service MUST be able to
+  distinguish a header contract set by the gateway from one supplied by a caller, and MUST refuse any
+  request on an audience path that cannot prove gateway provenance. **Network placement alone MUST NOT
+  be treated as that proof**: an internal-only service is reachable by everything already inside its
+  network boundary, and for a service that consumes the contract as authoritative, reachability *is*
+  the ability to assert any organisation and any role. The request MUST be refused rather than
+  sanitised — stripping the headers and continuing returns success to an attacker and leaves the
+  attempt indistinguishable from an ordinary unauthenticated call.
+
+  *Status.* The certificate-based mechanism that implemented this requirement — an APIM client
+  certificate, validated by Container Apps ingress, republished as a forwarded hash and checked by
+  each backend against an allow-list — has been removed from the active architecture and deferred for
+  a future architecture/security decision. **No replacement mechanism has been introduced**: not a
+  shared secret, an API key, a bearer header, an application-generated token, nor service-tag or
+  IP-based trust.
+
+  *Consequence, stated plainly.* The platform currently relies on network placement alone for this
+  hop — precisely what the requirement above forbids. A caller positioned inside the container apps
+  environment can reach a backend directly and present an `X-Idp-*` contract of its own choosing.
+  **This requirement MUST NOT be described as met, and no acceptance criterion may depend on it**,
+  until the decision in ADR-0008 is revisited and explicitly approved.
+
+  *Unaffected.* FR-IDENT-011 stands in full: the Gateway still deletes every inbound copy of these
+  headers before validation and sets them on the outbound request, so a contract cannot be smuggled
+  in from outside the platform. Container Apps ingress remains internal-only and no backend is
+  publicly exposed.
 
 #### Client surfaces
 
@@ -1259,13 +1281,31 @@ precisely the ones that do not exist in a single process.
   and no flow has an unauthenticated path that succeeds.
 - **SC-DEMO-003**: Every hop in every sample flow — client to service, service to service, service to
   platform resource — authenticates, and 0 of them rely on a shared key, connection secret or
-  password.
+  password. **One exception, recorded rather than absorbed:** the APIM-to-backend hop does not
+  authenticate, because the client certificate that authenticated it is deferred
+  ([ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md)). The
+  "0 shared keys" half of this criterion holds in full and is asserted — nothing replaced the
+  certificate, and nothing may.
 - **SC-DEMO-003a**: 100% of synchronous service-to-service calls route through the API gateway, and
   0 direct routes between deployables are reachable — verified by attempting one and observing it
   fail, not by observing that none is currently used.
-- **SC-DEMO-003b**: A request presented directly to a deployable, bypassing the edge and the gateway,
-  fails in 100% of attempts across every audience — including a request carrying a well-formed but
-  self-supplied gateway header contract, which is the shape a bypass actually takes.
+- **SC-DEMO-003b**: **DEFERRED — not measurable, and not met.** See
+  [ADR-0008](../../docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+
+  *The criterion, retained verbatim:* A request presented directly to a deployable, bypassing the
+  edge and the gateway, fails in 100% of attempts across every audience — including a request
+  carrying a well-formed but self-supplied gateway header contract, which is the shape a bypass
+  actually takes.
+
+  *Why it is deferred.* The control it measured was FR-IDENT-012's certificate-based gateway
+  provenance. With that deferred and unreplaced, a direct request carrying a **complete and
+  well-formed** self-supplied contract now **succeeds**. The criterion is therefore not satisfied,
+  and it is marked deferred rather than narrowed into one the platform happens to pass.
+
+  *What does still hold, and is still tested:* a direct request carrying **no** identity contract is
+  refused, and no caller outside the platform can supply one, because the Gateway deletes every
+  inbound copy (FR-IDENT-011). This is a weaker guarantee than the criterion above and is not a
+  substitute for it.
 - **SC-DEMO-004**: A repository scan finds 0 secret values in source, in tests and in committed
   configuration; every credential is present only as a reference resolved at the point of use.
 - **SC-DEMO-005**: One correlation identifier is recoverable end to end for 100% of sample-flow

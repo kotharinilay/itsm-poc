@@ -83,15 +83,6 @@ sed -i 's/^\([[:space:]]*\)external: false/\1external: true/' "$MANIFEST"
 expect_rejected "a container app publishing external ingress"
 restore
 
-# 2 - a backend that no longer demands the gateway certificate.
-#
-# Downgraded to `accept` rather than deleted, because `accept` is the plausible mistake: it reads
-# like a softer form of the same thing and is in fact no control at all.
-save "$MANIFEST"
-sed -i 's/^\([[:space:]]*\)clientCertificateMode: require/\1clientCertificateMode: accept/' "$MANIFEST"
-expect_rejected "a container app downgrading the client certificate to 'accept'"
-restore
-
 # 3 - the gateway no longer strips an inbound copy of the contract.
 #
 # Only the roles header is removed. A caller supplying X-Idp-Roles alone would then reach a backend
@@ -104,16 +95,6 @@ mv "$GLOBAL_POLICY.tmp" "$GLOBAL_POLICY"
 expect_rejected "the gateway not stripping an inbound X-Idp-Roles"
 restore
 
-# 4 - the gateway no longer strips the forwarded certificate header.
-#
-# The most dangerous single deletion in the tree: a caller who can set X-Forwarded-Client-Cert is
-# asserting gateway provenance itself, which every other control here rests on.
-save "$GLOBAL_POLICY"
-grep -v '<set-header name="X-Forwarded-Client-Cert" exists-action="delete" />' "$GLOBAL_POLICY" > "$GLOBAL_POLICY.tmp"
-mv "$GLOBAL_POLICY.tmp" "$GLOBAL_POLICY"
-expect_rejected "the gateway not stripping an inbound X-Forwarded-Client-Cert"
-restore
-
 # 5 - the origin stops being specific to this platform.
 #
 # Removing the FDID check leaves the service tag as the only control, and that tag admits every
@@ -121,17 +102,6 @@ restore
 save "$GLOBAL_POLICY"
 sed -i 's/{{front-door-id}}/anything/' "$GLOBAL_POLICY"
 expect_rejected "the gateway not checking this platform's Front Door identifier"
-restore
-
-# 5b - the client certificate referenced by thumbprint.
-#
-# The spelling that looks MORE precise and is in fact the broken one: a Key Vault certificate's
-# thumbprint changes on rotation, and the policy then silently stops attaching a certificate at
-# all. Planted because this is a mistake that works perfectly right up until the day it doesn't,
-# and because it was the actual defect in the first version of this policy.
-save "$GLOBAL_POLICY"
-sed -i 's/certificate-id="{{gateway-client-certificate-id}}"/thumbprint="{{gateway-client-certificate-thumbprint}}"/' "$GLOBAL_POLICY"
-expect_rejected "the client certificate referenced by thumbprint rather than certificate-id"
 restore
 
 # 6 - an audience that derives no identity.
@@ -172,55 +142,18 @@ rm -f "$POLICY"
 expect_rejected "the shared edge trust policy being deleted"
 restore
 
-# 9b - expiry alerting that notifies nobody.
-#
-# The plausible regression, and the one a review waves through: the event subscriptions are still
-# there, still filtered correctly, still named after the right certificate - and the destination
-# has lost its action group, so the whole thing is a dashboard nobody looks at. The alert appears
-# to exist right up until the morning it needed to wake somebody.
-EXPIRY_ALERTS="build/infra/monitoring/gateway-certificate-expiry.json"
-save "$EXPIRY_ALERTS"
-sed -i 's/"actionGroups"/"disabledActionGroups"/g' "$EXPIRY_ALERTS"
-expect_rejected "certificate expiry alerts that reach no action group"
-restore
-
-# 9c - the near-expiry alert removed entirely, leaving only the expired alert.
-#
-# Also plausible, because the 30-day alert is the noisy one and the expired alert feels like the
-# important one. It is exactly backwards: by the time CertificateExpired fires the platform is
-# already down, and the near-expiry alert was the only chance to prevent that.
-save "$EXPIRY_ALERTS"
-sed -i 's/Microsoft.KeyVault.CertificateNearExpiry/Microsoft.KeyVault.CertificateSomethingElse/' "$EXPIRY_ALERTS"
-expect_rejected "the certificate near-expiry alert being removed"
-restore
-
-# 9d - the gateway loses its Key Vault access.
-#
-# The subtlest failure this suite covers. Nothing in the APIM policy, the ingress manifests or
-# either backend changes - every other check still passes - and the platform is completely down,
-# because APIM cannot read the certificate it is configured to present.
-#
-# The role is removed from the APIM identity only, leaving the deployables' Key Vault roles intact,
-# which is what a naive file-wide grep would have been fooled by.
-IDENTITIES="build/infra/identity/managed-identities.json"
-save "$IDENTITIES"
-sed -i '/"name": "id-synthia-apim"/,/^    }/ s/"resource": "keyvault"/"resource": "none"/' "$IDENTITIES"
-expect_rejected "the APIM identity losing its Key Vault role"
-restore
-
 # 10 - A WORKER MANIFEST MUST NOT BE REJECTED.
 #
 # Workers consume Service Bus by dialling OUT over AMQP as a managed identity. They declare no
-# ingress, accept no inbound request, and there is no connection for a client certificate to appear
-# on - so demanding clientCertificateMode of them is meaningless.
+# ingress and accept no inbound request, so the ingress rules have nothing to say about them.
 #
-# This is the case that motivated the fix. The guard originally required the setting on EVERY
-# manifest, which would have failed the first correctly-written worker somebody added, on their
-# first attempt, for something that is not a defect. That is how guards get skipped.
+# Retained after the gateway-certificate checks were removed (ADR 0008), because the lesson it
+# encodes outlives them: a guard that fails the first correctly-written worker somebody adds, for
+# something that is not a defect, is a guard that gets skipped.
 WORKER="build/docker/containerapps/__planted_worker.yaml"
 cat > "$WORKER" <<'EOF'
 # Planted by verify-edge-guard.sh. Removed automatically.
-# A Service Bus consumer: no ingress, no inbound request, no client certificate to present.
+# A Service Bus consumer: no ingress and no inbound request.
 apiVersion: 2024-03-01
 type: Microsoft.App/containerApps
 name: synthia-resume-worker

@@ -31,7 +31,7 @@ usage() {
 Usage: build/scripts/dev.sh <command>
 
   setup       Restore every toolchain (.NET, Python, web, desktop)
-  build       Build all four trees
+  build       Build the .NET, web and desktop trees
   test        Run every test suite
   lint        Lint and format-check every tree
   typecheck   Strict type checking (Python, web, desktop)
@@ -39,13 +39,14 @@ Usage: build/scripts/dev.sh <command>
   validate    Everything CI runs, in CI's order. Use this before pushing.
   clean       Remove build output
 
-Single-tree shortcuts: dotnet | python | web | desktop
+Single-tree shortcuts: dotnet | python (RagCore + Integrations) | web | desktop
 EOF
 }
 
 setup() {
   step "Restoring .NET";      (cd dotnet && dotnet restore Synthia.sln)
   step "Restoring Python";    (cd ragcore && uv sync --all-groups)
+  step "Restoring Integrations"; (cd integrations && uv sync --all-groups)
   step "Restoring web";       (cd apps/web && npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund)
   step "Restoring desktop";   (cd apps/desktop && npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund)
 }
@@ -63,6 +64,13 @@ check_python() {
   run "ruff format"       bash -c "cd ragcore && uv run ruff format --check ."
   run "mypy --strict"     bash -c "cd ragcore && uv run mypy"
   run "pytest"            bash -c "cd ragcore && uv run pytest -q"
+
+  # A separate deployable with its own lock file (ADR-0007), so its gates run from its own tree.
+  step "Python / Integrations"
+  run "ruff check"        bash -c "cd integrations && uv run ruff check ."
+  run "ruff format"       bash -c "cd integrations && uv run ruff format --check ."
+  run "mypy --strict"     bash -c "cd integrations && uv run mypy"
+  run "pytest"            bash -c "cd integrations && uv run pytest -q"
 }
 
 check_web() {
@@ -105,11 +113,14 @@ case "${1:-validate}" in
   lint)
     run "ruff check"  bash -c "cd ragcore && uv run ruff check ."
     run "ruff format" bash -c "cd ragcore && uv run ruff format --check ."
+    run "ruff check (integrations)"  bash -c "cd integrations && uv run ruff check ."
+    run "ruff format (integrations)" bash -c "cd integrations && uv run ruff format --check ."
     run "dotnet format" bash -c "cd dotnet && dotnet format Synthia.sln --verify-no-changes"
     run "eslint"      bash -c "cd apps/web && npx eslint ."
     report ;;
   typecheck)
     run "mypy"           bash -c "cd ragcore && uv run mypy"
+    run "mypy (integrations)" bash -c "cd integrations && uv run mypy"
     run "tsc (desktop)"  bash -c "cd apps/desktop && npx tsc -p tsconfig.json --noEmit"
     report ;;
   build)
@@ -120,6 +131,7 @@ case "${1:-validate}" in
   test)
     run ".NET"    bash -c "cd dotnet && dotnet test Synthia.sln --nologo -v quiet"
     run "python"  bash -c "cd ragcore && uv run pytest -q"
+    run "integrations" bash -c "cd integrations && uv run pytest -q"
     run "web"     bash -c "cd apps/web && npm test"
     run "desktop" bash -c "cd apps/desktop && npx vitest run"
     report ;;

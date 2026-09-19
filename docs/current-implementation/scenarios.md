@@ -262,13 +262,13 @@ sequenceDiagram
   participant SN as System of record
   W->>G: GET /api/workload/v1/integrations/catalogue?sessionId=c000…1001
   G->>I: + client cert, X-Idp-* (app credential)
-  I->>DB: SELECT tenant_id FROM vw_session_summary_v1 WHERE session_id=… (Read) ⚠
-  I->>DB: SELECT vw_governance_catalogue_v1 LEFT JOIN vw_tenant_entitlement_v1 (Read) ⚠
+  I->>DB: SELECT tenant_id FROM vw_session_summary_v1 WHERE session_id=… (Read)
+  I->>DB: SELECT vw_governance_catalogue_v1 LEFT JOIN vw_tenant_entitlement_v1 (Read)
   I-->>W: 200 {"items":[{catalogueId "synthia.reference.noop", catalogueVersion 1, kind "action", entitled false, available true, isReferenceFixture true}],"nextCursor":null}
   W->>G: POST …/case-operations {sessionId c000…1001, catalogueId "synthia.reference.noop", catalogueVersion 1, idempotencyKey "k-f0003001-op1", parameters {}}
   G->>I: forwarded
-  I->>DB: tenant_for_session (Read) ⚠
-  I->>DB: AccessPolicy.evaluate: vw_tenant_entitlement_v1 → vw_governance_catalogue_v1 MAX(version) ⚠ → connector_binding JOIN connector (Read)
+  I->>DB: tenant_for_session (Read)
+  I->>DB: AccessPolicy.evaluate: vw_tenant_entitlement_v1 → vw_governance_catalogue_v1 MAX(version) → connector_binding JOIN connector (Read)
   alt not entitled / not registered / version mismatch / no binding
     I-->>W: 403 problem (kind not-entitled | not-registered | version-mismatch | no-binding)
   else container.servicenow is None (deployed default)
@@ -287,8 +287,6 @@ sequenceDiagram
 | Case operation | `create_case` → `TenantResolver.tenant_for_session` → `AccessPolicy.evaluate` (entitled → registered version → binding) → `ServiceNowAdapter.create_case`. `idempotencyKey` must be ≥ 8 chars. DB: **Read** only; nothing is written on this path. |
 | Deployed behaviour | The Dockerfile runs `create_app()` → `build_container()` with no secret resolver, so `servicenow` is `None`. A request that passes the policy check returns **503**. |
 | Azure | API Management (edge). Key Vault only on the bound-adapter branch, via `SecretResolverPort`. No concrete Key Vault resolver exists in `integrations/src` (Not found in current implementation). |
-
-⚠ The Integrations DB role has no SELECT on `vw_session_summary_v1`, `vw_work_item_v1` or `vw_governance_catalogue_v1` (see database.md § Implementation vs grants). Under the migrated grants these reads are refused by PostgreSQL.
 
 ---
 
@@ -349,7 +347,7 @@ sequenceDiagram
   OD->>SB: send to synthia-integration-commands {jobId, correlationId, kind}
   OD->>DB: UPDATE outbox_message SET dispatched_at
   SB->>IC: command (via command_consumer)
-  IC->>DB: SELECT integration_job JOIN vw_work_item_v1 JOIN vw_tenant_v1 ⚠
+  IC->>DB: SELECT integration_job JOIN vw_work_item_v1 JOIN vw_tenant_v1
   IC->>DB: AccessPolicy re-check, SELECT execution_record by derived key
   IC->>IC: connector invoke (ConnectorInvocationPort)
   IC->>DB: one txn: INSERT execution_record, INSERT integration.outbox_message, INSERT audit_event, UPDATE integration_job result_* 

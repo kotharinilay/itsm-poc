@@ -1,6 +1,6 @@
 # Database — current implementation
 
-Source of truth: `ragcore/migrations/versions/0001`–`0024` (Alembic, raw DDL) and `ragcore/src/ragcore/persistence/views.py` (view definitions used by revisions 0018 and 0021).
+Source of truth: `ragcore/migrations/versions/0001`–`0025` (Alembic, raw DDL) and `ragcore/src/ragcore/persistence/views.py` (view definitions used by revisions 0018 and 0021).
 
 One PostgreSQL database, two schemas, four roles. All DDL is applied by the gated migration job (`build/docker/migrate.job.yaml`); no service runs DDL at startup.
 
@@ -14,7 +14,7 @@ flowchart LR
   R[synthia_ragcore<br/>RagCore] -->|CRUD tables · SELECT+INSERT audit_event| P
   N[synthia_monolith<br/>.NET API] -->|SELECT 11 views| P
   X[synthia_integrations<br/>Integrations Service] -->|CRUD| I
-  X -->|SELECT 2 views + integration_job<br/>UPDATE 4 result cols · INSERT audit_event| P
+  X -->|SELECT 6 views + integration_job<br/>UPDATE 4 result cols · INSERT audit_event| P
 ```
 
 Roles are `NOLOGIN` with no password; managed identities are granted role membership at deployment (0019, 0021).
@@ -172,7 +172,7 @@ flowchart LR
     v7[vw_audit_event_v1]; v8[vw_governance_catalogue_v1]; v9[vw_tenant_v1]
     v10[vw_message_feedback_v1]; v11[vw_dashboard_rollup_v1]
   end
-  subgraph "Integrations read contract (0021 → synthia_integrations)"
+  subgraph "Integrations-only views (0021 → synthia_integrations)"
     v12[vw_tenant_entitlement_v1]; v13[vw_connector_credential_ref_v1]
   end
   chat_session --> v1 & v2 & v3 & v10 & v11
@@ -414,7 +414,7 @@ Enum columns are published as `text`. Other columns keep the source type.
 
 ## D. Ownership
 
-Grants come from migrations 0019, 0021–0024. "Read/Write by" lists the code that actually issues SQL. **(unwired)** means the code exists and is tested but has no running caller: every RagCore worker `main()` and the Integrations `command_consumer.main()` raise `NotImplementedError`, and the LangGraph run host is not built in the running app (see `scenarios.md`).
+Grants come from migrations 0019, 0021–0025. "Read/Write by" lists the code that actually issues SQL. **(unwired)** means the code exists and is tested but has no running caller: every RagCore worker `main()` and the Integrations `command_consumer.main()` raise `NotImplementedError`, and the LangGraph run host is not built in the running app (see `scenarios.md`).
 
 | Object | Owner (grant) | Read By | Write By |
 | ------ | ------------- | ------- | -------- |
@@ -438,16 +438,17 @@ Grants come from migrations 0019, 0021–0024. "Read/Write by" lists the code th
 | connector_binding | Integrations CRUD | Integrations `ConnectorRegistry.binding_for` (live via case-operations) | Not found in current implementation |
 | execution_record | Integrations CRUD | Integrations `ExecutionRepository.execution_for_key` | Integrations `ExecutionRepository.record` INSERT (unwired) |
 | outbox_message (integration) | Integrations CRUD | Integrations `claim_pending` (no running dispatcher) | Integrations `ExecutionRepository.record` INSERT; `mark_dispatched` / `record_dispatch_failure` UPDATE (no running dispatcher) |
-| vw_session_summary_v1, vw_session_message_v1, vw_session_step_v1, vw_message_feedback_v1 | .NET SELECT | .NET `SessionReadModel`, `FeedbackReadModel`; Integrations `TenantResolver.tenant_for_session` ⚠ | — |
-| vw_work_item_v1 | .NET SELECT | Integrations `TenantResolver.tenant_for_work_item`, `JobRepository.load` ⚠ (no .NET endpoint reads it) | — |
+| vw_session_summary_v1 | .NET SELECT; Integrations SELECT (0025) | .NET `SessionReadModel`, `FeedbackReadModel` (ownership subquery); Integrations `TenantResolver.tenant_for_session` | — |
+| vw_session_message_v1, vw_session_step_v1, vw_message_feedback_v1 | .NET SELECT | .NET `SessionReadModel`, `FeedbackReadModel`; Integrations `TenantResolver.tenant_for_session` | — |
+| vw_work_item_v1 | .NET SELECT; Integrations SELECT (0025) | Integrations `TenantResolver.tenant_for_work_item`, `JobRepository.load` (no .NET endpoint reads it) | — |
 | vw_approval_queue_v1, vw_approval_unexecuted_v1 | .NET SELECT | .NET `ApprovalReadModel` | — |
 | vw_audit_event_v1 | .NET SELECT | .NET `AuditReadModel` | — |
-| vw_governance_catalogue_v1 | .NET SELECT | Integrations `CatalogueRepository` ⚠ (no .NET endpoint reads it) | — |
-| vw_tenant_v1 | .NET SELECT | .NET `TenantRegistry.FindAsync` (every customer request), `TenantReadModel`; Integrations `JobRepository.load` ⚠ | — |
+| vw_governance_catalogue_v1 | .NET SELECT; Integrations SELECT (0025) | Integrations `CatalogueRepository` (no .NET endpoint reads it) | — |
+| vw_tenant_v1 | .NET SELECT; Integrations SELECT (0025) | .NET `TenantRegistry.FindAsync` (every customer request), `TenantReadModel`; Integrations `JobRepository.load` | — |
 | vw_dashboard_rollup_v1 | .NET SELECT | .NET `TenantReadModel.GetPlatformAsync` | — |
 | vw_tenant_entitlement_v1 | Integrations SELECT | Integrations `CatalogueRepository` | — |
 | vw_connector_credential_ref_v1 | Integrations SELECT | Integrations `TenantCredentialResolver` | — |
 
-### Implementation vs grants
+### Integrations read grants
 
-⚠ The Integrations Service queries `vw_session_summary_v1`, `vw_work_item_v1`, `vw_governance_catalogue_v1` and `vw_tenant_v1` (`integrations/src/integrations/catalogue/repository.py`, `persistence/jobs.py`), but no migration grants `synthia_integrations` SELECT on them — 0021 grants only `vw_tenant_entitlement_v1` and `vw_connector_credential_ref_v1`. When the service connects as that role, PostgreSQL refuses these statements.
+`synthia_integrations` holds SELECT on six views: the two entitlement views (0021) and, since 0025, `vw_session_summary_v1`, `vw_work_item_v1`, `vw_tenant_v1` and `vw_governance_catalogue_v1`. It uses those four to recover the organisation from a session or work item and to re-check tenant status, work state and catalogue version (FR-INTEG-018/019). The views that carry message content, audit data or aggregates stay ungranted, and `ragcore/tests/security/test_integration_grants.py` checks both sets.

@@ -420,12 +420,49 @@ async def test_the_integrations_principal_may_read_the_instruction(engine: Async
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("view", ["vw_tenant_entitlement_v1", "vw_connector_credential_ref_v1"])
-async def test_the_two_published_views_are_readable(engine: AsyncEngine, view: str) -> None:
-    """Exactly two views in `platform`, and not `ALL_VIEWS` (migration 0021)."""
+READABLE_VIEWS: Final = (
+    # Migration 0021: the access check and the credential lookup.
+    "vw_tenant_entitlement_v1",
+    "vw_connector_credential_ref_v1",
+    # Migration 0025: organisation recovery and the execution-time re-check (FR-INTEG-018/019).
+    "vw_session_summary_v1",
+    "vw_work_item_v1",
+    "vw_tenant_v1",
+    "vw_governance_catalogue_v1",
+)
+"""Every view the Integrations Service's own queries select from. Restated rather than imported
+from the migrations, for the same reason as :data:`RESULT_COLUMNS`."""
+
+UNREADABLE_VIEWS: Final = (
+    "vw_session_message_v1",
+    "vw_session_step_v1",
+    "vw_message_feedback_v1",
+    "vw_audit_event_v1",
+    "vw_approval_queue_v1",
+    "vw_approval_unexecuted_v1",
+    "vw_dashboard_rollup_v1",
+)
+"""Views carrying transcripts, the actor chain or cross-work aggregates. The service needs none of
+them, and a component holding connector credentials must not be able to read them (revision 0021).
+"""
+
+
+@pytest.mark.parametrize("view", READABLE_VIEWS)
+async def test_the_views_the_service_queries_are_readable(engine: AsyncEngine, view: str) -> None:
+    """Every view the service's code selects from is granted (migrations 0021 and 0025).
+
+    A grant narrower than the code is not least privilege, it is an outage: the catalogue read, the
+    organisation recovery and the job load all failed with `42501` before revision 0025.
+    """
     async with engine.begin() as connection:
         await connection.execute(text(f"SET LOCAL ROLE {INTEGRATIONS_ROLE}"))
         await connection.execute(text(f"SELECT 1 FROM platform.{view} LIMIT 1"))  # noqa: S608
+
+
+@pytest.mark.parametrize("view", UNREADABLE_VIEWS)
+async def test_content_and_audit_views_stay_unreadable(engine: AsyncEngine, view: str) -> None:
+    """Widening to the recovery views did not widen to the content-bearing ones."""
+    await _insufficient_privilege(engine, f"SELECT 1 FROM platform.{view} LIMIT 1")  # noqa: S608
 
 
 @pytest.mark.parametrize(

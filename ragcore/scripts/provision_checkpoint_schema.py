@@ -63,4 +63,12 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    # The migration job runs this on Linux, where the default loop is fine. On Windows the default
+    # is the Proactor loop, and psycopg refuses to run async on it — so a developer following the
+    # README got a stack trace from inside the driver rather than a provisioned schema. Set only on
+    # Windows, and only here: the application chooses no loop policy, because a library that picked
+    # one would be deciding for whatever host embeds it.
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     sys.exit(asyncio.run(main()))

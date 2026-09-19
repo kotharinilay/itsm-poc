@@ -5,12 +5,13 @@ module is the entire surface through which a production graph acquires a checkpo
 rule has one place to be true and one place to be tested
 (``tests/checkpoint/test_durable_checkpointer.py``).
 
-**Schema ownership.** The checkpoint tables live in their own ``langgraph`` schema, created and
-versioned by ``langgraph-checkpoint-postgres``'s own ``setup()``. Alembic owns ``platform`` and
-excludes ``langgraph`` from autogenerate (research R-004) — without the exclusion, autogenerate
-would propose dropping tables it did not create. The schema is selected by a ``search_path`` on
-the connection rather than by a parameter, because the saver has no schema argument: see
-:func:`checkpointer_dsn`.
+**Schema ownership.** The checkpoint tables live in their own ``langgraph`` schema, versioned by
+``langgraph-checkpoint-postgres``'s own ``setup()`` and created by
+:func:`provision_checkpoint_schema` — ``setup()`` creates tables, never the schema to put them in.
+Alembic owns ``platform`` and excludes ``langgraph`` from autogenerate (research R-004) — without
+the exclusion, autogenerate would propose dropping tables it did not create. The schema is selected
+by a ``search_path`` on the connection rather than by a parameter, because the saver has no schema
+argument: see :func:`checkpointer_dsn`.
 
 **``setup()`` runs from the migration job, never at application startup.** Migrations run as a
 gated job before revision activation (plan §Stage 7). A process that ran DDL on boot would need
@@ -49,6 +50,19 @@ PLATFORM_SCHEMA: Final = "platform"
 """The schema Alembic owns. Named here only to state that the two are disjoint."""
 
 
+def _psycopg_dsn(base_dsn: str) -> str:
+    """Strip the SQLAlchemy driver suffix so psycopg can parse the platform's own DSN.
+
+    Args:
+        base_dsn: A connection string, with or without a ``+driver`` suffix.
+
+    Returns:
+        The same DSN with the suffix removed.
+    """
+    scheme, delimiter, remainder = base_dsn.partition("://")
+    return f"{scheme.partition('+')[0]}{delimiter}{remainder}" if delimiter else base_dsn
+
+
 def checkpointer_dsn(base_dsn: str) -> str:
     """Return ``base_dsn`` with the connection pinned to the checkpoint schema.
 
@@ -57,11 +71,18 @@ def checkpointer_dsn(base_dsn: str) -> str:
     mechanism, not a shortcut, and doing it in one function means no call site can forget and
     quietly create checkpoint tables in ``public``.
 
+    **The SQLAlchemy driver suffix is stripped, and that is the whole reason this had to be
+    tested against the real setting.** One DSN configures both halves of this process:
+    ``create_async_engine`` needs ``postgresql+asyncpg://``, and the checkpointer's psycopg
+    connection cannot parse that — it reads ``+asyncpg`` as part of the host and refuses with
+    "invalid connection option". The migration job passes exactly that value, so its second step
+    failed on every platform. The unit tests passed a bare ``postgresql://`` and never saw it.
+
     Args:
-        base_dsn: A PostgreSQL connection string.
+        base_dsn: A PostgreSQL connection string, with or without a SQLAlchemy driver suffix.
 
     Returns:
-        The same DSN carrying ``options=-c search_path=langgraph``.
+        A psycopg-compatible DSN carrying ``options=-c search_path=langgraph``.
 
     Raises:
         ValueError: When the DSN already sets ``options``. Rather than merge two option strings
@@ -73,8 +94,11 @@ def checkpointer_dsn(base_dsn: str) -> str:
             "the connection string already sets `options`; refusing to overwrite it. The "
             f"checkpointer requires `search_path={CHECKPOINT_SCHEMA}` on its connection."
         )
-    separator = "&" if "?" in base_dsn else "?"
-    return f"{base_dsn}{separator}options=-c%20search_path%3D{CHECKPOINT_SCHEMA}"
+
+    normalised = _psycopg_dsn(base_dsn)
+
+    separator = "&" if "?" in normalised else "?"
+    return f"{normalised}{separator}options=-c%20search_path%3D{CHECKPOINT_SCHEMA}"
 
 
 @asynccontextmanager
@@ -119,10 +143,26 @@ async def provision_checkpoint_schema(dsn: str) -> None:
     :func:`durable_checkpointer`. That is the honest shape: only one checkpointer has DDL to run,
     and only one job may run it.
 
+    **The schema is created here, and it was nobody's job before.** Revision ``0001`` and this
+    module both said ``langgraph`` was created by the checkpointer's own ``setup()``. It is not:
+    ``setup()`` issues unqualified DDL into whatever ``search_path`` resolves to, so against a
+    database where the schema does not exist it fails with "no schema has been selected to create
+    in" — which is what the migration job would have done on its first run. Created here rather
+    than in an Alembic revision because the schema belongs to the checkpointer (research R-004):
+    autogenerate deliberately cannot see inside it, and a revision creating it would be Alembic
+    claiming ownership of a schema it then refuses to look at.
+
     Args:
         dsn: The base connection string, as a migration job holds it.
     """
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from psycopg import AsyncConnection
+
+    # Its own connection, without the pinned `search_path`: the schema cannot be selected until it
+    # exists. `IF NOT EXISTS` so the job stays rerunnable, which is what makes a failed deployment
+    # safe to retry.
+    async with await AsyncConnection.connect(_psycopg_dsn(dsn), autocommit=True) as connection:
+        await connection.execute(f"CREATE SCHEMA IF NOT EXISTS {CHECKPOINT_SCHEMA}".encode())
 
     async with AsyncPostgresSaver.from_conn_string(checkpointer_dsn(dsn)) as saver:
         await saver.setup()

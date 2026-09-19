@@ -4,8 +4,14 @@ Revision ID: 0001_platform_schema
 Revises: None
 
 **The first revision creates the schema Alembic owns and nothing else's.** ``langgraph`` is created
-by ``langgraph-checkpoint-postgres``'s own ``setup()``, run from the same gated migration job and
-never at application startup (research R-004, ADR-0003). Nothing here reaches into it.
+by ``ragcore.graph.checkpointer.provision_checkpoint_schema``, run from the same gated migration job
+and never at application startup (research R-004, ADR-0003). Nothing here reaches into it.
+
+*Amended 2026-09-19: this used to say the schema was created by the checkpointer's own ``setup()``.
+It was not — ``setup()`` issues unqualified DDL into whatever ``search_path`` resolves to, so the
+job failed with "no schema has been selected to create in" against any database where nobody had
+created it. Provisioning now creates it, still outside Alembic, because the schema belongs to the
+checkpointer and autogenerate deliberately cannot see inside it.*
 
 **Every enum type is created once, here, and shared by every table that references it.** Two tables
 declaring their own ``verification_outcome`` would be two PostgreSQL types with the same spelling:

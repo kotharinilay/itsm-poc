@@ -132,6 +132,30 @@ class TestTheCheckpointSchemaIsPinned:
         assert "search_path" in pinned
         assert checkpointer.CHECKPOINT_SCHEMA in pinned
 
+    def test_the_sqlalchemy_driver_suffix_is_stripped(self) -> None:
+        """The DSN the platform actually configures, which no test here used to pass.
+
+        One setting feeds both halves of this process: `create_async_engine` needs
+        `postgresql+asyncpg://`, and psycopg cannot parse it — it reads `+asyncpg` as part of the
+        host. The migration job passes exactly this value, so its checkpoint step failed on every
+        platform while these tests passed a bare `postgresql://` and saw nothing.
+        """
+        pinned = checkpointer.checkpointer_dsn("postgresql+asyncpg://host:5432/db")
+
+        assert pinned.startswith("postgresql://host:5432/db")
+        assert "+asyncpg" not in pinned
+        assert checkpointer.CHECKPOINT_SCHEMA in pinned
+
+    def test_the_settings_dsn_is_usable_by_the_checkpointer(self) -> None:
+        """End to end from the setting: whatever `DatabaseSettings` accepts must reach psycopg."""
+        from ragcore.config.settings import DatabaseSettings
+
+        settings = DatabaseSettings(dsn="postgresql+asyncpg://synthia@db.example:5432/synthia")  # type: ignore[arg-type]
+
+        pinned = checkpointer.checkpointer_dsn(str(settings.dsn))
+
+        assert "+" not in pinned.partition("://")[0]
+
     def test_an_existing_query_string_is_preserved(self) -> None:
         pinned = checkpointer.checkpointer_dsn("postgresql://host/db?sslmode=require")
         assert "sslmode=require" in pinned
@@ -208,3 +232,42 @@ class TestNoForeignKeyCrossesTheBoundary:
 
         hints = get_type_hints(AgentState)
         assert hints["work_item_id"] == (str | None)
+
+
+@pytest.mark.integration
+class TestProvisioningCreatesTheCheckpointSchema:
+    """The migration job's second half, run against a real PostgreSQL.
+
+    **It had never worked.** Revision 0001 and this module both said ``langgraph`` was created by
+    the checkpointer's own ``setup()``; ``setup()`` issues unqualified DDL into whatever
+    ``search_path`` resolves to, so on a database where the schema does not exist it fails with
+    "no schema has been selected to create in". Every structural test in this file passed
+    throughout, because none of them connected to anything.
+    """
+
+    async def test_the_schema_and_its_tables_are_created(self, database_url: str) -> None:
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        await checkpointer.provision_checkpoint_schema(database_url)
+
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                result = await connection.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = :schema"
+                    ),
+                    {"schema": checkpointer.CHECKPOINT_SCHEMA},
+                )
+                tables = list(result.scalars().all())
+        finally:
+            await engine.dispose()
+
+        assert "checkpoints" in tables
+
+    async def test_provisioning_twice_is_safe(self, database_url: str) -> None:
+        """A failed deployment is retried, so the job has to be rerunnable."""
+        await checkpointer.provision_checkpoint_schema(database_url)
+        await checkpointer.provision_checkpoint_schema(database_url)

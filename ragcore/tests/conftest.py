@@ -64,6 +64,24 @@ is unset and Testcontainers takes over, so a developer needs no setup.
 
 
 @pytest.fixture(scope="session")
+def event_loop_policy() -> Any:
+    """The loop policy every async test runs under.
+
+    **Windows only, and it is not a preference.** The default there is the Proactor loop, and
+    psycopg refuses to run async on it — so the checkpoint-provisioning tests failed on a
+    developer machine with a driver error while passing on Linux CI. The same choice is made by
+    `scripts/provision_checkpoint_schema.py` for the same reason.
+    """
+    import asyncio
+    import sys
+
+    selector = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if sys.platform == "win32" and selector is not None:
+        return selector()
+    return asyncio.get_event_loop_policy()
+
+
+@pytest.fixture(scope="session")
 def postgres() -> Iterator[Any]:
     """The shared container, started once for the whole session.
 

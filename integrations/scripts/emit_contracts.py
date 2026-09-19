@@ -128,7 +128,7 @@ def main() -> int:
     target = emit(arguments.out)
     document = json.loads(target.read_text(encoding="utf-8"))
     operations = sum(len(item) for item in document.get("paths", {}).values())
-    print(  # noqa: T201 — a CLI entry point is where printing is allowed
+    print(  # A CLI entry point is where printing is allowed
         f"{target}: {len(document.get('paths', {}))} paths, {operations} operations"
     )
     return 0

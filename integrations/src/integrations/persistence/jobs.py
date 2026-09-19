@@ -179,7 +179,7 @@ class JobRepository:
 
     async def record_result(
         self,
-        session: Any,  # noqa: ANN401 — an AsyncSession; typed loosely to keep this module driver-agnostic
+        session: Any,  # An AsyncSession; typed loosely to keep this module driver-agnostic
         job_id: UUID,
         result_status: ExecutionOutcome,
         verification: VerificationOutcome,

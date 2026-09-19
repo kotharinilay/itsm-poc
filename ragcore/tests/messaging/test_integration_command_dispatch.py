@@ -50,7 +50,7 @@ class _Session:
     def __init__(self) -> None:
         self.executed: list[tuple[str, dict[str, Any]]] = []
 
-    async def execute(self, statement: Any, parameters: Any = None) -> None:  # noqa: ANN401
+    async def execute(self, statement: Any, parameters: Any = None) -> None:
         self.executed.append((str(statement), dict(parameters or {})))
 
 
@@ -62,7 +62,7 @@ class _Outbox:
 
     async def enqueue_integration_command(
         self, tenant: Any, envelope: IntegrationCommandEnvelope
-    ) -> None:  # noqa: ANN401
+    ) -> None:
         del tenant
         self.enqueued.append(envelope)
 
@@ -247,7 +247,7 @@ class _Sender:
     async def __aexit__(self, *args: object) -> None:
         return None
 
-    async def send_messages(self, message: Any) -> None:  # noqa: ANN401
+    async def send_messages(self, message: Any) -> None:
         # `ServiceBusMessage.body` is a generator of byte chunks, not a string. Joining here rather
         # than in each assertion keeps the fake faithful to the SDK — a fake that exposed a plain
         # string would let a test pass against a shape the real client never produces.

@@ -96,7 +96,7 @@ async def ready(request: Request) -> HealthStatus:
             # reach the server, and a query touching a table would also fail on a permission or
             # migration problem that a restart cannot fix and that rotation should not hide.
             await connection.execute(text("SELECT 1"))
-    except Exception:  # noqa: BLE001 — every failure mode has the same answer: not ready
+    except Exception:  # Every failure mode has the same answer: not ready
         _log.warning("Readiness check failed: the platform database is unreachable.", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

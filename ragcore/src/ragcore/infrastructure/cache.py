@@ -160,8 +160,8 @@ class RedisTransientCache:
     def __init__(
         self,
         settings: CacheSettings,
-        client: Any | None = None,  # noqa: ANN401 — the concrete type needs the SDK imported
-        credential: Any | None = None,  # noqa: ANN401 — likewise
+        client: Any | None = None,  # The concrete type needs the SDK imported
+        credential: Any | None = None,  # Likewise
     ) -> None:
         """Bind the cache to an endpoint.
 
@@ -190,7 +190,7 @@ class RedisTransientCache:
 
         try:
             value = await client.get(cache_key(tenant, key))
-        except Exception:  # noqa: BLE001 — a cache failure must never fail a request
+        except Exception:  # A cache failure must never fail a request
             _log.warning("The transient cache could not be read; treating it as a miss.")
             return None
 
@@ -216,7 +216,7 @@ class RedisTransientCache:
             # window in which a crash produces an entry with no expiry at all — one immortal row in
             # a store whose whole guarantee is that nothing in it is.
             await client.set(cache_key(tenant, key), value, ex=ttl_seconds)
-        except Exception:  # noqa: BLE001 — a cache failure must never fail a request
+        except Exception:  # A cache failure must never fail a request
             _log.warning("The transient cache could not be written; the entry is simply absent.")
 
     async def invalidate(self, tenant: TenantContext, key: str) -> None:
@@ -227,10 +227,10 @@ class RedisTransientCache:
 
         try:
             await client.delete(cache_key(tenant, key))
-        except Exception:  # noqa: BLE001 — a cache failure must never fail a request
+        except Exception:  # A cache failure must never fail a request
             _log.warning("The transient cache could not be invalidated; the entry expires anyway.")
 
-    async def _connect(self) -> Any | None:  # noqa: ANN401 — the concrete type needs the SDK
+    async def _connect(self) -> Any | None:  # The concrete type needs the SDK
         """The Redis client, built on first use with an Entra token as the password.
 
         Entra authentication to Redis presents the access token in the password position, exactly as
@@ -266,7 +266,7 @@ class RedisTransientCache:
                 socket_timeout=self._settings.request_timeout_seconds,
                 socket_connect_timeout=self._settings.request_timeout_seconds,
             )
-        except Exception:  # noqa: BLE001 — an unreachable cache is a miss, not an outage
+        except Exception:  # An unreachable cache is a miss, not an outage
             _log.warning("The transient cache is unreachable; every lookup will report a miss.")
             return None
 

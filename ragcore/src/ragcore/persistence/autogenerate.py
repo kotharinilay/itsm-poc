@@ -24,11 +24,11 @@ from ragcore.persistence.base import PLATFORM_SCHEMA
 
 
 def include_object(
-    obj: Any,  # noqa: ANN401 — Alembic passes SchemaItem subclasses of several kinds
+    obj: Any,  # Alembic passes SchemaItem subclasses of several kinds
     name: str | None,
     type_: str,
     reflected: bool,
-    compare_to: Any,  # noqa: ANN401
+    compare_to: Any,
 ) -> bool:
     """Decide whether autogenerate may consider a schema object.
 

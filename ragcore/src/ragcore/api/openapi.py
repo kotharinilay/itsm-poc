@@ -115,7 +115,7 @@ def _normalise(name: str) -> str:
     return "".join(character for character in name.lower() if character.isalnum())
 
 
-def _walk_names(node: Any, path: str = "") -> Iterable[tuple[str, str]]:  # noqa: ANN401
+def _walk_names(node: Any, path: str = "") -> Iterable[tuple[str, str]]:
     """Yield every ``(json path, key name)`` pair in a document.
 
     Keys only. Values are not scanned: a description saying "never carries a credential" is correct
@@ -338,7 +338,7 @@ def _reachable_components(full: Mapping[str, Any], paths: Mapping[str, Any]) -> 
     return {name: schema for name, schema in all_schemas.items() if name in wanted}
 
 
-def _references(node: Any) -> Iterable[str]:  # noqa: ANN401
+def _references(node: Any) -> Iterable[str]:
     """Every ``#/components/schemas/X`` name reachable from ``node``."""
     if isinstance(node, dict):
         for key, value in node.items():
@@ -362,7 +362,7 @@ PROBLEM_MEDIA_TYPE: Final = "application/problem+json"
 _DEFAULT_MEDIA_TYPE: Final = "application/json"
 
 
-def _is_problem(content_entry: Any) -> bool:  # noqa: ANN401
+def _is_problem(content_entry: Any) -> bool:
     """Whether one ``content`` entry carries the problem-details schema."""
     schema = content_entry.get("schema") if isinstance(content_entry, dict) else None
     return isinstance(schema, dict) and schema.get("$ref") == PROBLEM_SCHEMA_REF
@@ -424,7 +424,7 @@ def install_contract_openapi(app: FastAPI) -> None:
         # FastAPI caches in `app.openapi_schema`; this cache exists for the same reason and is
         # separate only because the attribute is FastAPI's to manage.
         if not generated:
-            from fastapi.openapi.utils import get_openapi  # noqa: PLC0415 — deferred, heavy import
+            from fastapi.openapi.utils import get_openapi  # Deferred, heavy import
 
             generated.update(
                 relabel_problem_media_type(

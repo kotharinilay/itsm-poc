@@ -66,7 +66,7 @@ class AgentMetrics:
     metric that could raise would make telemetry able to fail the work it observes.
     """
 
-    def __init__(self, meter: Any | None = None) -> None:  # noqa: ANN401 — the type needs the SDK
+    def __init__(self, meter: Any | None = None) -> None:  # The type needs the SDK
         """Build the instruments, or nothing at all.
 
         Args:
@@ -182,7 +182,7 @@ class AgentMetrics:
         return {**extra, TENANT_DIMENSION: tenant_id} if tenant_id else dict(extra)
 
 
-def _global_meter() -> Any | None:  # noqa: ANN401 — the concrete type needs the SDK imported
+def _global_meter() -> Any | None:  # The concrete type needs the SDK imported
     """The process meter, or ``None`` when OpenTelemetry is absent."""
     try:
         from opentelemetry import metrics

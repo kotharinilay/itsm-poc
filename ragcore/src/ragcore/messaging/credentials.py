@@ -74,7 +74,7 @@ def require_namespace(settings: MessagingSettings) -> str:
     return namespace
 
 
-def service_bus_client(settings: MessagingSettings) -> Any:  # noqa: ANN401 — needs the SDK imported
+def service_bus_client(settings: MessagingSettings) -> Any:  # Needs the SDK imported
     """Build the async Service Bus client, authenticated as this process's managed identity.
 
     The import is local for the same reason it is in

@@ -75,7 +75,7 @@ async def guarded_update(
     session: AsyncSession,
     table: Table,
     row: VersionedRow,
-    **changes: Any,  # noqa: ANN401 — column values are as varied as the columns
+    **changes: Any,  # Column values are as varied as the columns
 ) -> bool:
     """Apply ``changes`` if and only if the row is still at the version the caller read.
 
@@ -120,7 +120,7 @@ async def require_guarded_update(
     session: AsyncSession,
     table: Table,
     row: VersionedRow,
-    **changes: Any,  # noqa: ANN401
+    **changes: Any,
 ) -> None:
     """Apply ``changes`` or raise.
 
@@ -139,7 +139,7 @@ async def claim_once(
     session: AsyncSession,
     table: Table,
     identity: ColumnElement[bool],
-    **changes: Any,  # noqa: ANN401
+    **changes: Any,
 ) -> bool:
     """Take an unclaimed row, atomically. **Idempotency boundary 1.**
 

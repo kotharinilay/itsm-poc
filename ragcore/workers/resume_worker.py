@@ -97,7 +97,7 @@ def parse_message(body: str | bytes, properties: dict[Any, Any] | None) -> Consu
     return ConsumedTrigger(envelope=envelope, trace=trace)
 
 
-def _text(value: Any) -> str:  # noqa: ANN401 — an application property is loosely typed
+def _text(value: Any) -> str:  # An application property is loosely typed
     """Decode an application property to text, tolerating the SDK's bytes."""
     if value is None:
         return ""

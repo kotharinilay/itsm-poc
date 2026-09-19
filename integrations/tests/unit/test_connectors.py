@@ -47,7 +47,7 @@ class _Credential:
     def __init__(self) -> None:
         self.scopes: list[tuple[str, ...]] = []
 
-    async def get_token(self, *scopes: str, **kwargs: Any) -> AccessToken:  # noqa: ANN401
+    async def get_token(self, *scopes: str, **kwargs: Any) -> AccessToken:
         del kwargs
         self.scopes.append(scopes)
         # The token authenticates nothing. No credential appears in this tree, in source or in

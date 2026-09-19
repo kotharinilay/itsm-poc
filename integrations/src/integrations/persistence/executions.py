@@ -102,7 +102,7 @@ _HAS_EXECUTION_FOR_KEY: Final = text(
 class ExecutionRepository:
     """Durable execution records and the outbox that announces them."""
 
-    def __init__(self, database: Any) -> None:  # noqa: ANN401 — Database; loose to stay driver-agnostic
+    def __init__(self, database: Any) -> None:  # Database; loose to stay driver-agnostic
         """Bind the repository.
 
         Args:
@@ -112,7 +112,7 @@ class ExecutionRepository:
 
     async def record(
         self,
-        session: Any,  # noqa: ANN401 — an AsyncSession
+        session: Any,  # An AsyncSession
         record: ExecutionRecord,
         result_kind: MessageKind,
     ) -> bool:
@@ -196,7 +196,7 @@ class ExecutionRepository:
         )
         return rows[0]["execution_id"] if rows else None
 
-    async def claim_pending(self, session: Any, limit: int) -> list[Any]:  # noqa: ANN401
+    async def claim_pending(self, session: Any, limit: int) -> list[Any]:
         """Take undispatched rows nobody else holds.
 
         Args:
@@ -209,7 +209,7 @@ class ExecutionRepository:
         result = await session.execute(_CLAIM_PENDING, {"limit": limit})
         return list(result.mappings().all())
 
-    async def mark_dispatched(self, session: Any, message_id: UUID) -> None:  # noqa: ANN401
+    async def mark_dispatched(self, session: Any, message_id: UUID) -> None:
         """Record that a row reached the queue.
 
         Args:
@@ -218,7 +218,7 @@ class ExecutionRepository:
         """
         await session.execute(_MARK_DISPATCHED, {"message_id": message_id})
 
-    async def record_dispatch_failure(self, session: Any, message_id: UUID) -> None:  # noqa: ANN401
+    async def record_dispatch_failure(self, session: Any, message_id: UUID) -> None:
         """Increment the attempt count and retire the row at the ceiling.
 
         **Why a ceiling rather than indefinite retry.** The execution window is fifteen minutes. A

@@ -100,6 +100,83 @@ public sealed class BannedApiTests
     }
 
     [Fact]
+    public void No_production_code_reads_a_tasks_Result()
+    {
+        // Never block (constitution §Async). CA1849 catches this at build time; asserted here too,
+        // because an analyzer can be suppressed at a call site with a pragma and a plausible
+        // reason, and a test cannot be suppressed without deleting it — which shows in a diff.
+        // `.Wait()` and `.GetAwaiter().GetResult()` are covered by IdentityDisciplineTests.
+        IReadOnlyList<string> offending = SourceTree.ProductionFilesContaining(".Result");
+
+        Assert.True(
+            offending.Count == 0,
+            "Blocking on a task's Result starves the pool under the load it was sized for, and the " +
+            "symptom is latency with no matching CPU. Await it:\n  " +
+            string.Join("\n  ", offending));
+    }
+
+    [Fact]
+    public void No_production_catch_of_Exception_swallows_it()
+    {
+        // CA1031 is an error, so the general catch should not be here at all — but the rule the
+        // constitution states is narrower and is the one worth asserting: a general catch that does
+        // not rethrow turns every unanticipated failure into a success nobody sees.
+        List<string> offending = [];
+
+        foreach (FileInfo file in SourceTree.ProductionFiles())
+        {
+            string code = SourceTree.CodeOf(file);
+            int index = code.IndexOf("catch (Exception", StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                if (!Rethrows(code, index))
+                {
+                    offending.Add(file.Name);
+                }
+
+                index = code.IndexOf("catch (Exception", index + 1, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.True(
+            offending.Count == 0,
+            "A general catch that does not rethrow reports failure as success:\n  " +
+            string.Join("\n  ", offending.Distinct(StringComparer.Ordinal)));
+    }
+
+    /// <summary>Whether the catch block beginning at <paramref name="index"/> throws.</summary>
+    /// <param name="code">The file's code, comments stripped.</param>
+    /// <param name="index">The offset of the <c>catch</c> keyword.</param>
+    /// <returns><see langword="true"/> when the handler rethrows or throws.</returns>
+    private static bool Rethrows(string code, int index)
+    {
+        int open = code.IndexOf('{', index);
+        if (open < 0)
+        {
+            return false;
+        }
+
+        int depth = 0;
+        for (int position = open; position < code.Length; position++)
+        {
+            if (code[position] == '{')
+            {
+                depth++;
+            }
+            else if (code[position] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return code[open..position].Contains("throw", StringComparison.Ordinal);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    [Fact]
     public void No_production_type_writes_to_the_console()
     {
         // Structured logging through Microsoft.Extensions.Logging. Console.WriteLine bypasses

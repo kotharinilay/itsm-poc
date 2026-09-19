@@ -85,7 +85,9 @@ class Database:
         """The schema this service owns and writes."""
         return self._schema
 
-    async def read(self, statement: Any, parameters: Mapping[str, Any]) -> Sequence[Any]:  # noqa: ANN401 — SQLAlchemy executables are not one type
+    async def read(
+        self, statement: Any, parameters: Mapping[str, Any]
+    ) -> Sequence[Any]:  # SQLAlchemy executables are not one type
         """Run a read against a published view.
 
         Args:

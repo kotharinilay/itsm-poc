@@ -65,7 +65,7 @@ class Base(DeclarativeBase):
 
     metadata = metadata
 
-    type_annotation_map: Final[dict[Any, Any]] = {  # noqa: RUF012
+    type_annotation_map: Final[dict[Any, Any]] = {
         # `timestamptz`, never a naive timestamp. A naive value compared against a
         # fifteen-minute authorization window compares wrongly and fails silently.
         datetime: DateTime(timezone=True),

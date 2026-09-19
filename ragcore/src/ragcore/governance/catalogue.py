@@ -173,7 +173,7 @@ def _roles_from(raw: Iterable[str] | RoleSet | None) -> RoleSet:
     return RoleSet.of(*roles)
 
 
-def _member(enumeration: type[Any], value: Any) -> Any:  # noqa: ANN401 — generic over enums
+def _member(enumeration: type[Any], value: Any) -> Any:  # Generic over enums
     """Resolve an enum member from a stored value, or refuse."""
     if isinstance(value, enumeration):
         return value
@@ -185,7 +185,7 @@ def _member(enumeration: type[Any], value: Any) -> Any:  # noqa: ANN401 — gene
         ) from error
 
 
-def record_from_row(row: Any) -> CatalogueRecord:  # noqa: ANN401 — a database row
+def record_from_row(row: Any) -> CatalogueRecord:  # A database row
     """Turn a ``governance_record`` row into a validated catalogue entry.
 
     **This is the only place a stored row becomes something governance will act on.** The column is

@@ -53,11 +53,12 @@ jobs:
         run: npm test
 
       # WCAG 2.2 AA on all three surfaces, no best-effort surface (spec FR-SURF-010).
-      # The sweep lands with the journeys it measures, in Phase 3 (T049).
+      #
+      # UNCONDITIONAL. This step used to run the sweep only "if a test:a11y script exists", and none
+      # did — so T049's sweep passed CI by never running, while printing that it had not arrived yet.
+      # A gate that decides for itself whether to run is a gate whose failure mode is silence.
+      - name: Install the browser for the sweep
+        run: npx playwright install --with-deps chromium
+
       - name: Accessibility sweep
-        run: |
-          if npm run | grep -q 'test:a11y'; then
-            npm run test:a11y
-          else
-            echo "::notice::axe-core sweep arrives with T049 (Phase 3) - no journeys to sweep yet"
-          fi
+        run: npm run test:a11y

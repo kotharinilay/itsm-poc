@@ -90,7 +90,7 @@ class _CapturingCaller:
         """Script what the index returns next."""
         self._documents = documents
 
-    async def send(self, system: str, request: Any) -> httpx.Response:  # noqa: ANN401
+    async def send(self, system: str, request: Any) -> httpx.Response:
         del system
         self.requests.append(request)
         return httpx.Response(200, json={"value": self._documents})

@@ -124,7 +124,7 @@ def build_message(
     traceparent: str | None = None,
     tracestate: str | None = None,
     time_to_live_seconds: int | None = None,
-) -> Any:  # noqa: ANN401 — the concrete type needs the SDK imported
+) -> Any:  # The concrete type needs the SDK imported
     """Build the Service Bus message for one trigger.
 
     Separated from :meth:`ServiceBusTriggerPublisher.publish` so the message can be constructed and
@@ -177,7 +177,7 @@ class ServiceBusTriggerPublisher:
     one per message would turn the dispatcher's happy path into a connection storm.
     """
 
-    def __init__(self, settings: MessagingSettings, client: Any | None = None) -> None:  # noqa: ANN401
+    def __init__(self, settings: MessagingSettings, client: Any | None = None) -> None:
         """Bind the publisher to a namespace and queue.
 
         Args:

@@ -182,7 +182,7 @@ def concluded_from(result: IntegrationResult | None) -> Conclusion:
     return Conclusion.RESOLVED if result.may_report_resolution else Conclusion.ACTED_UNVERIFIED
 
 
-def _text(value: Any) -> str:  # noqa: ANN401 — an application property is loosely typed
+def _text(value: Any) -> str:  # An application property is loosely typed
     """One application property as text, or empty when absent."""
     return str(value) if value is not None else ""
 

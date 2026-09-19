@@ -37,7 +37,7 @@ ROOT: Final = Path(__file__).resolve().parents[3]
 CONTRACTS: Final = ROOT / "build" / "contracts"
 
 
-def _comparator() -> Any:  # noqa: ANN401 — a module object
+def _comparator() -> Any:  # A module object
     """Load the shared comparator by path.
 
     It lives under ``build/scripts/`` because CI runs it over both stacks' output, and it is not a
@@ -53,7 +53,7 @@ def _comparator() -> Any:  # noqa: ANN401 — a module object
 
 
 @pytest.fixture(scope="module")
-def app() -> Any:  # noqa: ANN401 — FastAPI, imported lazily
+def app() -> Any:  # FastAPI, imported lazily
     """The application, built with settings that need no environment and no vault."""
     from ragcore.api.app import create_app
     from ragcore.config.settings import DatabaseSettings, Settings
@@ -324,7 +324,7 @@ class TestNoDocumentOffersAClientAWayToAssertAuthority:
 # ---------------------------------------------------------------------------
 
 
-def _document(**paths: Any) -> dict[str, Any]:  # noqa: ANN401
+def _document(**paths: Any) -> dict[str, Any]:
     return {"openapi": "3.1.0", "info": {"title": "t", "version": "v1"}, "paths": paths}
 
 

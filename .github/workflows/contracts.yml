@@ -156,19 +156,24 @@ jobs:
       # committed baseline — a new API must be published deliberately, not by whatever CI happened
       # to generate. An approved breaking change is recorded in the register, verbatim and with an
       # expiry; there is no flag and no environment variable that bypasses this.
+      #
+      # THE BASELINE IS THE COPY TAKEN BEFORE ANYTHING RAN. `build/contracts` in the working tree
+      # is not it: the .NET emitter has overwritten build/contracts/dotnet by now, so comparing
+      # against the tree compared the fresh .NET documents with themselves and passed whatever they
+      # said. The copy was taken for exactly this reason at the top of the job, and then never used.
       - name: Compare against the committed contracts
         run: |
           python3 build/scripts/openapi_diff.py \
-            --baseline build/contracts \
+            --baseline "${{ runner.temp }}/committed" \
             --current "${{ runner.temp }}/contracts" \
             --approved build/contracts/approved-breaking-changes.json
 
       # A stale baseline is worse than none: the comparator would pass a breaking change because
       # the thing it compares against already contains it. This catches the case where somebody
-      # changed a route and did not re-emit.
+      # changed a route and did not re-emit. Compared against the pre-run copy, for the reason above.
       - name: Fail if the committed contracts are stale
         run: |
-          if ! diff -r build/contracts "${{ runner.temp }}/contracts" \
+          if ! diff -r "${{ runner.temp }}/committed" "${{ runner.temp }}/contracts" \
               --exclude 'approved-breaking-changes.json' > /tmp/contract.diff; then
             echo "::error::The committed contracts are stale. Re-emit and commit them."
             cat /tmp/contract.diff

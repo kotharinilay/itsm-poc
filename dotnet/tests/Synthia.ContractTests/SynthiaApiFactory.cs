@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Synthia.ContractTests;
 
@@ -17,6 +18,15 @@ namespace Synthia.ContractTests;
 /// the contract — casing, versioning, cursor envelope, problem details, the whitelist — and each
 /// one is decided at the boundary, before a read model runs. A test needing rows is an integration
 /// test and belongs where a real PostgreSQL can be started (plan Stage 11, Testcontainers).
+/// </para>
+/// <para>
+/// <b>One exception, and its limit is stated where it is used.</b> A read model may be replaced to
+/// stand in for the store (see the <see cref="Action{T}"/> constructor), which is what lets the
+/// tenant-isolation contract — a resource that is not the caller's answers 404, never 403 or 200 —
+/// be asserted through the real identity pipeline. The stand-in scopes by the same
+/// <c>ITenantScope</c> the EF filter binds; that the filter itself cannot be escaped is a separate
+/// claim, proven structurally in <c>Synthia.TenantIsolationTests</c> and against a real database by
+/// the migration suite.
 /// </para>
 /// <para>
 /// <b>Configuration arrives as environment variables, not through
@@ -40,11 +50,25 @@ internal sealed class SynthiaApiFactory : WebApplicationFactory<Program>
         "Host=contract-tests.invalid;Port=5432;Database=synthia;Username=reader;Password=unused";
 
     private readonly EnvironmentScope _environment;
+    private readonly Action<IServiceCollection>? _services;
 
     /// <summary>Boots the application with a valid configuration.</summary>
     public SynthiaApiFactory()
         : this(new Dictionary<string, string?>(StringComparer.Ordinal))
     {
+    }
+
+    /// <summary>Boots the application with a read model replaced.</summary>
+    /// <param name="services">
+    /// Replaces registrations after the composition root has run. Only for standing in for the
+    /// database: the identity pipeline, the scope binding and the endpoints are the real ones, and
+    /// a test that replaced one of those would be asserting against itself.
+    /// </param>
+    public SynthiaApiFactory(Action<IServiceCollection> services)
+        : this(new Dictionary<string, string?>(StringComparer.Ordinal))
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        _services = services;
     }
 
     /// <summary>Boots the application with named settings removed or replaced.</summary>
@@ -80,6 +104,11 @@ internal sealed class SynthiaApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        if (_services is not null)
+        {
+            builder.ConfigureServices(_services);
+        }
     }
 
     /// <inheritdoc/>

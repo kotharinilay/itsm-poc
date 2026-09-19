@@ -110,7 +110,7 @@ def configure_telemetry(
     )
 
 
-def _credential() -> Any:  # noqa: ANN401 — the concrete type needs the SDK imported
+def _credential() -> Any:  # The concrete type needs the SDK imported
     """The shared managed identity, for Entra-authenticated ingestion.
 
     The process-wide credential, never one built here: a second credential is a second

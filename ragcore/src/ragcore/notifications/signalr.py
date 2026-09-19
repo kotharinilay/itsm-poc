@@ -105,7 +105,7 @@ class SignalRNotifier:
         self,
         settings: NotificationSettings,
         client: httpx.AsyncClient | None = None,
-        credential: Any | None = None,  # noqa: ANN401 — the concrete type needs the SDK imported
+        credential: Any | None = None,  # The concrete type needs the SDK imported
     ) -> None:
         """Bind the notifier to an endpoint and hub.
 
@@ -154,7 +154,7 @@ class SignalRNotifier:
             finally:
                 if self._client is None:
                     await client.aclose()
-        except Exception:  # noqa: BLE001 — see the class docstring: delivery must not fail the flow
+        except Exception:  # See the class docstring: delivery must not fail the flow
             _log.warning(
                 "Realtime notification was not delivered; the outcome remains readable through the "
                 "API. kind=%s correlation=%s",

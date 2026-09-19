@@ -104,7 +104,7 @@ class AuditWriter:
 
     async def record(
         self,
-        session: Any,  # noqa: ANN401 — an AsyncSession, typed loosely as elsewhere in this layer
+        session: Any,  # An AsyncSession, typed loosely as elsewhere in this layer
         execution: ExecutionRecord,
         *,
         work_item_id: UUID,

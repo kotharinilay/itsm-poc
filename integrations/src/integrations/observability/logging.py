@@ -100,7 +100,9 @@ def configure_logging(observability: ObservabilitySettings) -> None:
     root.setLevel(logging.INFO)
 
 
-def log_context(**fields: Any) -> dict[str, Any]:  # noqa: ANN401 — structured log fields are heterogeneous by nature
+def log_context(
+    **fields: Any,
+) -> dict[str, Any]:  # Structured log fields are heterogeneous by nature
     """Build an `extra` mapping with the correlation identifier already present.
 
     Args:

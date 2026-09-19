@@ -47,7 +47,7 @@ def _postgres_container() -> Any:
     try:
         container = PostgresContainer("postgres:17-alpine")
         container.start()
-    except Exception:  # noqa: BLE001 — any startup failure means the same thing: no Docker here
+    except Exception:  # Any startup failure means the same thing: no Docker here
         return None
     return container
 

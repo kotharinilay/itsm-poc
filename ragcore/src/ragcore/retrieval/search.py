@@ -139,7 +139,7 @@ class AzureAiSearchRetrieval:
         self,
         settings: RetrievalSettings,
         caller: ResilientHttpCaller,
-        credential: Any | None = None,  # noqa: ANN401 — the concrete type needs the SDK imported
+        credential: Any | None = None,  # The concrete type needs the SDK imported
     ) -> None:
         """Bind retrieval to an index.
 

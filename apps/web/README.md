@@ -5,15 +5,15 @@ contracts and infrastructure are real, and no business workflow is implemented.
 
 ## Layout
 
-| Project | Kind | What it is |
-| --- | --- | --- |
-| `customer-portal` | app | Customer surface (spec FR-SURF-001) |
-| `desktop-renderer` | app | Customer desktop surface, rendered by the Electron host |
-| `staff-portal` | app | Staff surface — works on other people's sessions |
-| `customer-features` | lib | Customer feature shells: chat, session, consent, hand-off |
-| `staff-features` | lib | Staff feature shells: queue, take-over, reporting |
-| `platform-core` | lib | Typed API contracts and clients, auth, correlation, realtime, browser security |
-| `design-system` | lib | Accessible primitives and the loading/empty/failure state vocabulary |
+| Project             | Kind | What it is                                                                     |
+| ------------------- | ---- | ------------------------------------------------------------------------------ |
+| `customer-portal`   | app  | Customer surface (spec FR-SURF-001)                                            |
+| `desktop-renderer`  | app  | Customer desktop surface, rendered by the Electron host                        |
+| `staff-portal`      | app  | Staff surface — works on other people's sessions                               |
+| `customer-features` | lib  | Customer feature shells: chat, session, consent, hand-off                      |
+| `staff-features`    | lib  | Staff feature shells: queue, take-over, reporting                              |
+| `platform-core`     | lib  | Typed API contracts and clients, auth, correlation, realtime, browser security |
+| `design-system`     | lib  | Accessible primitives and the loading/empty/failure state vocabulary           |
 
 ### Dependency direction
 

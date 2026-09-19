@@ -33,7 +33,7 @@ class _Session:
         self.statements: list[str] = []
         self.parameters: list[dict[str, Any]] = []
 
-    async def execute(self, statement: Any, parameters: Any = None) -> None:  # noqa: ANN401
+    async def execute(self, statement: Any, parameters: Any = None) -> None:
         self.statements.append(str(statement))
         self.parameters.append(dict(parameters or {}))
 

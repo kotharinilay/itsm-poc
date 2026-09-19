@@ -6,7 +6,7 @@
     "start": "ng serve",
     "build": "npm run build:libs && ng build customer-portal && ng build staff-portal && ng build desktop-renderer",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test design-system --watch=false --browsers=ChromeHeadless && ng test platform-core --watch=false --browsers=ChromeHeadless && ng test customer-portal --watch=false --browsers=ChromeHeadless && ng test desktop-renderer --watch=false --browsers=ChromeHeadless",
+    "test": "npm run test:unit && npm run test:architecture",
     "lint": "eslint .",
     "build:libs": "ng build design-system && ng build platform-core && ng build customer-features && ng build staff-features",
     "format": "prettier --write .",
@@ -15,6 +15,7 @@
     "test:unit": "ng test design-system --watch=false --browsers=ChromeHeadless && ng test platform-core --watch=false --browsers=ChromeHeadless && ng test customer-features --watch=false --browsers=ChromeHeadless && ng test staff-features --watch=false --browsers=ChromeHeadless && ng test customer-portal --watch=false --browsers=ChromeHeadless && ng test staff-portal --watch=false --browsers=ChromeHeadless && ng test desktop-renderer --watch=false --browsers=ChromeHeadless",
     "test:architecture": "node --test \"projects/platform-core/no-authz.spec.ts\"",
     "e2e": "playwright test",
+    "test:a11y": "playwright test",
     "e2e:install": "playwright install chromium"
   },
   "prettier": {

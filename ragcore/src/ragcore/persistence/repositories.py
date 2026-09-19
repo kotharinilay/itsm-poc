@@ -258,7 +258,7 @@ class SessionRepository(_TenantScoped):
     Satisfies :class:`~ragcore.application.ports.SessionRepositoryPort`.
     """
 
-    async def get(self, tenant: TenantContext, session_id: SessionId) -> Any | None:  # noqa: ANN401
+    async def get(self, tenant: TenantContext, session_id: SessionId) -> Any | None:
         """Load one session within the tenant.
 
         The tenant predicate is applied **as well as** the primary key, which looks redundant and
@@ -332,7 +332,7 @@ class WorkItemRepository(_TenantScoped):
     Satisfies :class:`~ragcore.application.ports.WorkItemRepositoryPort`.
     """
 
-    async def get(self, tenant: TenantContext, work_item_id: WorkItemId) -> Any | None:  # noqa: ANN401
+    async def get(self, tenant: TenantContext, work_item_id: WorkItemId) -> Any | None:
         """Load one work item within the tenant."""
         table = models.WORK_ITEM
         statement = select(table).where(
@@ -1129,7 +1129,7 @@ class FeedbackRepository(_TenantScoped):
 
     def _owned_message(
         self, tenant: TenantContext, message_id: MessageId, given_by: PrincipalId
-    ) -> Any:  # noqa: ANN401 — a SQLAlchemy Select, whose generic parameters are not worth spelling
+    ) -> Any:  # A SQLAlchemy Select, whose generic parameters are not worth spelling
         """The caller's own agent-authored message, as a subquery.
 
         Three predicates, all required: the organisation, the message, and the session's requester.

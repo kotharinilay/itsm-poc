@@ -304,7 +304,7 @@ class TestStartupFailsOnAnUnresolvableSecret:
         assert [ref.name for ref in settings.required_secret_references()] == ["otel"]
 
 
-def _settings(vault_uri: str = "", secret_name: str = "") -> Any:  # noqa: ANN401
+def _settings(vault_uri: str = "", secret_name: str = "") -> Any:
     """Settings for a test, with no environment read and no vault unless one is asked for."""
     from ragcore.config.settings import (
         DatabaseSettings,

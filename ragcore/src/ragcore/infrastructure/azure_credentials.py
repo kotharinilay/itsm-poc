@@ -29,7 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
 
 
 @lru_cache(maxsize=1)
-def azure_credential() -> Any:  # noqa: ANN401 — the concrete type needs the SDK imported
+def azure_credential() -> Any:  # The concrete type needs the SDK imported
     """Return the process-wide Azure credential.
 
     Cached, because the credential caches tokens internally: constructing a second one throws away

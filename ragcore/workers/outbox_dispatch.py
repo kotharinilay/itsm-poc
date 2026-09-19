@@ -74,7 +74,7 @@ def subject_of(envelope: TriggerEnvelope | IntegrationCommandEnvelope) -> str:
     return str(envelope.work_item_id)
 
 
-def envelope_from_row(row: Any) -> TriggerEnvelope | IntegrationCommandEnvelope:  # noqa: ANN401
+def envelope_from_row(row: Any) -> TriggerEnvelope | IntegrationCommandEnvelope:
     """Rebuild the envelope from a durable outbox row.
 
     The row's ``payload`` holds what a consumer may see; ``kind`` is a column because the dispatcher
@@ -120,8 +120,8 @@ def envelope_from_row(row: Any) -> TriggerEnvelope | IntegrationCommandEnvelope:
 
 
 async def dispatch_once(
-    outbox: Any,  # noqa: ANN401 — the Outbox repository, which is not a port
-    publisher: Any,  # noqa: ANN401 — MessagePublisherPort plus trace kwargs
+    outbox: Any,  # The Outbox repository, which is not a port
+    publisher: Any,  # MessagePublisherPort plus trace kwargs
     *,
     batch_size: int,
     policy: BackoffPolicy | None = None,
@@ -151,7 +151,7 @@ async def dispatch_once(
         envelope = envelope_from_row(row)
         try:
             await publisher.publish(envelope)
-        except Exception as error:  # noqa: BLE001 — one row's failure must not end the batch
+        except Exception as error:  # One row's failure must not end the batch
             attempts = await outbox.record_failure(row.outbox_id)
             if backoff.exhausted(attempts):
                 undispatchable += 1

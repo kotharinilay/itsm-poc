@@ -131,7 +131,7 @@ class IntegrationsClient:
         self,
         settings: IntegrationsClientSettings,
         caller: ResilientHttpCaller,
-        credential: Any | None = None,  # noqa: ANN401 — the concrete type needs the SDK imported
+        credential: Any | None = None,  # The concrete type needs the SDK imported
     ) -> None:
         """Bind the client.
 

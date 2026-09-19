@@ -125,7 +125,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `ragcore/src/ragcore/infrastructure/cache.py` | Redis transient cache (Entra auth) or `NullCache`. |
 | `ragcore/src/ragcore/infrastructure/clock.py` | System clock adapter. |
 | `ragcore/src/ragcore/egress/http.py`, `validation.py` | Pooled outbound HTTP with timeouts/retry; validation of provider responses. |
-| `ragcore/src/ragcore/platform_clients/integrations.py` | HTTP client for the Integrations Service via APIM (bound only when configured; no live caller). |
+| `ragcore/src/ragcore/platform_clients/integrations.py` | HTTP client for the Integrations Service via APIM, authenticated with RagCore's own workload token (bound only when configured; no live caller). |
 
 ### Persistence
 
@@ -141,7 +141,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `ragcore/src/ragcore/persistence/retention.py`, `erasure.py` | Retention windows per data class; per-tenant hard delete. |
 | `ragcore/src/ragcore/persistence/autogenerate.py` | Alembic autogenerate filter (excludes `langgraph`). |
 | `ragcore/migrations/env.py`, `alembic.ini` | Alembic environment; version table in `platform`. |
-| `ragcore/migrations/versions/0001`–`0024_*.py` | Schema history: enums, 20 tables, trigger, 13 views, 4 roles and grants. |
+| `ragcore/migrations/versions/0001`–`0025_*.py` | Schema history: enums, 20 tables, trigger, 13 views, 4 roles and grants. |
 | `ragcore/scripts/provision_checkpoint_schema.py` | Creates LangGraph checkpoint tables from the migration job. |
 | `ragcore/scripts/emit_contracts.py` | Writes per-audience OpenAPI files to `build/contracts/ragcore/`. |
 
@@ -157,7 +157,7 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `ragcore/src/ragcore/governance/policy.py`, `conditions.py` | Deterministic treatment policy; knowledge/ability/security conditions. |
 | `ragcore/src/ragcore/governance/catalogue.py`, `fixtures.py` | Catalogue entry shape; four inert `synthia.reference.*` fixtures. |
 | `ragcore/src/ragcore/graph/builder.py`, `state.py`, `projections.py` | LangGraph topology, typed state, enum→state literal mapping. |
-| `ragcore/src/ragcore/graph/host.py`, `checkpointer.py`, `context.py`, `dependencies.py` | Run host (turn → events), Postgres checkpointer, run context, graph dependency bundle. |
+| `ragcore/src/ragcore/graph/host.py`, `checkpointer.py`, `context.py`, `dependencies.py`, `threads.py` | Run host (turn → events), Postgres checkpointer, run context, graph dependency bundle, checkpoint thread key (organisation + requester + session). |
 | `ragcore/src/ragcore/graph/nodes/*.py` | Graph nodes: intake, guardrail, classify, grounding, governance, clarification/consent/approval interrupts, execution, closure. |
 | `ragcore/src/ragcore/execution/claim.py`, `idempotency.py` | Atomic claim (boundary 1) and idempotency key/replay (boundary 2). |
 | `ragcore/src/ragcore/execution/executor.py`, `availability.py` | Execution + verification leg; entitled-but-unreachable outcome. |

@@ -21,24 +21,45 @@ identity.
 
 ## First run
 
-```bash
-# 1. Database — migrations run as a job, never at application startup
-cd ragcore
-alembic upgrade head
+The README's §Running it locally is the maintained copy of this, with the configuration table. In
+short:
 
-# 2. RagCore API and the resume worker (separate processes, same image)
-uv run uvicorn ragcore.api:app --reload
-uv run python workers/resume_worker.py
+```bash
+# 1. Database — migrations run as a job, never at application startup (ADR-0003). The checkpointer
+#    provisions its own tables from the same job, in this order.
+docker run -d --name synthia-db -e POSTGRES_PASSWORD=local -e POSTGRES_DB=synthia \
+  -p 5432:5432 postgres:17-alpine
+export SYNTHIA_DB_DSN=postgresql+asyncpg://postgres:local@localhost:5432/synthia
+cd ragcore
+uv run alembic upgrade head
+uv run python scripts/provision_checkpoint_schema.py
+
+# 2. RagCore. A factory, not a module-level app: `create_app` builds the container from validated
+#    settings, so a test can construct one without touching the environment.
+uv run uvicorn ragcore.api.app:create_app --factory --port 8000
 
 # 3. The read-only monolith
 cd ../dotnet
-dotnet run --project src/Synthia.Api
+ReadDatabase__ConnectionString="Host=localhost;Port=5432;Database=synthia;Username=postgres;Password=local" \
+  dotnet run --project src/Synthia.Api
 
-# 4. Any client surface
+# 4. The Integrations Service
+cd ../integrations
+SYNTHIA_INTEGRATIONS_PERSISTENCE__DSN=$SYNTHIA_DB_DSN \
+  uv run uvicorn integrations.api.app:create_app --factory --port 8100
+
+# 5. Any client surface
 cd ../apps/web
-npm run start:customer-portal     # or start:staff-portal
-cd ../desktop && npm run start    # Electron host
+npx ng serve customer-portal      # or staff-portal, or desktop-renderer
+cd ../desktop && npm run build:renderer && npm run start   # Electron host
 ```
+
+**The workers are not among these commands**, and that is not an omission: all seven `main()`
+functions raise by design until their container definitions land (T324). Their behaviour is
+exercised by the suites, not by a process.
+
+Every application route requires the `X-Idp-*` contract APIM would set — see the README for the
+header set and for why a request without it is a 401 rather than an anonymous session.
 
 ## Validation scenarios
 

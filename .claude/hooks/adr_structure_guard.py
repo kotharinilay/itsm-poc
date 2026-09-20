@@ -49,7 +49,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _guardlib import changed_files, matches, paths_from_event, project_dir  # noqa: E402
+from _guardlib import (  # noqa: E402
+    active_root,
+    changed_files,
+    matches,
+    normalize_candidates,
+    paths_from_event,
+    resolve_in_repo,
+    root_for,
+)
 
 PREFIXES = ("docs/adr/",)
 EXACT: tuple[str, ...] = ()
@@ -83,24 +91,31 @@ acceptance: it checks structure and nothing else."""
 
 
 def is_governed(path: str) -> bool:
-    """A record under docs/adr/, at the top level. The index is not a record."""
+    """A record under docs/adr/, at the top level. The index is not a record.
+
+    Decided on the normalized forms rather than the literal string: the same record reached from a
+    worktree, a subdirectory or an absolute path is the same record.
+    """
     if not matches(path, PREFIXES, EXACT):
         return False
-    normalized = path.strip().strip("\"'").replace("\\", "/").lower()
-    tail = normalized.split("docs/adr/", 1)[1]
-    if not tail or "/" in tail or not tail.endswith(".md"):
-        return False
-    return not normalized.endswith(INDEX)
+    for candidate in normalize_candidates(path):
+        if not candidate.startswith(PREFIXES[0]):
+            continue
+        tail = candidate[len(PREFIXES[0]) :]
+        if tail and "/" not in tail and tail.endswith(".md") and candidate != INDEX:
+            return True
+    return False
 
 
-def adr_dir() -> Path:
-    return Path(project_dir()) / "docs" / "adr"
+def adr_dir(base: str = "") -> Path:
+    """The records directory of the root in use - the worktree's when Claude works in one."""
+    return Path(base or active_root()) / "docs" / "adr"
 
 
-def existing_numbers(excluding: str = "") -> dict[int, str]:
+def existing_numbers(excluding: str = "", base: str = "") -> dict[int, str]:
     """Every ADR number currently on disk, mapped to its filename."""
     found: dict[int, str] = {}
-    directory = adr_dir()
+    directory = adr_dir(base)
     if not directory.is_dir():
         return found
     for entry in sorted(directory.glob("*.md")):
@@ -180,7 +195,8 @@ def check_content(text: str, number: int | None) -> list[str]:
 def validate(path: str, text: str | None, is_new: bool = True) -> list[str]:
     """Every structural problem with this record. Empty means structurally valid."""
     name = Path(path.replace("\\", "/")).name
-    problems, number = check_filename(name, existing_numbers(excluding=name), is_new)
+    known = existing_numbers(excluding=name, base=root_for(path))
+    problems, number = check_filename(name, known, is_new)
     if text is not None:
         problems.extend(check_content(text, number))
     return problems
@@ -201,8 +217,8 @@ def content_for(path: str, tool_input: dict) -> str | None:
 
 
 def on_disk(path: str) -> Path:
-    candidate = Path(path)
-    return candidate if candidate.is_absolute() else Path(project_dir()) / path
+    """The record on disk, resolved against the root that governs it, worktree included."""
+    return resolve_in_repo(path)
 
 
 def report(path: str, problems: list[str], existing: bool) -> str:

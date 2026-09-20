@@ -11,8 +11,14 @@ only governance artifacts; it touches no application code, no schema and no grap
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parent
@@ -22,7 +28,7 @@ sys.path.insert(0, str(HOOKS))
 import adr_structure_guard as h5  # noqa: E402
 import db_migration_guard as h2  # noqa: E402
 import langgraph_change_guard as h3  # noqa: E402
-from _guardlib import governed  # noqa: E402
+from _guardlib import governed, reset_root_cache  # noqa: E402
 
 FAILURES: list[str] = []
 CHECKS = 0
@@ -518,6 +524,318 @@ check(
     "when the choice is a human's" in adr_skill,
 )
 check("adr-author defers the trigger lists to the rules", "70-adr.md" in adr_skill)
+
+# --- real Git worktree: the enforcement path, proven against an actual worktree ----------------
+# Phase 7 found that a governed write made from a Git worktree was not detected. Paths were
+# normalized against CLAUDE_PROJECT_DIR alone, so an absolute path under a worktree root kept the
+# worktree prefix ('.claude/worktrees/<name>/...', or a temporary directory) and matched no
+# governed prefix - H2, H3 and H5 all returned 0 for a write they exist to stop.
+#
+# These checks create REAL worktrees with 'git worktree add' and exercise the guards' own entry
+# points against them. Nothing here re-implements normalization: the assertions are on what a guard
+# decides and on the exit code a hook returns, so a regression in normalization fails them.
+
+WORKTREE_CASES = (
+    ("H2", h2, "db_migration_guard.py", "ragcore/migrations/versions/0026_worktree_probe.py"),
+    ("H3", h3, "langgraph_change_guard.py", "ragcore/src/ragcore/graph/builder.py"),
+    ("H5", h5, "adr_structure_guard.py", "docs/adr/9999-worktree-probe.md"),
+)
+UNGOVERNED_PROBE = "ragcore/src/ragcore/retrieval/hybrid.py"
+
+
+def detects(guard, path: str) -> bool:
+    """Whether this guard considers ``path`` governed, asked through the guard's own entry point."""
+    if guard is h5:
+        return h5.is_governed(path)
+    return guard_hits(guard, edit_event(path)) != []
+
+
+@contextmanager
+def working_in(directory: Path, project_dir_value: str | None):
+    """Run the body as Claude would: this working directory, this CLAUDE_PROJECT_DIR (or none)."""
+    previous_cwd = Path.cwd()
+    previous_env = os.environ.get("CLAUDE_PROJECT_DIR")
+    os.chdir(directory)
+    if project_dir_value is None:
+        os.environ.pop("CLAUDE_PROJECT_DIR", None)
+    else:
+        os.environ["CLAUDE_PROJECT_DIR"] = project_dir_value
+    reset_root_cache()
+    try:
+        yield
+    finally:
+        os.chdir(previous_cwd)
+        if previous_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = previous_env
+        reset_root_cache()
+
+
+def git(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=False
+    )
+
+
+def run_guard(
+    script: str, args: list[str], cwd: Path, project_dir_value: str | None, stdin: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a guard exactly as settings.json does: the primary checkout's script, from ``cwd``."""
+    env = dict(os.environ)
+    if project_dir_value is None:
+        env.pop("CLAUDE_PROJECT_DIR", None)
+    else:
+        env["CLAUDE_PROJECT_DIR"] = project_dir_value
+    return subprocess.run(
+        [sys.executable, str(HOOKS / script), *args],
+        input=stdin,
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def remove_tree(location: Path, attempts: int = 6) -> bool:
+    """Delete a directory, retrying briefly.
+
+    On Windows a checkout this suite has just read can hold transient handles - an indexer, a
+    virus scanner, a file the interpreter has not released yet - and a single rmtree loses the
+    race. Retrying makes cleanup deterministic instead of making the assertion tolerant.
+    """
+
+    def force_writable(func, path, _exc):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass
+
+    for attempt in range(attempts):
+        if not location.exists():
+            return True
+        shutil.rmtree(location, onerror=force_writable)
+        if not location.exists():
+            return True
+        time.sleep(0.2 * (attempt + 1))
+    return not location.exists()
+
+
+def as_absolute(root: Path, relative: str) -> str:
+    return str(root / relative).replace(chr(92), "/")
+
+
+check("the fix names no local filesystem path", "D:/Projects" not in (HOOKS / "_guardlib.py")
+      .read_text(encoding="utf-8"))
+
+_temp_parent = Path(tempfile.mkdtemp(prefix="synthia-guard-worktree-"))
+EXTERNAL_WT = _temp_parent / "external-checkout"
+NESTED_WT = ROOT / ".claude" / "worktrees" / "guard-regression-probe"
+_created: list[Path] = []
+
+try:
+    # A previous run that was interrupted can leave a probe behind. Clear it first: a stale
+    # directory would fail 'worktree add' and make this suite report a defect it does not have.
+    for _location in (EXTERNAL_WT, NESTED_WT):
+        if _location.exists():
+            git("worktree", "remove", "--force", str(_location))
+            remove_tree(_location)
+    git("worktree", "prune")
+
+    for _label, _location in (("external", EXTERNAL_WT), ("nested", NESTED_WT)):
+        _result = git("worktree", "add", "--detach", str(_location), "HEAD")
+        _ok = _result.returncode == 0 and (_location / ".git").exists()
+        check(f"a real {_label} Git worktree was created", _ok)
+        if _ok:
+            _created.append(_location)
+
+    # A linked worktree's .git is a FILE, not a directory. That is the distinction the old
+    # normalization missed, and the one the fix keys on.
+    for _location in _created:
+        check(
+            f"the worktree at {_location.name} is a linked worktree (.git is a file)",
+            (_location / ".git").is_file(),
+        )
+
+    ROOTS: list[tuple[str, Path]] = [("main checkout", ROOT)]
+    ROOTS += [
+        (("external worktree" if wt == EXTERNAL_WT else "nested worktree"), wt) for wt in _created
+    ]
+
+    # --- the regression matrix: root x path form x CLAUDE_PROJECT_DIR presence ----------------
+    for _root_label, _root in ROOTS:
+        for _env_label, _env_value in (
+            ("CLAUDE_PROJECT_DIR set", str(ROOT)),
+            ("CLAUDE_PROJECT_DIR absent", None),
+        ):
+            with working_in(_root, _env_value):
+                for _name, _guard, _script, _path in WORKTREE_CASES:
+                    for _form, _named in (
+                        ("relative", _path),
+                        ("absolute", as_absolute(_root, _path)),
+                    ):
+                        check(
+                            f"{_name} detects a {_form} governed path "
+                            f"from the {_root_label} ({_env_label})",
+                            detects(_guard, _named),
+                        )
+                    for _form, _named in (
+                        ("relative", UNGOVERNED_PROBE),
+                        ("absolute", as_absolute(_root, UNGOVERNED_PROBE)),
+                    ):
+                        check(
+                            f"{_name} leaves a {_form} non-governed path alone "
+                            f"from the {_root_label} ({_env_label})",
+                            not detects(_guard, _named),
+                        )
+
+    # --- the hook does not always run from the root of the tree --------------------------------
+    # A Bash tool call can change directory, so a guard may run with cwd inside the tree. The
+    # governed prefixes are repository-relative literals and must never be resolved against that
+    # cwd; the path under test must be recognised whether it was written relative to the
+    # subdirectory, relative to the repository, or absolute.
+    SUBDIR_CASES = (
+        ("H2", h2, "ragcore", "migrations/versions/0026_worktree_probe.py",
+         "ragcore/migrations/versions/0026_worktree_probe.py"),
+        ("H3", h3, "ragcore", "src/ragcore/graph/builder.py",
+         "ragcore/src/ragcore/graph/builder.py"),
+        ("H5", h5, "docs", "adr/9999-worktree-probe.md", "docs/adr/9999-worktree-probe.md"),
+    )
+    for _root_label, _root in ROOTS:
+        for _name, _guard, _subdir, _sub_relative, _repo_relative in SUBDIR_CASES:
+            _where = _root / _subdir
+            if not _where.is_dir():
+                continue
+            for _env_label, _env_value in (
+                ("CLAUDE_PROJECT_DIR set", str(ROOT)),
+                ("CLAUDE_PROJECT_DIR absent", None),
+            ):
+                with working_in(_where, _env_value):
+                    check(
+                        f"{_name} detects a subdirectory-relative path from "
+                        f"{_root_label}/{_subdir} ({_env_label})",
+                        detects(_guard, _sub_relative),
+                    )
+                    check(
+                        f"{_name} detects a repository-relative path from "
+                        f"{_root_label}/{_subdir} ({_env_label})",
+                        detects(_guard, _repo_relative),
+                    )
+                    check(
+                        f"{_name} detects an absolute path from "
+                        f"{_root_label}/{_subdir} ({_env_label})",
+                        detects(_guard, as_absolute(_root, _repo_relative)),
+                    )
+                    check(
+                        f"{_name} leaves a non-governed path alone from "
+                        f"{_root_label}/{_subdir} ({_env_label})",
+                        not detects(_guard, as_absolute(_root, UNGOVERNED_PROBE)),
+                    )
+
+    # --- the hook contract end to end, from a real worktree ------------------------------------
+    # The precise Phase 7 bypass: cwd is the worktree, the path is absolute under it, and
+    # CLAUDE_PROJECT_DIR still names the primary checkout. Exit 2 is the block.
+    for _root_label, _root in ROOTS[1:]:
+        for _name, _guard, _script, _path in WORKTREE_CASES:
+            _blocked = run_guard(
+                _script, [], _root, str(ROOT), json.dumps(edit_event(as_absolute(_root, _path)))
+            )
+            check(
+                f"{_name} exits 2 for an absolute governed write from the {_root_label}",
+                _blocked.returncode == 2,
+            )
+            check(
+                f"{_name} explains itself when it blocks from the {_root_label}",
+                _blocked.stderr.strip() != "",
+            )
+        _passed = run_guard(
+            "db_migration_guard.py",
+            [],
+            _root,
+            str(ROOT),
+            json.dumps(edit_event(as_absolute(_root, UNGOVERNED_PROBE))),
+        )
+        check(f"a non-governed write from the {_root_label} exits 0", _passed.returncode == 0)
+
+    # --- planted violations: written to disk in a real worktree, then removed -------------------
+    # --diff reads the working tree of the root in use. Before the fix it read the primary
+    # checkout, so a violation planted in a worktree was invisible to it.
+    if _created:
+        _wt = _created[0]
+        PLANTED = {
+            "db_migration_guard.py": (
+                "ragcore/migrations/versions/0026_planted_violation.py",
+                '"""Planted by test_guards.py. Removed before the suite exits."""\n',
+            ),
+            "langgraph_change_guard.py": (
+                "ragcore/src/ragcore/graph/planted_violation.py",
+                '"""Planted by test_guards.py. Removed before the suite exits."""\n',
+            ),
+            "adr_structure_guard.py": (
+                "docs/adr/9999-planted-violation.md",
+                "# A planted record with no number, no status and no sections\n",
+            ),
+        }
+
+        # Clean first: nothing planted, nothing reported.
+        for _script, (_relative, _body) in PLANTED.items():
+            _clean = run_guard(_script, ["--diff"], _wt, str(ROOT))
+            check(
+                f"{_script} reports nothing for {_relative} before it is planted",
+                _relative not in _clean.stdout,
+            )
+
+        try:
+            for _script, (_relative, _body) in PLANTED.items():
+                _file = _wt / _relative
+                _file.parent.mkdir(parents=True, exist_ok=True)
+                _file.write_text(_body, encoding="utf-8")
+
+            for _script, (_relative, _body) in PLANTED.items():
+                _seen = run_guard(_script, ["--diff"], _wt, str(ROOT))
+                check(
+                    f"{_script} reports the violation planted at {_relative} in a real worktree",
+                    _relative in _seen.stdout,
+                )
+
+            # H5 validates the planted record's structure against the worktree's own history.
+            _checked = run_guard(
+                "adr_structure_guard.py",
+                ["--check", PLANTED["adr_structure_guard.py"][0]],
+                _wt,
+                str(ROOT),
+            )
+            check("H5 rejects the planted record from a worktree", _checked.returncode == 1)
+            for _expected in ("status", "context", "decision", "consequences"):
+                check(
+                    f"H5 names the missing '{_expected}' in the planted record",
+                    _expected in _checked.stdout.lower(),
+                )
+        finally:
+            for _script, (_relative, _body) in PLANTED.items():
+                (_wt / _relative).unlink(missing_ok=True)
+
+        # Restored: the tree is clean again and every guard says so.
+        for _script, (_relative, _body) in PLANTED.items():
+            _restored = run_guard(_script, ["--diff"], _wt, str(ROOT))
+            check(
+                f"{_script} reports nothing again once {_relative} is removed",
+                _relative not in _restored.stdout,
+            )
+finally:
+    for _location in _created:
+        git("worktree", "remove", "--force", str(_location))
+        # 'worktree remove' unregisters; on Windows it can leave the directory behind.
+        remove_tree(_location)
+    git("worktree", "prune")
+    remove_tree(_temp_parent)
+
+check(
+    "every temporary worktree was removed",
+    not EXTERNAL_WT.exists() and not NESTED_WT.exists(),
+)
 
 # --- Spec Kit machinery is intact -------------------------------------------------------------
 speckit = sorted((ROOT / ".claude/skills").glob("speckit-*/SKILL.md"))

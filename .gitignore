@@ -59,3 +59,7 @@ local.settings.json
 Thumbs.db
 *.swp
 *.tmp
+
+# Claude Code worktrees. Isolated checkouts created by EnterWorktree and the
+# governance suite's worktree probes live here; they are scratch, never content.
+.claude/worktrees/

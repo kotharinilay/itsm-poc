@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -863,6 +864,270 @@ check(
     "the matcher covers file-writing tools",
     all("Write" in e.get("matcher", "") and "Edit" in e.get("matcher", "") for e in entries),
 )
+
+# --- Phase 9: the engineering baseline is migrated, traced and honestly scoped ----------------
+# These checks exist so a later edit cannot silently drop a baseline requirement, lose a rule's
+# traceability, or quietly invent a TypeScript baseline. They validate the migration record
+# against the authoritative sources; they do not judge whether a rule is correct.
+
+BASELINE_RULES = [
+    ROOT / ".claude/rules/00-authority.md",
+    ROOT / ".claude/rules/10-principles.md",
+    ROOT / ".claude/rules/20-dotnet.md",
+    ROOT / ".claude/rules/21-python.md",
+    ROOT / ".claude/rules/22-web-typescript.md",
+    ROOT / ".claude/rules/40-testing.md",
+    ROOT / ".claude/rules/60-architecture-gates.md",
+    ROOT / ".claude/rules/80-security-ops.md",
+]
+for _f in BASELINE_RULES:
+    check("exists: " + _f.name, _f.is_file())
+
+for _f in BASELINE_RULES:
+    text = _f.read_text(encoding="utf-8")
+    prose = outside_fences(text)
+    check(_f.name + " has a single H1", prose.count("\n# ") + prose.startswith("# ") == 1)
+    check(_f.name + " has balanced code fences", text.count("```") % 2 == 0)
+
+RULE_TEXT = {p.name: p.read_text(encoding="utf-8")
+             for p in sorted((ROOT / ".claude/rules").glob("*.md"))}
+ALL_RULES = "\n".join(RULE_TEXT.values())
+
+# every rule file that governs one stack says so, and says which paths
+check("20-dotnet.md declares its stack", "governs `.NET / C#` code only" in RULE_TEXT["20-dotnet.md"])
+check("20-dotnet.md names its paths", "`dotnet/**`" in RULE_TEXT["20-dotnet.md"])
+check("21-python.md declares its stack", "governs Python code only" in RULE_TEXT["21-python.md"])
+check("21-python.md names its paths", "`ragcore/**`" in RULE_TEXT["21-python.md"]
+      and "`integrations/**`" in RULE_TEXT["21-python.md"])
+check("22-web-typescript.md names its paths", "`apps/web/**`" in RULE_TEXT["22-web-typescript.md"]
+      and "`apps/desktop/**`" in RULE_TEXT["22-web-typescript.md"])
+check(
+    "no language rule silently claims another stack",
+    "language-independent" not in RULE_TEXT["20-dotnet.md"].split("## 20.1")[0],
+)
+
+# --- the migration record exists and is complete ----------------------------------------------
+COVERAGE = ROOT / "docs/migration/phase-9-baseline-coverage.md"
+check("exists: phase-9-baseline-coverage.md", COVERAGE.is_file())
+coverage_text = COVERAGE.read_text(encoding="utf-8") if COVERAGE.is_file() else ""
+for _heading in (
+    "## 1. Inputs",
+    "## 2. Inventory",
+    "## 3. Applicability matrix",
+    "## 4. Semantic preservation",
+    "## 5. Enforcement",
+    "## 6. Traceability",
+    "## 7. Dropped-rule recovery",
+    "## 8. Deviations",
+    "## 9. Unresolved decisions",
+):
+    check("coverage record has " + _heading, _heading in coverage_text)
+
+BASELINE_INPUT = ROOT / "docs/migration/phase-9-baseline-input.md"
+check("exists: phase-9-baseline-input.md", BASELINE_INPUT.is_file())
+
+# --- traceability: every authoritative baseline id reaches both the record and a rule ----------
+YAML_PACKS = ["principles.yaml", "dotnet.yaml", "dotnet_lang.yaml",
+              "python.yaml", "python_lang.yaml"]
+for _pack in YAML_PACKS:
+    check("baseline pack present: " + _pack, (ROOT / _pack).is_file())
+
+
+def keyed_ids(pack: str) -> list[str]:
+    """The explicit `id:` values in a rule pack, qualified the way the matrices identify them."""
+    raw = re.findall(r"^\s*-?\s*id:\s*(\S+)\s*$",
+                     (ROOT / pack).read_text(encoding="utf-8"), re.M)
+    out = []
+    for rid in raw:
+        if rid.startswith("P-DN"):
+            out.append("dotnet.yaml#" + rid)
+        elif rid.startswith("P-PY"):
+            out.append("python.yaml#" + rid)
+        else:
+            out.append(rid)
+    return out
+
+
+KEYED = {pack: keyed_ids(pack) for pack in YAML_PACKS}
+KEYED_TOTAL = sum(len(v) for v in KEYED.values())
+check("the packs still carry exactly 115 keyed rule ids", KEYED_TOTAL == 115)
+for _pack, _expected in [("principles.yaml", 32), ("dotnet.yaml", 12), ("dotnet_lang.yaml", 37),
+                         ("python.yaml", 9), ("python_lang.yaml", 25)]:
+    check(f"{_pack} keyed id count is {_expected}", len(KEYED[_pack]) == _expected)
+
+# the 13 requirements that carry no `id:` in the source and were promoted into matrix rows
+UNKEYED_IDS = [
+    "dotnet.yaml#baseline", "python.yaml#baseline",
+    "dotnet.yaml#toolchain.analyzers", "dotnet.yaml#toolchain.formatter",
+    "dotnet.yaml#toolchain.style_in_build", "dotnet.yaml#toolchain.warnings",
+    "dotnet.yaml#toolchain.packages",
+    "python.yaml#toolchain.linter", "python.yaml#toolchain.formatter",
+    "python.yaml#toolchain.import_sort", "python.yaml#toolchain.type_checker",
+    "python.yaml#toolchain.security", "python.yaml#toolchain.packaging",
+]
+check("13 unkeyed baseline requirements are enumerated", len(UNKEYED_IDS) == 13)
+check("115 keyed + 13 unkeyed reproduce the Phase 2 total of 128",
+      KEYED_TOTAL + len(UNKEYED_IDS) == 128)
+
+# the explicit baseline block: 39 items, Phase 9 migration ids BL-01..BL-39
+BL_IDS = [f"BL-{i:02d}" for i in range(1, 40)]
+if BASELINE_INPUT.is_file():
+    check(
+        "the baseline block still holds 39 items",
+        len(re.findall(r"^\\- ", BASELINE_INPUT.read_text(encoding="utf-8"), re.M)) == 39,
+    )
+
+ALL_BASELINE_IDS = [i for v in KEYED.values() for i in v] + UNKEYED_IDS + BL_IDS
+check("167 baseline requirements are accounted for", len(ALL_BASELINE_IDS) == 167)
+
+_missing_record = [r for r in ALL_BASELINE_IDS if r not in coverage_text]
+check("every baseline id appears in the migration record: "
+      + (", ".join(_missing_record[:5]) or "all present"), not _missing_record)
+
+_missing_rule = [r for r in ALL_BASELINE_IDS if r not in ALL_RULES]
+check("every baseline id is traceable from a rule file: "
+      + (", ".join(_missing_rule[:5]) or "all present"), not _missing_rule)
+
+# Phase 9 ids are assigned in the record, never written back into an authoritative source
+_leaked = [p for p in YAML_PACKS
+           if re.search(r"\bBL-\d\d\b", (ROOT / p).read_text(encoding="utf-8"))]
+check("no Phase 9 BL id was written into a source pack: " + (", ".join(_leaked) or "clean"),
+      not _leaked)
+
+# --- the applicability matrix is complete, unique, and its roll-up has not drifted ------------
+_LABELS = ("mechanical", "partial", "procedural", "currently-unenforced", "not-applicable")
+_matrix_ids: list[str] = []
+_enf_counts: dict[str, int] = {lbl: 0 for lbl in _LABELS}
+for _line in coverage_text.splitlines():
+    if not _line.startswith("| "):
+        continue
+    _cells = [c.strip() for c in re.split(r"(?<!\\)\|", _line.strip("|"))]
+    if len(_cells) != 8 or _cells[4] not in _LABELS:
+        continue
+    _matrix_ids.append(_cells[0])
+    _enf_counts[_cells[4]] += 1
+
+check("the applicability matrix holds one row per requirement", len(_matrix_ids) == 167)
+check("no requirement is represented twice in the matrix",
+      len(set(_matrix_ids)) == len(_matrix_ids))
+check("every matrix row carries an enforcement label",
+      sum(_enf_counts.values()) == len(_matrix_ids))
+for _lbl in _LABELS:
+    check(
+        f"the enforcement roll-up matches the matrix for {_lbl}",
+        f"| `{_lbl}` | {_enf_counts[_lbl]} |" in coverage_text,
+    )
+
+# --- the rules Phase 7 found dropped are present as requirements, not only as gates -----------
+DROPPED = {
+    "Conventional Commits": "### C-1 — Conventional Commits",
+    "SemVer": "### C-2 — Semantic Versioning",
+    "Diataxis": "### C-3 — Documentation structure: Diátaxis",
+    "C4": "### C-4 — Architecture diagrams: C4",
+    "README quickstart + ADR pointer": "### C-5 — README: quickstart and ADR pointer",
+}
+for _label, _needle in DROPPED.items():
+    holders = [n for n, t in RULE_TEXT.items() if _needle in t]
+    check("recovered dropped rule is stated exactly once: " + _label, len(holders) == 1)
+
+check("Conventional Commits states the actual grammar",
+      "BREAKING CHANGE:" in RULE_TEXT["10-principles.md"]
+      and "refactor" in RULE_TEXT["10-principles.md"])
+check("SemVer states the actual bump rule",
+      "MAJOR.MINOR.PATCH" in RULE_TEXT["10-principles.md"])
+check("Diataxis names its four kinds",
+      all(k in RULE_TEXT["10-principles.md"]
+          for k in ("Tutorial", "How-to guide", "Reference", "Explanation")))
+check("C4 names its levels",
+      "System Context" in RULE_TEXT["10-principles.md"]
+      and "Container" in RULE_TEXT["10-principles.md"])
+
+# both source ids survive the consolidation of the duplicated profile conventions
+for _pair in ("dotnet.yaml#P-DN-4", "python.yaml#P-PY-4",
+              "dotnet.yaml#P-DN-6", "python.yaml#P-PY-6"):
+    check("consolidated convention keeps its source id: " + _pair,
+          _pair in RULE_TEXT["10-principles.md"])
+
+# --- the repository-wide principle stays repository-wide --------------------------------------
+check("P17 least privilege is repository-wide, not DB-only",
+      "P-17 — Least privilege (repository-wide)" in RULE_TEXT["10-principles.md"])
+check("P17's operational surfaces are enumerated",
+      "principles#P17" in RULE_TEXT["80-security-ops.md"])
+
+# --- the engineering requirement survives alongside its governance gate ------------------------
+check("DN21 states the suppression requirement itself",
+      "scoped and carries a justification" in RULE_TEXT["20-dotnet.md"]
+      or "scoped and justified" in RULE_TEXT["20-dotnet.md"])
+check("DN21 is not represented only as an ADR trigger",
+      "#pragma warning restore" in RULE_TEXT["20-dotnet.md"])
+
+# --- no TypeScript baseline was invented -------------------------------------------------------
+check("the TS/Angular/Electron gap is recorded verbatim",
+      "TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED"
+      in RULE_TEXT["22-web-typescript.md"])
+check("existing TS tooling is not promoted to baseline authority",
+      "NOT BASELINE AUTHORITY" in RULE_TEXT["22-web-typescript.md"])
+check("the TS decision is named as a human decision",
+      "HUMAN DECISION REQUIRED" in RULE_TEXT["22-web-typescript.md"])
+
+# --- enforcement claims are stated with the honest vocabulary ---------------------------------
+for _needle in ("mechanical", "partial", "procedural", "currently-unenforced"):
+    check("coverage record uses the enforcement label " + _needle, _needle in coverage_text)
+for _rule, _file in (("lang/dotnet#DN8", "20-dotnet.md"), ("lang/dotnet#DN31", "20-dotnet.md"),
+                     ("lang/python#PY4", "21-python.md")):
+    check(_rule + " is recorded as unenforced, not claimed green",
+          "currently-unenforced" in RULE_TEXT[_file])
+check("the re-verified Phase 7 enforcement errors are all recorded",
+      all(r in coverage_text for r in
+          ("lang/dotnet#DN8", "lang/dotnet#DN31", "lang/dotnet#DN16", "lang/python#PY4")))
+
+# --- conflicts are recorded, not reconciled ----------------------------------------------------
+check("the EF-migrations conflict is recorded", "CF-1" in coverage_text)
+check("the conflict names both sources",
+      "BL-10" in RULE_TEXT["20-dotnet.md"] and "50-database.md" in RULE_TEXT["20-dotnet.md"])
+check("the migration invariant is not weakened by the conflict",
+      "NoMigrationTests" in RULE_TEXT["20-dotnet.md"])
+check("deviations are recorded rather than repaired", "DV-1" in coverage_text)
+check("enforcement gaps are recorded rather than closed", "EG-1" in coverage_text)
+
+# --- root CLAUDE.md -----------------------------------------------------------------------------
+CLAUDE_MD = ROOT / "CLAUDE.md"
+check("exists: CLAUDE.md", CLAUDE_MD.is_file())
+claude_text = CLAUDE_MD.read_text(encoding="utf-8") if CLAUDE_MD.is_file() else ""
+check("CLAUDE.md is concise", 0 < len(claude_text.splitlines()) <= 200)
+for _doc in ("identity-plane-final.md", "Synthia-OverallArchitecture-final.md",
+             "RagAgent-Architecture-final.md"):
+    check("CLAUDE.md names architecture authority " + _doc, _doc in claude_text)
+for _gate in ("50-database.md", "30-langgraph.md", "70-adr.md", "90-functional-knowledge.md"):
+    check("CLAUDE.md names the gate " + _gate, _gate in claude_text)
+check("CLAUDE.md names docs/functional/implemented.md",
+      "docs/functional/implemented.md" in claude_text)
+check("CLAUDE.md names the baseline sources",
+      "principles.yaml" in claude_text and "phase-9-baseline-input.md" in claude_text)
+check("CLAUDE.md says Spec Kit artifacts are not authoritative",
+      "not authoritative" in claude_text.lower())
+check("CLAUDE.md distinguishes rules from skills",
+      ".claude/rules/" in claude_text and ".claude/skills/" in claude_text)
+check("CLAUDE.md does not inline the baseline", "principles#P1" not in claude_text)
+_listed = [n for n in RULE_TEXT if n in claude_text]
+check("CLAUDE.md indexes every rule file", len(_listed) == len(RULE_TEXT))
+
+# --- every .claude path referenced by a rule or by CLAUDE.md actually exists --------------------
+_refs = set()
+for _text in list(RULE_TEXT.values()) + [claude_text]:
+    for _m in re.finditer(r"`(\.claude/[A-Za-z0-9_./-]+)`", _text):
+        _refs.add(_m.group(1))
+_broken = sorted(r for r in _refs
+                 if "*" not in r and "<" not in r and not (ROOT / r).exists())
+check("every .claude path referenced by the rules exists: "
+      + (", ".join(_broken[:5]) or "all resolve"), not _broken)
+
+# --- the pre-existing governance rules were not rewritten to fit the baseline ------------------
+for _name, _needle in (("30-langgraph.md", "execution_treatment"),
+                       ("50-database.md", "identity-bearing"),
+                       ("70-adr.md", "MADR"),
+                       ("90-functional-knowledge.md", "implemented.md")):
+    check("pre-existing governance intact: " + _name, _needle in RULE_TEXT[_name])
 
 print(f"{CHECKS - len(FAILURES)}/{CHECKS} checks passed")
 for failure in FAILURES:

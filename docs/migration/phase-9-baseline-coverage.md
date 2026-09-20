@@ -16,6 +16,13 @@ represented?*
 | **Repository content established by** | `git ls-files` (generated and untracked residue excluded) |
 | **Predecessors** | `docs/migration/phase-2-authority-model.md`, `docs/migration/phase-2-coverage-matrix.md`, `docs/migration/phase-7-validation.md`, `docs/migration/phase-8-worktree-guard.md` |
 
+> **Amended by Phase 10.** `docs/migration/phase-10-baseline-reconciliation.md` records an
+> explicit human decision that resolved conflict **CF-1** / decision **UD-3**. The `BL-10` row in
+> §3.7, the enforcement roll-up in §5.2, the semantic-preservation roll-up in §4, and §9.1 / §9.3
+> below are updated in place to reflect it. **The requirement count is unchanged at 167** — the
+> amendment rewords one item, it does not add or remove one. Everything else in this document is
+> the Phase 9 record as written.
+
 ---
 
 ## 1. Inputs
@@ -292,7 +299,7 @@ brief warns against creating content merely because a filename was proposed.
 | BL-07 | Contract conventions: camelCase JSON; plural resource nouns; kebab-case multi-word segments; HTTP verbs carry the action | .NET / C# | `20-dotnet.md` §20.3 | partial | MIGRATED_PARTIALLY_ENFORCED | preserved | — |
 | BL-08 | Pagination keyset/cursor (opaque cursor + limit, stable monotonic ordering); typed query-string filters, no OData; ?sort=field / -field, whitelisted fields only | .NET / C# | `20-dotnet.md` §20.3 | procedural | MIGRATED_TO_RULE | **narrowed — source is truncated.** Every legible requirement is migrated in full; the offset/limit clause is unreadable in the source and could not be migrated | D-2 / UD-4 |
 | BL-09 | Data access: EF Core 10 + Npgsql | .NET / C#; database | `20-dotnet.md` §20.4 | mechanical | MIGRATED_AND_MECHANICALLY_ENFORCED | preserved | — |
-| BL-10 | Migrations: EF Migrations bundle in CI/deploy step | .NET / C#; database | `20-dotnet.md` §20.4 (recorded, not applied) | not-applicable | NOT_APPLICABLE_WITH_REASON + CONFLICT | **CONFLICTING — recorded, not reconciled.** Contradicts `50-database.md` §50.7 and A2 §8.1 (Alembic owns all schema; .NET owns no migrations, mechanically enforced by NoMigrationTests) | CF-1 / UD-3 |
+| BL-10 | Migrations: exactly one versioned migration mechanism, executed as a gated job in the CI/deploy step before revision activation, never at application startup; Alembic under `ragcore/migrations/`; the .NET deployable owns no migrations and applies no DDL | .NET / C#; Python; database; deployment/runtime | `20-dotnet.md` §20.4 + `50-database.md` §50.7 | mechanical | MIGRATED_AND_MECHANICALLY_ENFORCED | **amended by explicit human decision — Phase 10.** The EF attribution is withdrawn; the requirement it carried is preserved | CF-1 / UD-3 **CLOSED** — `phase-9-baseline-input.md` App. A.1 |
 | BL-11 | Transaction and concurrency model: optimistic only, no lock anywhere | .NET / C#; database | `20-dotnet.md` §20.4 | procedural | MIGRATED_TO_RULE | preserved | — |
 | BL-12 | Isolation: Read Committed default, Serializable on invariant transactions | .NET / C#; database | `20-dotnet.md` §20.4 | procedural | MIGRATED_TO_RULE | preserved | — |
 | BL-13 | Data lifecycle: soft-delete + global query filter + audit columns | .NET / C#; database | `20-dotnet.md` §20.4 | partial | MIGRATED_PARTIALLY_ENFORCED | preserved | — |
@@ -355,7 +362,8 @@ than `preserved` is explained.
 | **narrowed** | 1 | `BL-08` — explained below |
 | **altered** | 0 | — |
 | **missing** | 0 | — |
-| **conflicting (migrated, not reconciled)** | 2 | `BL-10`, `BL-38` — explained below and in §9 |
+| **conflicting (migrated, not reconciled)** | 1 | `BL-38` — explained below and in §9 |
+| **amended by explicit human decision (Phase 10)** | 1 | `BL-10` — the EF attribution withdrawn, the requirement preserved; §4.2 |
 | **Total** | **167** | |
 
 ### 4.1 The one narrowing — `BL-08`
@@ -377,11 +385,34 @@ is migrated **in full** to `20-dotnet.md` §20.3.
 **The truncated clause was not reconstructed, guessed, or filled from general knowledge.** Recorded
 as defect **D-2**, decision **UD-4**.
 
-### 4.2 The two conflicts — `BL-10`, `BL-38`
+### 4.2 The two conflicts — `BL-10` (closed), `BL-38` (open)
 
-Both are migrated **as written** into the rule files, each carrying an explicit conflict notice and
-an explicit statement of which rule governs in the meantime. Neither was silently reconciled, and
-neither caused application code or a test to change. See §9.
+Both were migrated **as written** into the rule files in Phase 9, each carrying an explicit conflict
+notice and an explicit statement of which rule governs in the meantime. Neither was silently
+reconciled, and neither caused application code or a test to change.
+
+**`BL-10` — closed in Phase 10 by explicit human decision.** The baseline input was amended to
+withdraw the **EF attribution** while preserving the requirement the item actually carried: *one
+versioned migration mechanism, executed as a gated job in the CI/deploy step, never at application
+startup.* The amendment therefore changes the item's **mechanism attribution and abstraction
+level**, not its obligation:
+
+| | Before | After |
+|---|---|---|
+| Named mechanism | EF Migrations, produced as a bundle from the .NET side | Alembic, under `ragcore/migrations/` |
+| Execution point | a CI/deploy step | a gated job in the CI/deploy step, **before revision activation**, never at application startup |
+| Abstraction level | a .NET framework choice | a repository- and deployment-level rule about schema ownership and execution point |
+| Scope | `.NET / C#`, database | `.NET / C#` (owns none), Python (owns it), database, deployment/runtime |
+| Rule in force | `50-database.md` (the conflict notice said so) | `50-database.md` — **unchanged** |
+
+The semantic scope is **narrowed in one respect and widened in another, deliberately**: the EF
+requirement is withdrawn (narrowing), and the "never at application startup" and
+"before revision activation" qualifiers — already binding under `50-database.md` §50.7 and
+`80-security-ops.md` §80.6 — are now stated in the input too (widening the *text*, not the
+*obligation*). No obligation that was in force before the amendment stopped being in force, and
+none was newly created. Full record: `docs/migration/phase-9-baseline-input.md` Appendix A.1.
+
+**`BL-38` — still open.** Conflict **CF-2**, decision **UD-6**. Unchanged by Phase 10. See §9.
 
 ### 4.3 Defects that could have caused silent loss
 
@@ -416,11 +447,11 @@ Counted directly from the §3 matrices — 167 rows, 167 distinct rule ids, no d
 
 | Enforcement | Count | Share |
 |---|---|---|
-| `mechanical` | 78 | 47% |
+| `mechanical` | 79 | 47% |
 | `partial` | 47 | 28% |
 | `procedural` | 26 | 16% |
 | `currently-unenforced` | 14 | 8% |
-| `not-applicable` | 2 | 1% |
+| `not-applicable` | 1 | 1% |
 | **Total** | **167** | 100% |
 
 The `mechanical` share is high because the Python stack is almost entirely gated by Ruff and mypy
@@ -571,18 +602,29 @@ would be baseline changes requiring an ADR; the rest are the human decisions in 
 ### 9.1 Genuine conflicts between authoritative sources
 
 Per `00-authority.md` §00.6 and Phase 9 brief §22: **stopped, recorded, no winner chosen.**
+Phase 10 closed **CF-1** — not by choosing a winner, but by a human amending the input that
+was the outlier. **CF-2 remains open and unchosen.**
 
-#### CF-1 — EF Migrations vs Alembic-owns-all-schema
+#### CF-1 — EF Migrations vs Alembic-owns-all-schema — **CLOSED (Phase 10)**
+
+```text
+STATUS: CLOSED by explicit human decision, Phase 10.
+Closed by amending the baseline INPUT. No architecture changed. No rule in force changed.
+No test, analyzer, configuration or application file was touched.
+```
 
 | | |
 |---|---|
-| **Source A** | `docs/migration/phase-9-baseline-input.md`, item `BL-10`: *"Migrations: EF Migrations bundle in CI/deploy step."* |
-| **Source B** | `.claude/rules/50-database.md` §50.7 and **A2 §8.1**: Alembic under `ragcore/migrations/` is the single schema-migration mechanism; *"The .NET side owns **no** migrations"*; *"Do not introduce EF Core migrations, a second migration tool, a second migration directory, or startup-time DDL."* |
-| **Exact conflict** | A requires an EF Migrations bundle produced and run from the .NET side. B forbids the .NET side from owning any migration at all. They cannot both hold. |
-| **Affected stack** | `.NET / C#`, database, deployment pipeline |
-| **Impact** | Implementing A would require introducing EF migrations to `dotnet/**`, adding a second migration mechanism and a second migration directory, and **deleting or weakening `dotnet/tests/Synthia.ArchitectureTests/NoMigrationTests.cs`** — which `40-testing.md` §40.1 forbids outright. It would also change the deployment ordering that `80-security-ops.md` §80.6 and `.github/workflows/migrations.yml` depend on. |
-| **In force meanwhile** | **B.** `50-database.md` is a mandatory governance rule with an accepted procedure and a live mechanical gate; `BL-10` is an unreconciled migration input. Recorded in `20-dotnet.md` §20.4. |
-| **Human decision required** | **UD-3** — either (i) confirm `BL-10` does not apply to this repository and amend the baseline block, or (ii) accept an ADR changing the schema-ownership architecture, which is an A2 change under `70-adr.md` §70.2 A(6) and D(4). |
+| **Source A (as recorded in Phase 9)** | `docs/migration/phase-9-baseline-input.md`, item `BL-10`: *"Migrations: EF Migrations bundle in CI/deploy step."* |
+| **Source B** | `.claude/rules/50-database.md` §50.7 and **A2 §8.1**: Alembic under `ragcore/migrations/` is the single schema-migration mechanism; *"The .NET side owns **no** migrations"* |
+| **Exact conflict** | A required an EF Migrations bundle produced and run from the .NET side. B forbids the .NET side from owning any migration at all. They could not both hold. |
+| **Resolution** | **Source A amended.** The human decision supplied in the Phase 10 brief states that PostgreSQL schema migrations remain owned and executed by the Python/RagCore Alembic path, and that there is no requirement to move them into .NET/EF Core. The baseline block was amended accordingly — option (i) of UD-3. |
+| **Which side won** | Neither was chosen by Claude. A human decided, and the decision confirmed the model **A2 and `50-database.md` already stated**. Phase 9's "in force meanwhile: B" is now simply "in force: B", with the input agreeing. |
+| **Amendment record** | `docs/migration/phase-9-baseline-input.md` Appendix A.1 — original wording, replacement wording, reason, authority, classification, and the ADR determination |
+| **Phase record** | `docs/migration/phase-10-baseline-reconciliation.md` |
+| **ADR required?** | **No.** Assessed against every `70-adr.md` §70.2 trigger in Appendix A.2. The amendment introduces no architecture change and contradicts no migrated baseline rule — it removes a contradiction with one. |
+| **Rule files updated** | `20-dotnet.md` `BL-10` (conflict notice → closure notice; `NoMigrationTests` still named as the live gate), `21-python.md` §21.9 (`BL-10` removed from the no-Python-counterpart list, since the amended item applies to `ragcore/**` directly), `50-database.md` §50.7 (closure note; **section text unchanged**) |
+| **Decision** | **UD-3 — CLOSED** |
 
 #### CF-2 — SDK container publish vs chiseled base image
 
@@ -612,7 +654,7 @@ editorial correction, not an ADR."*
 |---|---|---|---|
 | **UD-1** | TypeScript / Angular / Electron baseline: *principles-only*, *a separately supplied TS baseline*, or *deliberately ungoverned* | Blocker **B-4**; `22-web-typescript.md` beyond its current scope statement | Confirmation (option 1) or ADR (options 2, 3) |
 | **UD-2** | `CA2007` / `DN-8`: accept the relaxation by ADR, or restore `severity = error` for library projects | DV-1 | ADR (`70-adr.md` §70.2 B(1)) or a configuration change |
-| **UD-3** | `BL-10` vs `50-database.md`/A2 schema ownership | CF-1 | Baseline-block amendment, or an ADR changing A2 |
+| ~~**UD-3**~~ | ~~`BL-10` vs `50-database.md`/A2 schema ownership~~ — **CLOSED in Phase 10**: baseline block amended; Alembic/RagCore ownership confirmed; no ADR required | ~~CF-1~~ **closed** | Baseline-block amendment — taken |
 | **UD-4** | The truncated `BL-08` offset/limit requirement | CF/D-2 | Editorial correction to the baseline block |
 | **UD-5** | Whether to add `T20` to ruff `select`, making `PY-4` mechanical | DV-10 | A configuration change realizing the existing baseline (no ADR needed — it *strengthens* toward the baseline) |
 | **UD-6** | `BL-38` vs `BL-39` build mode | CF-2, DV-11 | Editorial correction to the baseline block |
@@ -677,5 +719,6 @@ Every other rule appears in exactly one place.
   (Phase 9 brief §24).
 - It does not retire Spec Kit. `.specify/**`, `specs/**` and the ten `speckit-*` skills are
   untouched by Phase 9.
-- It does not declare readiness for retirement. Blocker **B-4** (UD-1) remains open, as do CF-1 and
-  CF-2.
+- It does not declare readiness for retirement. Blocker **B-4** (UD-1) remains open, as does
+  **CF-2**. **CF-1 was closed in Phase 10** — see
+  `docs/migration/phase-10-baseline-reconciliation.md`.

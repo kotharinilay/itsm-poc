@@ -166,6 +166,14 @@ them.
 | Migration validation already exists in CI: single head, upgrade from base, models-match-DDL, every downgrade | `.github/workflows/migrations.yml`, `ragcore/tests/migrations/` |
 | Migrations run as a gated job **before** revision activation, never at application startup | `.github/workflows/migrations.yml`; `ragcore/src/ragcore/graph/checkpointer.py` |
 
+> **The baseline input now agrees with this section.** Until Phase 10 the explicit baseline block
+> read *"Migrations: EF Migrations bundle in CI/deploy step"*, recorded as conflict **CF-1**. On an
+> explicit human decision the block was amended to withdraw the EF attribution while preserving the
+> requirement it carried — one versioned migration mechanism, gated in CI/deploy, never at
+> application startup. **CF-1 is closed. Nothing in this section changed**, and nothing in it is
+> weakened by the closure. Amendment record: `docs/migration/phase-9-baseline-input.md`
+> Appendix A.1; phase record: `docs/migration/phase-10-baseline-reconciliation.md`.
+
 **Do not change the migration mechanism under this rule.** Do not introduce EF Core migrations, a
 second migration tool, a second migration directory, or startup-time DDL.
 

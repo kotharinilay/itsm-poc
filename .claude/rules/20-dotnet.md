@@ -203,23 +203,30 @@ boundary. No raw exception detail reaches a client.
 *Source: `BL-09` · Enforcement: mechanical (`Directory.Packages.props` pins the versions centrally;
 `DataAccessDisciplineTests`)*
 
-### BL-10 — Migrations — ⚠ CONFLICT, UNRESOLVED
-The baseline block states: **"Migrations: EF Migrations bundle in CI/deploy step."**
+### BL-10 — Migrations — the .NET side owns none
+**This deployable owns no schema.** It introduces no EF Core migration, no migration bundle, no
+second migration tool, no second migration directory and no startup-time DDL. It reads through
+published views that RagCore's Alembic history creates and versions.
 
-This **conflicts** with `.claude/rules/50-database.md` §50.7 and with A2 §8.1, which establish that
-**Alembic under RagCore is the single schema-migration mechanism and the .NET side owns no
-migrations** — an invariant mechanically enforced by
-`dotnet/tests/Synthia.ArchitectureTests/NoMigrationTests.cs`.
+The platform schema is owned by exactly one versioned migration mechanism — **Alembic, under
+`ragcore/migrations/`** — executed as a gated job in the CI/deploy step **before** the new
+application revision is activated, never at application startup. The full procedure is
+`.claude/rules/50-database.md`, which owns this subject; it is not restated here.
 
-Per `.claude/rules/00-authority.md` §00.6 this is **recorded, not resolved.** It is conflict
-**CF-1** in `docs/migration/phase-9-baseline-coverage.md` §9.
+> **Conflict CF-1 — closed in Phase 10.** The baseline block previously read *"Migrations: EF
+> Migrations bundle in CI/deploy step"*, which contradicted `.claude/rules/50-database.md` §50.7
+> and A2 §8.1. On an explicit human decision, the baseline input was amended to withdraw the EF
+> attribution while preserving the requirement it actually carried — one versioned mechanism,
+> gated in CI/deploy, never at startup. The amendment record is
+> `docs/migration/phase-9-baseline-input.md` Appendix A.1; the phase record is
+> `docs/migration/phase-10-baseline-reconciliation.md`. **The rule in force did not change**: it
+> was `50-database.md` before the amendment and it is `50-database.md` after it.
 
-**Until a human resolves it, the governing rule in force is `.claude/rules/50-database.md`:** do not
-introduce EF Core migrations, a second migration tool, a second migration directory, or startup-time
-DDL. `50-database.md` is a mandatory governance rule with an accepted procedure and a live
-mechanical gate; the baseline block is an unreconciled input. **Do not weaken or delete
-`NoMigrationTests` to satisfy `BL-10`.**
-*Source: `BL-10` · Enforcement: the **opposite** requirement is mechanically enforced*
+**`dotnet/tests/Synthia.ArchitectureTests/NoMigrationTests.cs` is the live gate on this rule.
+Do not weaken or delete it** (`.claude/rules/40-testing.md` §40.1).
+*Source: `BL-10` (amended, Phase 10) · Enforcement: mechanical — `NoMigrationTests` on the .NET
+side; `.github/workflows/migrations.yml` (single head, upgrade from base, models match DDL, every
+downgrade) on the owning side*
 
 ### BL-11 — Transaction and concurrency model
 **Optimistic concurrency only. No lock anywhere.** No pessimistic row locks, no `SELECT … FOR

@@ -315,9 +315,9 @@ is not duplicated here.
 The following .NET baseline rules have **no Python counterpart in any authoritative source**, and
 none is invented here (`.claude/rules/00-authority.md` §00.5, Phase 9 brief §6):
 
-- `EF Core 10 + Npgsql` (`BL-09`), EF migrations (`BL-10`), `AsNoTracking`/compiled queries
-  (`BL-14`) — .NET data-access rules. Python persistence in this repository is SQLAlchemy +
-  Alembic, governed by `.claude/rules/50-database.md`, **not** by a translated EF rule.
+- `EF Core 10 + Npgsql` (`BL-09`) and `AsNoTracking`/compiled queries (`BL-14`) — .NET
+  data-access rules. Python persistence in this repository is SQLAlchemy + Alembic, governed by
+  `.claude/rules/50-database.md`, **not** by a translated EF rule.
 - `IExceptionHandler` → `ProblemDetails` (`BL-19`) — a .NET implementation rule. Both Python
   services emit problem-details-shaped errors; that is **existing implementation, not baseline
   authority**.
@@ -328,6 +328,14 @@ none is invented here (`.claude/rules/00-authority.md` §00.5, Phase 9 brief §6
 - Minimal APIs, URI-segment versioning, `IHttpClientFactory` typed clients, `DelegatingHandler`
   chains, Polly resilience, `MapHealthChecks` (`BL-04`, `BL-05`, `BL-25`, `BL-28`, `BL-31`,
   `BL-32`) — .NET framework mechanisms.
+
+> **`BL-10` is no longer on this list.** Until Phase 10 it read *"EF Migrations bundle in
+> CI/deploy step"* and was recorded here as a .NET-only rule with no Python counterpart. The
+> amended item (`docs/migration/phase-9-baseline-input.md` Appendix A.1) is a **repository- and
+> deployment-level** requirement — one versioned migration mechanism, executed as a gated job in
+> CI/deploy, never at application startup — and it applies to `ragcore/**` **directly**, because
+> Alembic under `ragcore/migrations/` is that mechanism. It is not a translated EF rule; it is the
+> rule the amendment states, and the procedure for it is `.claude/rules/50-database.md`, in full.
 
 Where an equivalent obligation genuinely exists it is stated as the **repository-wide principle** in
 `.claude/rules/10-principles.md` and applies to Python from there — not as a copy of the .NET rule.

@@ -53,15 +53,22 @@ or the gate becomes advice.
 
 ## Branch policy
 
-On the default branch, matching the GitHub configuration:
+> **Verified 2026-09-22: `main` on the GitHub remote has NO branch protection.** The API returns
+> *Branch not protected*, so no required status check is enforced today and a direct push to `main`
+> is possible. The policy below is therefore **the target state, not a description of the current
+> one**, and there is no existing enforcement for an Azure DevOps policy to be made equivalent to.
+> Registered as **UD-12** in `docs/governance/open-items.md`.
+
+The target state on the default branch:
 
 - **No direct pushes.** Every change arrives by pull request.
 - **Build validation** for each pipeline above, required, with the stated path filter.
 - **Linear history** is not required and is not assumed; nothing in the gates depends on it.
 
-If the repository stays on GitHub while Azure DevOps runs the pipelines, wire the Azure DevOps
-GitHub service connection and keep GitHub branch protection as the mechanism that enforces the
-checks. If it moves to Azure Repos, the equivalent is a branch policy per pipeline. **Either way
+The repository is hosted on **GitHub** (`kotharinilay/itsm-poc`) and **no Azure DevOps
+organisation or project is connected to it**. Nothing here runs until one exists. If the repository
+stays on GitHub while Azure DevOps runs the pipelines, wire the Azure DevOps GitHub service
+connection and keep GitHub branch protection as the mechanism that enforces the checks. If it moves to Azure Repos, the equivalent is a branch policy per pipeline. **Either way
 the required set above is the same**, and the move is not an occasion to drop one.
 
 ## Before deleting `.github/`

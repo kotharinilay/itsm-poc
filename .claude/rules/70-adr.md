@@ -50,9 +50,15 @@ Consequences of that split, all of them binding:
   *contents* are not a source for reconstructing current architecture or the current baseline. Read
   them for structure and for history; never cite one as the reason a rule now says something.
 - An ADR that is *inline in A3* (ADR-001…ADR-012 in `RagAgent-Architecture-final.md` §4) is part of
-  an authoritative document and is authoritative. It is a different thing from `docs/adr/NNNN`, and
-  the two numbering spaces must never be conflated. Whether that reading is confirmed is **OQ-5**
-  in `docs/governance/open-items.md` §6, still open.
+  an authoritative document and **is authoritative**. §4 is an ordinary numbered section of A3,
+  carried in its Contents, and neither A3 nor `.claude/rules/00-authority.md` §00.2 carves it out
+  of what A3 owns — §00.2 names it explicitly. This reading is also the one the baseline already
+  depends on: seven of the seventeen mandatory LangGraph triggers in
+  `.claude/rules/30-langgraph.md` §30.4 rest on ADR-003, ADR-004, ADR-005, ADR-008, ADR-009,
+  ADR-011 and ADR-012, which would rest on nothing if §4 were not normative.
+- **The two numbering spaces must never be conflated.** `ADR-001`…`ADR-012` are sections of A3;
+  `docs/adr/0001`…`0012` are records in this repository's own sequence. They are different
+  instruments with coincidentally overlapping numbers, and a citation always says which it means.
 
 ## 70.2 When an ADR is mandatory
 

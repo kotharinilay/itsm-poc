@@ -1561,7 +1561,16 @@ check("the parity record states the criteria for deleting .github",
 check("the parity record does not claim the pipelines have run",
       "They have not been run" in parity or "not met" in parity)
 check("the parity record names the one partial replacement, rather than rounding it up",
-      "partial, deliberately" in parity)
+      "partial by design" in parity and "UD-11" in open_items)
+check("the parity record separates definition equivalence from execution",
+      "definition-equivalent, not executed" in parity
+      and "Not executable in current environment" in parity)
+check("the parity record claims no Azure DevOps execution it cannot show",
+      "executed and verified" not in parity.replace("`full — executed and verified` may be", ""))
+check("the branch-protection finding is registered rather than assumed away",
+      "UD-12" in open_items and "no branch protection" in parity.lower())
+check("a red security gate is recorded rather than passed over",
+      "UD-13" in open_items)
 check("the parity record states that no gate was weakened",
       "No gate was weakened, dropped or made conditional" in parity)
 check("the parity record does not claim an open gap was closed by the migration",

@@ -14,11 +14,32 @@ exists. Where a capability is absent, that absence is itself evidenced by
 code: a `501` response, a `NotImplementedError`, an unconditional `None` binding, or a raised
 refusal.
 
-**Audited revision.** `de27d8156644322ee5889ba2a8c29fab99f876ea` (`de27d81`). The three commits preceding this audit (`9ab956e`, `d2d2c9d`, `de27d81`) touched
-only `docs/` and `.claude/`; **no application artifact changed between `5cdcd26` and the audited
-revision**, which was verified with `git diff --stat`. The findings below were nonetheless
-re-derived from the code rather than carried forward, and several statements in the previous
-generated snapshot were found to be wrong — see §19.
+**Audited revision.** `19b8daca06514819a97b872e6890042ae5891421` (`19b8dac`), re-verified
+2026-09-22. Commits after it in this branch change governance documents only and no application
+artifact, so they do not move the revision this record describes.
+
+**How this revision was established.** The findings below were first derived from the code at
+`de27d81`. They are carried to `19b8dac` **only because the implementation between the two
+revisions was proven unchanged**, not because they were assumed to still hold:
+
+- Every one of the 81 changed Python files was parsed at both revisions and compared as an
+  abstract syntax tree with docstrings removed. **72 are byte-for-byte identical after that
+  normalisation.** The remaining 9 differ only in the text of a string literal inside a
+  `raise` or a docstring — a citation repointed, no control flow, no new branch, no changed
+  condition.
+- The 84 changed non-Python application and build files were compared with comments and
+  whitespace normalised away. The `.cs`, `.ts`, Dockerfile, ingress-manifest and policy files
+  differ only in comment and description text.
+- `build/contracts/**` differs **only** in OpenAPI `description` strings. No path, operation,
+  status code, schema or field changed, so no contract statement below is affected.
+- Every suite was then run at `19b8dac` and passed: RagCore 1301, Integrations 155, the .NET
+  solution built with `-warnaserror` at zero warnings with every suite green, the web workspace
+  (unit, architecture, accessibility, CSP) and the Electron security suite at 178.
+
+**What that does and does not license.** It licenses stating that the behaviour described below is
+the behaviour of `19b8dac`. It does not license a new claim: nothing was added to this record on
+the strength of the re-verification, and several statements in an earlier generated snapshot were
+found to be wrong at the original audit — see §19.
 
 **Evidence scope.** Only files tracked by git were treated as source. Untracked build output —
 `bin/`, `obj/`, `.venv/`, `__pycache__/`, `node_modules/`, Angular cache, `apps/desktop/release/` —
@@ -839,7 +860,18 @@ Playwright a11y and CSP suites (require a Chromium install), and `smoke-images.s
 ### 16.3 CI gates that exist
 
 Twelve GitHub Actions workflows: `ragcore`, `integrations`, `dotnet`, `web`, `desktop`, `contracts`,
-`boundaries`, `edge`, `migrations`, `images`, `security`, `base-image-digests`.
+`boundaries`, `edge`, `migrations`, `images`, `security`, `base-image-digests`. **These are the
+gates that actually execute**; runs are observable in the repository's Actions history.
+
+**Fifteen Azure DevOps pipeline definitions exist under `azure-pipelines/` and have never run —
+`Wired but inert`.** No Azure DevOps organisation or project is connected to this repository, so
+nothing there has produced a result. They parse as YAML and every `script` block passes `bash -n`;
+that is static validation, not execution. `azure-pipelines/PARITY.md` §1a records the status of
+each one.
+
+**The scheduled `security` workflow is currently failing**, reporting secret-scan findings
+(run `35599755535`, 2026-09-21). The gate works; the finding is unresolved and registered as
+**UD-13** in `docs/governance/open-items.md`.
 
 Implemented gates include ruff lint and format, `mypy --strict` and pytest; `dotnet build -warnaserror`,
 `dotnet format --verify-no-changes` and `dotnet test`; eslint, prettier, `tsc -b`, the Angular build,

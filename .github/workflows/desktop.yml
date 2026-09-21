@@ -1,8 +1,8 @@
 name: desktop
 
-# The Electron security suite. Every assertion corresponds to a control the constitution states
-# unconditionally, and each fails when its switch is flipped - that is the gate
-# (constitution Principle VII, plan Stage 4).
+# The Electron security suite. Every assertion corresponds to a control
+# .claude/rules/24-electron.md states unconditionally, and each fails when its switch is
+# flipped - that is the gate (24-electron.md 24.1-24.5).
 on:
   push:
     branches: [main]

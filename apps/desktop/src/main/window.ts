@@ -7,7 +7,7 @@
  * change silently drops.
  *
  * The endpoint runs inside a customer network and is outside platform control. Anything it decides
- * is a decision an attacker can make instead — so it decides nothing (constitution Principle VII).
+ * is a decision an attacker can make instead — so it decides nothing (FE-EL-1, .claude/rules/24-electron.md).
  */
 
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
@@ -15,7 +15,8 @@ import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 /**
  * `webPreferences` for **every** window.
  *
- * `sandbox` is unconditional here. The constitution says "where compatible"; plan Stage 4 resolves
+ * `sandbox` is unconditional here. FE-EL-2 (.claude/rules/24-electron.md) says "where
+ * compatible"; this scaffold resolves
  * that discretion, because the one thing that breaks the sandbox — a preload needing Node built-ins
  * — does not apply to a preload that exposes a narrow typed bridge and nothing else. Turning it off
  * requires an ADR, not a code comment.

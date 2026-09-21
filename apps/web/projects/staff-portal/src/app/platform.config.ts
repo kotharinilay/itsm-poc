@@ -3,7 +3,7 @@ import type { PlatformApiConfig } from 'platform-core';
 /**
  * Staff portal runtime configuration.
  *
- * No secret here, and none may be added (constitution §Secrets). One gateway origin and no second
+ * No secret here, and none may be added (FE-SH-2, .claude/rules/22-web-typescript.md). One gateway origin and no second
  * platform origin (spec FR-SURF-017). Deployed values come from the hosting tier.
  */
 export const STAFF_PORTAL_CONFIG: PlatformApiConfig = {

@@ -7,7 +7,7 @@ import type { AuthSession, AuthStatus } from './auth-session';
 /**
  * The one authentication integration point for all three surfaces.
  *
- * Centralised per the constitution §Angular: "Authentication and token handling … are each
+ * Centralised per FE-NG-4 (.claude/rules/23-angular.md): authentication and token handling are each
  * centralized rather than repeated." A surface asks this service who is signed in; it never talks
  * to an identity library, and it never handles a token.
  *
@@ -52,7 +52,7 @@ export class AuthService {
    * The current access token, or `null` when nobody is signed in or no provider is registered.
    *
    * The scaffold registers no provider, so this is `null` throughout Stage 3 — which is the honest
-   * answer, not a stub pretending to be signed in (constitution P-IX).
+   * answer, not a stub pretending to be signed in.
    */
   accessToken(): Observable<string | null> {
     return this.tokenProvider?.getAccessToken() ?? EMPTY;

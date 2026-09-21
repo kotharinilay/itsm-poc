@@ -10,7 +10,8 @@ import {
 /**
  * The one realtime integration point for all three surfaces.
  *
- * Centralised per the constitution §Angular: realtime/SignalR infrastructure is centralized rather
+ * Centralised per FE-NG-4 (.claude/rules/23-angular.md): realtime/SignalR infrastructure is
+ * centralized rather
  * than repeated.
  *
  * ## Reconnect rebuilds from the platform, not from missed notifications

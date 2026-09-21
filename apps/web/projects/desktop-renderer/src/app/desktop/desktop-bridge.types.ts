@@ -15,7 +15,8 @@
  *
  * Nothing on this bridge carries authority. There is no member that reports a role, a tenant, a
  * permission or an approval state, and there must never be one: every such decision is made
- * server-side and re-verified server-side (constitution Principle VII). The bridge reports facts
+ * server-side and re-verified server-side (FE-EL-1, .claude/rules/24-electron.md). The bridge
+ * reports facts
  * about the host and the origins it was configured with — and nothing else.
  */
 

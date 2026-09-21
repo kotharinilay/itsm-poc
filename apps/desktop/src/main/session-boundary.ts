@@ -7,7 +7,7 @@
  *
  * That is not an omission to be filled in later. Sign-in is interactive against the Entra
  * authority and happens in the renderer, against the platform, over HTTPS — and every decision
- * that follows is made server-side and re-verified server-side (constitution Principle VII). A
+ * that follows is made server-side and re-verified server-side (FE-EL-1, .claude/rules/24-electron.md). A
  * main process that held the token would be a second place to attack for a capability the host
  * does not need, on a machine inside a customer network that the platform does not control.
  *

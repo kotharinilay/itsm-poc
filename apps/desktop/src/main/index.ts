@@ -8,7 +8,7 @@
  * rules is what lets the rules be proven in CI on a machine with no display.
  *
  * The host is thin and **decides nothing**. No business authorization decision exists here or in
- * the renderer (constitution Principle VII).
+ * the renderer (FE-EL-1, .claude/rules/24-electron.md).
  *
  * Script execution is NOT implemented — see `endpoint-execution-boundary.ts`, which refuses
  * unconditionally and is reachable from no IPC channel.
@@ -148,7 +148,7 @@ function createWindow(): BrowserWindow {
   applyNavigationPolicy(window.webContents, config, (url) => {
     // Double-checked: `decideWindowOpen` already applied the allow-list, and this re-applies it at
     // the one call site that hands a string to the operating system. `shell.openExternal` MUST
-    // NEVER receive an untrusted URL (constitution Principle VII), so it is checked twice.
+    // NEVER receive an untrusted URL (FE-EL-8, .claude/rules/24-electron.md), so it is checked twice.
     if (isExternalOpenAllowed(url, config)) {
       void shell.openExternal(url);
     }

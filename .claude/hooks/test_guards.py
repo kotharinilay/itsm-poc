@@ -200,9 +200,9 @@ check("a guard that cannot read its input does not block", malformed.returncode 
 
 # --- H5: the ADR surface, and only the ADR surface --------------------------------------------
 ADR_PATHS = [
-    "docs/adr/0010-a-new-decision.md",
+    "docs/adr/0011-a-new-decision.md",
     "docs/adr/0001-ragcore-owns-orchestration-dotnet-owns-read.md",
-    BS.join(["docs", "adr", "0010-a-new-decision.md"]),
+    BS.join(["docs", "adr", "0011-a-new-decision.md"]),
 ]
 for _p in ADR_PATHS:
     check("H5 governs " + _p, h5.is_governed(_p))
@@ -229,15 +229,15 @@ for _p in ADR_PATHS:
 
 # --- H5: the next number is read off the existing history -------------------------------------
 KNOWN = h5.existing_numbers()
-check("H5 sees the nine historical records", sorted(KNOWN) == list(range(1, 10)))
+check("H5 sees the ten historical records", sorted(KNOWN) == list(range(1, 11)))
 check(
     "H5 excludes the index from the record set",
     all("readme" not in n.lower() for n in KNOWN.values()),
 )
-check("the next ADR number is 0010", max(KNOWN) + 1 == 10)
+check("the next ADR number is 0011", max(KNOWN) + 1 == 11)
 
 # --- H5: structural validation of a new record ------------------------------------------------
-VALID_ADR = """# 0010. A deliberate decision about something
+VALID_ADR = """# 0011. A deliberate decision about something
 
 - **Status:** Proposed
 - **Date:** 2026-09-20
@@ -266,8 +266,8 @@ def h5_problems(path: str, content: str | None) -> list[str]:
 
 
 check(
-    "a valid 0010 record passes",
-    h5_problems("docs/adr/0010-a-deliberate-decision.md", VALID_ADR) == [],
+    "a valid 0011 record passes",
+    h5_problems("docs/adr/0011-a-deliberate-decision.md", VALID_ADR) == [],
 )
 check(
     "a duplicate number fails",
@@ -284,14 +284,14 @@ check(
     "a non-sequential number fails",
     any(
         "does not continue the sequence" in p
-        for p in h5_problems("docs/adr/0012-too-far-ahead.md", VALID_ADR)
+        for p in h5_problems("docs/adr/0013-too-far-ahead.md", VALID_ADR)
     ),
 )
 check(
     "a malformed filename fails",
     any(
         "kebab-case" in p or "NNNN-" in p
-        for p in h5_problems("docs/adr/0010-A_Title With Spaces.md", VALID_ADR)
+        for p in h5_problems("docs/adr/0011-A_Title With Spaces.md", VALID_ADR)
     ),
 )
 check(
@@ -299,7 +299,7 @@ check(
     any(
         "Status" in p
         for p in h5_problems(
-            "docs/adr/0010-no-status.md", VALID_ADR.replace("- **Status:** Proposed\n", "")
+            "docs/adr/0011-no-status.md", VALID_ADR.replace("- **Status:** Proposed\n", "")
         )
     ),
 )
@@ -308,7 +308,7 @@ check(
     any(
         "Context" in p
         for p in h5_problems(
-            "docs/adr/0010-no-context.md",
+            "docs/adr/0011-no-context.md",
             VALID_ADR.replace("## Context and Problem Statement", "## Background"),
         )
     ),
@@ -318,7 +318,7 @@ check(
     any(
         "Decision" in p
         for p in h5_problems(
-            "docs/adr/0010-no-decision.md", VALID_ADR.replace("## Decision Outcome", "## Outcome")
+            "docs/adr/0011-no-decision.md", VALID_ADR.replace("## Decision Outcome", "## Outcome")
         )
     ),
 )
@@ -327,7 +327,7 @@ check(
     any(
         "Consequences" in p
         for p in h5_problems(
-            "docs/adr/0010-no-consequences.md", VALID_ADR.replace("## Consequences", "## Notes")
+            "docs/adr/0011-no-consequences.md", VALID_ADR.replace("## Consequences", "## Notes")
         )
     ),
 )
@@ -336,22 +336,22 @@ check(
     any(
         "does not carry" in p
         for p in h5_problems(
-            "docs/adr/0010-wrong-title.md", VALID_ADR.replace("# 0010.", "# 0007.")
+            "docs/adr/0011-wrong-title.md", VALID_ADR.replace("# 0011.", "# 0007.")
         )
     ),
 )
 check(
     "the minimal MADR dialect passes too",
     h5_problems(
-        "docs/adr/0010-minimal-dialect.md",
-        "# ADR-0010: A decision\n\n- Status: Proposed\n- Date: 2026-09-20\n\n"
+        "docs/adr/0011-minimal-dialect.md",
+        "# ADR-0011: A decision\n\n- Status: Proposed\n- Date: 2026-09-20\n\n"
         "## Context\n\nx\n\n## Decision\n\ny\n\n## Consequences\n\nz\n",
     )
     == [],
 )
 
 # --- H5: the hook contract end to end ---------------------------------------------------------
-h5_ok = run_hook("adr_structure_guard.py", write_event("docs/adr/0010-a-good-record.md", VALID_ADR))
+h5_ok = run_hook("adr_structure_guard.py", write_event("docs/adr/0011-a-good-record.md", VALID_ADR))
 check("H5 exits 0 on a structurally valid new record", h5_ok.returncode == 0)
 check("H5 says nothing when it passes", h5_ok.stdout.strip() == "" and h5_ok.stderr.strip() == "")
 
@@ -389,10 +389,10 @@ check("H5 points at the authoring skill's requirement", "acceptance" in h5_sourc
 
 # --- H5 leaves the historical records exactly as they are -------------------------------------
 HISTORY = sorted((ROOT / "docs/adr").glob("0*.md"))
-check("the nine historical records are present", len(HISTORY) == 9)
+check("the ten historical records are present", len(HISTORY) == 10)
 BEFORE = {f.name: f.read_bytes() for f in HISTORY}
 for _event in (
-    write_event("docs/adr/0010-a-good-record.md", VALID_ADR),
+    write_event("docs/adr/0011-a-good-record.md", VALID_ADR),
     write_event("docs/adr/0005-duplicate.md", VALID_ADR),
     edit_event("docs/adr/0001-ragcore-owns-orchestration-dotnet-owns-read.md"),
 ):
@@ -403,7 +403,7 @@ check(
 )
 check(
     "H5 created no record of its own",
-    not (ROOT / "docs/adr/0010-a-good-record.md").exists(),
+    not (ROOT / "docs/adr/0011-a-good-record.md").exists(),
 )
 
 

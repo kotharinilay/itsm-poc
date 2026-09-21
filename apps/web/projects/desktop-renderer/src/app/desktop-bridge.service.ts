@@ -11,8 +11,8 @@ import { Injectable, signal } from '@angular/core';
  *
  * ## It decides nothing
  *
- * No business authorization decision exists in the renderer **or** the main process (constitution
- * Principle VII). This service asks the host to do host things — run a verified instruction, report
+ * No business authorization decision exists in the renderer **or** the main process (FE-EL-1,
+ * .claude/rules/24-electron.md). This service asks the host to do host things — run a verified instruction, report
  * what happened. Whether that instruction was ever authorized was decided by the platform, is
  * carried by the instruction fetched over the Customer API, and is verified by content hash before
  * anything runs (ADR-0004).

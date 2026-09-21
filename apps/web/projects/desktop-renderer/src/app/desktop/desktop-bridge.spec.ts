@@ -5,7 +5,7 @@
  * the same Angular code runs in a browser and must not throw there. Second, and more importantly,
  * that the service exposes **no authorization surface**: no method reports a role, a tenant, a
  * permission or an approval state, and `isDesktopHost()` is not repurposed as one
- * (constitution Principle VII, spec FR-SURF-004).
+ * (FE-EL-1, .claude/rules/24-electron.md).
  */
 
 import { TestBed } from '@angular/core/testing';

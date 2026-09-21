@@ -83,4 +83,4 @@ and suspended, pending and expired are conveyed by glyph and text as well as col
 
 Standalone components, strict TypeScript, `inject()` over constructor injection, kebab-case
 filenames, `.spec.ts` tests colocated with what they test. No state-management framework is adopted;
-the constitution forbids one until a requirement justifies it.
+FE-NG-7 (.claude/rules/23-angular.md) forbids one until a requirement justifies it.

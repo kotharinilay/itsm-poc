@@ -1,7 +1,8 @@
 /**
  * T055 — the Electron security suite.
  *
- * Every assertion here corresponds to a control the constitution states unconditionally, and each
+ * Every assertion here corresponds to a control .claude/rules/24-electron.md states
+ * unconditionally, and each
  * one **fails when its switch is flipped** — that is the Stage 4 gate. A protection without a
  * failing test does not count (plan Stage 11). `build/scripts/verify-desktop-security-guard.sh`
  * proves that claim by flipping each switch in a scratch copy and asserting this suite goes red.

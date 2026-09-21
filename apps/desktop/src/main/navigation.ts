@@ -85,7 +85,7 @@ export function isAllowedRemote(rawUrl: unknown, config: HostConfig): boolean {
  * The union of the app's own origin and the remote allow-list. This is the `will-navigate`
  * decision and nothing more — it decides where the window may point, never what the user may do
  * once it points there. That second question is the platform's and is re-decided server-side
- * (constitution Principle VII).
+ * (FE-EL-6, .claude/rules/24-electron.md).
  */
 export function isNavigationAllowed(rawUrl: unknown, config: HostConfig): boolean {
   return isRendererOrigin(rawUrl) || isAllowedRemote(rawUrl, config);

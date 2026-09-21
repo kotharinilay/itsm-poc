@@ -1,8 +1,8 @@
 /**
  * T056 — no business authorization decision exists in the renderer **or** the main process.
  *
- * Constitution Principle VII states this unconditionally, and Principle III sharpens it for the
- * endpoint: "The endpoint executes; it MUST NEVER decide." This suite is the thing that fails when
+ * FE-EL-1 (.claude/rules/24-electron.md) states this unconditionally, and FE-EL-11 sharpens it
+ * for the endpoint: the endpoint executes; it MUST NEVER decide. This suite is the thing that fails when
  * that stops being true.
  *
  * Two kinds of assertion here, and they catch different things:

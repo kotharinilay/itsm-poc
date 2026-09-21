@@ -13,7 +13,8 @@ import { assertNoCspMetaTag } from './content-security-policy';
  *
  * `DomSanitizer.bypassSecurityTrustHtml` and its siblings hand the value straight to the DOM. Every
  * one of them is a deliberate hole, and each is a standing invitation to XSS the next time the
- * value's origin changes. Constitution Principle VII: they are absent from this scaffold.
+ * value's origin changes. FE-NG-10 (.claude/rules/23-angular.md): they are absent from this
+ * scaffold.
  *
  * This is enforced in three places rather than asserted once:
  *  - ESLint `no-restricted-properties` fails the build on a call (`eslint.config.js`);

@@ -7,7 +7,7 @@
  *
  * The shell **decides nothing about business operations**. It decides which window to open, which
  * headers to attach and which messages are well formed. Every question about what a user may do is
- * the platform's, answered server-side and re-verified server-side (constitution Principle VII).
+ * the platform's, answered server-side and re-verified server-side (FE-EL-1, .claude/rules/24-electron.md).
  */
 
 import {

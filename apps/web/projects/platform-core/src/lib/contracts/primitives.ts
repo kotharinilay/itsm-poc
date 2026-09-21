@@ -1,5 +1,5 @@
 /**
- * Shared primitives from the contracts under `specs/001-platform-scaffold/contracts/`.
+ * Shared primitives from the generated API contracts under `build/contracts/`.
  *
  * These are branded rather than bare `string` so an identifier of one kind cannot be passed where
  * another is expected. The platform never trusts a client-supplied identifier regardless; this is

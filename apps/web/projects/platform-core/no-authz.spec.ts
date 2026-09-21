@@ -180,7 +180,7 @@ describe('no presentation component makes an authorization decision (FR-SURF-004
   });
 });
 
-describe('no security bypass API anywhere in the workspace (Principle VII)', () => {
+describe('no security bypass API anywhere in the workspace (FE-NG-10)', () => {
   it('calls no bypassSecurityTrust* API', () => {
     const offenders = allSources.filter((file) =>
       /bypassSecurityTrust\w*\s*\(/.test(code(file.text)),
@@ -190,7 +190,7 @@ describe('no security bypass API anywhere in the workspace (Principle VII)', () 
       offenders.map((file) => file.relativePath),
       [],
       'bypassSecurityTrust* defeats Angular sanitization. Render the value as text, or model the ' +
-        'markup as data (constitution Principle VII).',
+        'markup as data (FE-NG-10, .claude/rules/23-angular.md).',
     );
   });
 
@@ -209,7 +209,7 @@ describe('no security bypass API anywhere in the workspace (Principle VII)', () 
   });
 });
 
-describe('no secret in browser code (§Secrets)', () => {
+describe('no secret in browser code (FE-SH-2)', () => {
   it('assigns no credential-shaped literal', () => {
     const credential =
       /\b(?:clientSecret|client_secret|apiKey|api_key|connectionString|accountKey|sasToken|privateKey)\b\s*[:=]\s*(?:'|"|`)[^'"`\n]{8,}/i;
@@ -220,7 +220,7 @@ describe('no secret in browser code (§Secrets)', () => {
       offenders.map((file) => file.relativePath),
       [],
       'No credential in source code. A browser cannot keep a secret — anything shipped to the ' +
-        'page is readable by whoever loads it (constitution §Secrets).',
+        'page is readable by whoever loads it (FE-SH-2, .claude/rules/22-web-typescript.md).',
     );
   });
 });

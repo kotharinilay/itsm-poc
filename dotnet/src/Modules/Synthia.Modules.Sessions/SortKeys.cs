@@ -11,13 +11,13 @@ namespace Synthia.Modules.Sessions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>These sets are the complete ones from <c>contracts/README.md</c>.</b> A field absent here is
+/// <b>These sets are the complete ones for this module.</b> A field absent here is
 /// not sortable on that resource, and a request naming one is a 400 — never silently ignored.
 /// Adding a field is a contract change, and it is made here.
 /// </para>
 /// <para>
 /// The API layer decides whether a requested field is allowed; this decides what allowing it means.
-/// Keeping the two apart is what lets the whitelist be asserted against the contract document
+/// Keeping the two apart is what lets the whitelist be asserted against the generated contract
 /// without a database in the room.
 /// </para>
 /// </remarks>

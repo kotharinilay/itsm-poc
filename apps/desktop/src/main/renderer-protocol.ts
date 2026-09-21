@@ -3,8 +3,8 @@
  *
  * ## Why not `file://`
  *
- * The constitution says `file://` is "avoided where a safer protocol strategy applies"
- * (Principle VII). This is that case, and it is not a stylistic preference — three controls in
+ * FE-EL-9 (.claude/rules/24-electron.md) says `file://` is avoided where a safer protocol
+ * strategy applies. This is that case, and it is not a stylistic preference — three controls in
  * this scaffold do not function over `file://`:
  *
  *  - **CSP.** A `file://` document has an *opaque* origin, so `'self'` matches nothing. The policy

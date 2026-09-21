@@ -32,11 +32,11 @@ const EXECUTION_MODULES = [
   },
   {
     name: 'vm',
-    message: 'No remote or dynamic code execution in the host (constitution Principle VII).',
+    message: 'No remote or dynamic code execution in the host (FE-EL-10, .claude/rules/24-electron.md).',
   },
   {
     name: 'node:vm',
-    message: 'No remote or dynamic code execution in the host (constitution Principle VII).',
+    message: 'No remote or dynamic code execution in the host (FE-EL-10, .claude/rules/24-electron.md).',
   },
 ];
 
@@ -75,21 +75,22 @@ export default tseslint.config(
         },
       ],
 
-      // Every one of these disables a control the constitution states unconditionally. A change
+      // Every one of these disables a control .claude/rules/24-electron.md states unconditionally.
+      // A change
       // that needs one is a change that needs an ADR (see docs/adr/README.md).
       'no-restricted-syntax': [
         'error',
         {
           selector: "Property[key.name='webSecurity'][value.value=false]",
-          message: 'webSecurity MUST NOT be disabled (constitution Principle VII).',
+          message: 'webSecurity MUST NOT be disabled (FE-EL-3, .claude/rules/24-electron.md).',
         },
         {
           selector: "Property[key.name='contextIsolation'][value.value=false]",
-          message: 'contextIsolation MUST remain enabled (constitution Principle VII).',
+          message: 'contextIsolation MUST remain enabled (FE-EL-2, .claude/rules/24-electron.md).',
         },
         {
           selector: "Property[key.name='nodeIntegration'][value.value=true]",
-          message: 'nodeIntegration MUST remain disabled (constitution Principle VII).',
+          message: 'nodeIntegration MUST remain disabled (FE-EL-2, .claude/rules/24-electron.md).',
         },
         {
           selector: "Property[key.name='sandbox'][value.value=false]",
@@ -97,7 +98,7 @@ export default tseslint.config(
         },
         {
           selector: "Property[key.name='allowRunningInsecureContent'][value.value=true]",
-          message: 'Insecure content MUST NOT be allowed (constitution Principle VII).',
+          message: 'Insecure content MUST NOT be allowed (FE-EL-3, .claude/rules/24-electron.md).',
         },
         {
           selector: "Property[key.name='webviewTag'][value.value=true]",
@@ -107,7 +108,7 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.object.name='contextBridge'][callee.property.name='exposeInMainWorld'] > Identifier[name='ipcRenderer']",
           message:
-            'Raw ipcRenderer MUST NEVER be exposed (constitution Principle VII). Expose a narrow ' +
+            'Raw ipcRenderer MUST NEVER be exposed (FE-EL-4, .claude/rules/24-electron.md). Expose a narrow ' +
             'typed function per channel instead.',
         },
       ],

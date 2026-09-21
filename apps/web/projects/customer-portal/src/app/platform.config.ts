@@ -3,7 +3,7 @@ import type { PlatformApiConfig } from 'platform-core';
 /**
  * Customer portal runtime configuration.
  *
- * **Nothing here is a secret, and nothing here may become one** (constitution §Secrets). Every
+ * **Nothing here is a secret, and nothing here may become one** (FE-SH-2, .claude/rules/22-web-typescript.md). Every
  * value is a public origin or a public identifier. A browser cannot keep a credential: anything
  * shipped to the page is readable by whoever loads the page. Tokens are acquired at runtime through
  * the auth integration and are never baked into a build.

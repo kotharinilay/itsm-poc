@@ -2,7 +2,7 @@
  * T051 — the preload, and the narrow `contextBridge` surface.
  *
  * This is the **only** thing the renderer can reach. Raw `ipcRenderer` is never exposed, and no
- * broad Electron or Node API appears on the bridge (constitution Principle VII). `ipcRenderer` is
+ * broad Electron or Node API appears on the bridge (FE-EL-4, .claude/rules/24-electron.md). `ipcRenderer` is
  * imported here and captured in a closure; nothing that leaves this module can reach it.
  *
  * The surface is derived from `BRIDGE_SURFACE` in `ipc-contracts`, so widening it means editing

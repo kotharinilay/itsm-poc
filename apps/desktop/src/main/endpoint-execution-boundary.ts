@@ -7,7 +7,7 @@
  * day attach, written now so the *shape* of the obligation is recorded while the implementation is
  * still refused.
  *
- * ## What the constitution requires of this path, when it is eventually built
+ * ## What FE-EL-11 (.claude/rules/24-electron.md) requires of this path, when it is eventually built
  *
  *  - Scripts are **predefined, versioned and platform-owned**. The platform must not generate them
  *    at runtime, and the endpoint must not compose them.
@@ -35,7 +35,7 @@
  * The four bindings a real instruction must carry.
  *
  * Declared now so the type exists for contract work upstream, and so the four-field requirement is
- * visible in the codebase rather than only in the constitution. Every field is required: there is
+ * visible in the codebase rather than only in the rule. Every field is required: there is
  * no partial instruction.
  */
 export interface ApprovedScriptInstruction {

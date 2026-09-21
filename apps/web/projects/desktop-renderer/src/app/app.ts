@@ -1,7 +1,8 @@
 /**
  * The desktop renderer application shell.
  *
- * A shell, honestly scaffolded (constitution Principle IX): it establishes the layout, the routing
+ * A shell, honestly scaffolded — it claims no capability it does not have. It establishes the
+ * layout, the routing
  * outlet and the one desktop-specific seam — the bridge — and implements no feature behaviour. The
  * customer journey itself comes from `customer-features` when plan Stage 3 composes it here; this
  * component adds only what the desktop surface needs beyond the shared UI.

@@ -1,4 +1,4 @@
-"""The API surface, checked against the frozen contract in ``specs/001-platform-scaffold``.
+"""The API surface, checked against the generated contracts under ``build/contracts/``.
 
 Three audiences, the SSE envelope, and the conventions that outrank any individual endpoint.
 

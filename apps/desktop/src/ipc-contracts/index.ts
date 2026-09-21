@@ -3,7 +3,7 @@
  *
  * This file IS the allow-list. A channel that does not appear here cannot be invoked, and the
  * `contextBridge` surface is derived from it — so widening the bridge means editing this file,
- * which is visible in a diff (constitution Principle VII).
+ * which is visible in a diff (FE-EL-5, .claude/rules/24-electron.md).
  *
  * Nothing here carries or implies authority. The desktop host decides nothing: every consequential
  * decision is made server-side and re-verified server-side. If a channel is ever proposed that
@@ -42,8 +42,8 @@ export function isIpcChannel(value: unknown): value is IpcChannel {
 /**
  * Argument validators, one per channel.
  *
- * Sender validation and argument validation are **two distinct obligations** (constitution
- * Principle VII). A trusted sender may still send a malformed payload, and a well-formed payload
+ * Sender validation and argument validation are **two distinct obligations** (FE-EL-5,
+ * .claude/rules/24-electron.md). A trusted sender may still send a malformed payload, and a well-formed payload
  * from an untrusted sender is still untrusted. Neither check substitutes for the other, which is
  * why they live in separate functions with separate tests.
  *

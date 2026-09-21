@@ -117,7 +117,8 @@ public sealed class FilterField
 /// filtered and receives rows it did not ask for.
 /// </para>
 /// <para>
-/// The per-resource sets are enumerated in <c>specs/001-platform-scaffold/contracts/README.md</c>.
+/// The per-resource sets are declared in each module's sort-key type and published in the
+/// generated contracts under <c>build/contracts/</c>.
 /// This type is how an endpoint holds one.
 /// </para>
 /// </remarks>

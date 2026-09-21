@@ -20,7 +20,8 @@ import { verifyBrowserSecurityBaseline } from './security/sanitization-policy';
  * Wire the shared client infrastructure into a surface.
  *
  * One call, in one place per application. Centralising it is what makes "authentication, API and
- * realtime infrastructure are each centralized rather than repeated" (constitution §Angular) true
+ * realtime infrastructure are each centralized rather than repeated (FE-NG-4,
+ * .claude/rules/23-angular.md) true
  * of the workspace rather than aspirational: a surface cannot half-configure this, and cannot
  * quietly add a second platform origin.
  *

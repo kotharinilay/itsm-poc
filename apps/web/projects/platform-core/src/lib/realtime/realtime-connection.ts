@@ -9,7 +9,7 @@ export type RealtimeStatus = 'disconnected' | 'connecting' | 'connected' | 'reco
  *
  * Declared as a port so `@microsoft/signalr` is integrated in exactly one adapter rather than
  * imported across features. The scaffold registers no implementation: Stage 8 brings the hub, and
- * pretending otherwise would be a dishonest scaffold (constitution P-IX).
+ * pretending otherwise would be a dishonest scaffold.
  */
 export interface RealtimeConnection {
   readonly status$: Observable<RealtimeStatus>;

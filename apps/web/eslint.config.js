@@ -56,14 +56,15 @@ module.exports = tseslint.config(
       'no-console': ['error', { allow: ['warn', 'error'] }],
       eqeqeq: ['error', 'always'],
 
-      // Constitution Principle VII: no secret in browser code, and sanitization is not optional.
+      // FE-SH-2 (.claude/rules/22-web-typescript.md): no secret in browser code.
+      // FE-NG-10 (.claude/rules/23-angular.md): sanitization is not optional.
       'no-restricted-properties': [
         'error',
         {
           object: 'DomSanitizer',
           message:
             'bypassSecurityTrust* defeats Angular sanitization. Requires specific justification, ' +
-            'review and constraint (constitution Principle VII).',
+            'review and constraint (FE-NG-10, .claude/rules/23-angular.md).',
         },
       ],
     },

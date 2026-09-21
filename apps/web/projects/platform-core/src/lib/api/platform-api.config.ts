@@ -3,7 +3,7 @@ import { InjectionToken } from '@angular/core';
 /**
  * Runtime configuration for every platform call.
  *
- * **No secret belongs in this object, or anywhere else in browser code** (constitution §Secrets).
+ * **No secret belongs in this object, or anywhere else in browser code** (FE-SH-2, .claude/rules/22-web-typescript.md).
  * Everything here is a public origin or a path. There is no client secret, no API key and no
  * connection string, because a browser cannot keep one — anything shipped to the page is readable
  * by whoever loads the page.
@@ -67,7 +67,8 @@ function assertNoSecretKeys(candidate: object): void {
     if (SECRET_KEYS.some((forbidden) => normalised.includes(forbidden))) {
       throw new Error(
         `PlatformApiConfig.${key} looks like a secret. No credential may be shipped in browser ` +
-          `code (constitution §Secrets). Obtain tokens through the auth integration instead.`,
+          `code (FE-SH-2, .claude/rules/22-web-typescript.md). Obtain tokens through the auth ` +
+          `integration instead.`,
       );
     }
   }

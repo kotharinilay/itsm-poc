@@ -1,7 +1,8 @@
 /**
  * T052 — IPC sender validation and argument validation, as two distinct checks.
  *
- * The constitution requires both: "Every IPC sender and every IPC argument MUST be validated."
+ * FE-EL-5 (.claude/rules/24-electron.md) requires both: every IPC sender and every IPC
+ * argument is validated.
  * They catch different things. Sender validation stops a frame we did not ship from reaching the
  * main process at all; argument validation stops a frame we *did* ship from sending a payload the
  * handler was not written for. Neither substitutes for the other, which is why they are separate
@@ -9,7 +10,7 @@
  *
  * NOTE: everything here decides whether a **message is well formed**, never whether an
  * **operation is permitted**. No business authorization decision exists in the main process or the
- * renderer (constitution Principle VII). If a future change makes any function in this file
+ * renderer (FE-EL-1, .claude/rules/24-electron.md). If a future change makes any function in this file
  * consult a role, a tenant or an approval state, that change is a defect and
  * `tests/no-policy.spec.ts` is where it should be caught.
  */

@@ -45,7 +45,7 @@ import type { Subscription } from 'rxjs';
   styleUrl: './chat-shell.css',
 })
 export class ChatShell {
-  /** Injected, not constructor-parameterised — `inject()` where appropriate (constitution). */
+  /** Injected, not constructor-parameterised — `inject()` where appropriate (FE-NG-3, .claude/rules/23-angular.md). */
   protected readonly api = inject(CustomerApiClient);
   protected readonly stream = inject(MessageStreamClient);
   protected readonly announcer = inject(LiveAnnouncer);

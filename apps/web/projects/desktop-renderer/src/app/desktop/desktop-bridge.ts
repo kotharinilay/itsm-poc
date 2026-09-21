@@ -15,8 +15,8 @@
  *
  * This service makes no authorization decision and exposes nothing that could be mistaken for one.
  * `isDesktopHost()` answers "am I running in Electron", which is a rendering question — never
- * "may this user do that", which is the platform's and is re-decided server-side (constitution
- * Principle VII, spec FR-SURF-004).
+ * "may this user do that", which is the platform's and is re-decided server-side (FE-EL-1,
+ * .claude/rules/24-electron.md).
  */
 
 import { Injectable } from '@angular/core';

@@ -77,13 +77,13 @@ Authoritative sources only:
 - `docs/architecture/identity-plane-final.md` (A1)
 - `docs/architecture/Synthia-OverallArchitecture-final.md` (A2)
 - `docs/architecture/RagAgent-Architecture-final.md` (A3)
-- the migrated `.claude/rules/` baseline, for an engineering decision
+- `.claude/rules/**`, for an engineering decision
 
 For an architecture decision, establish four things and quote or cite each:
 
-1. **The owning document.** Use the ownership map in `.claude/rules/70-adr.md` and
-   `docs/migration/phase-2-authority-model.md` §1.1. If two documents appear to own it, §1.3 decides;
-   if they genuinely contradict, that contradiction *is* the decision to record.
+1. **The owning document.** Use the ownership map in `.claude/rules/70-adr.md` and the precedence
+   rule in `.claude/rules/00-authority.md` §00.5. If they genuinely contradict, that contradiction
+   *is* the decision to record (§00.6).
 2. **The applicable section.** §x.y, not "somewhere in A2".
 3. **The currently documented decision or boundary.** What the document says today, in its own words.
 4. **The requested change.** What would have to become true instead.

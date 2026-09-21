@@ -1,6 +1,6 @@
 # 30 — LangGraph engineering and workflow-change control
 
-**Category 5 of the Phase 2 authority model** (`docs/migration/phase-2-authority-model.md` §2.2, §10).
+**One of the four change gates** (`.claude/rules/60-architecture-gates.md` §60.1).
 Procedure: `.claude/skills/langgraph-change/SKILL.md`. Deterministic guard: `.claude/hooks/langgraph_change_guard.py` (H3).
 
 Architecture authority for this file:

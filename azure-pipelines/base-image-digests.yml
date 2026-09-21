@@ -1,0 +1,121 @@
+# A pinned digest is only a control if something re-pins it. This is that something.
+#
+# The process is defined rather than merely required to exist:
+#   Owner      the platform team; the re-pin lands as an ordinary reviewed pull request, never an
+#              out-of-band registry change
+#   Triggers   a monthly scheduled check, a High or Critical CVE against either base image, or a
+#              base-image release carrying a runtime patch
+#   Gate       the PR passes the full suite plus an image scan showing no new High or Critical.
+#              A DIGEST NEVER REACHES PRODUCTION ON A GREEN SCAN ALONE.
+#   Emergency  a Critical CVE with a published fix may skip the schedule, but not the gate.
+#
+# Replaces .github/workflows/base-image-digests.yml.
+#
+# PARITY NOTE - read this before assuming the pipeline is weaker than it is. The GitHub version
+# opened the re-pin pull request itself, with a marketplace action. Azure DevOps has no
+# first-party equivalent, and opening a PR needs a repository-scoped token this pipeline is
+# deliberately not granted. This pipeline RESOLVES, RE-PINS, SCANS and PUBLISHES the result as an
+# artifact, then FAILS so a person opens the pull request. That is weaker automation and the same
+# control: a digest still reaches production only through a reviewed PR that passes the full gate.
+# Granting a token and restoring automatic PR creation is a human decision, registered as an open
+# item in docs/governance/open-items.md.
+
+name: base-image-digests
+
+trigger: none
+pr: none
+
+schedules:
+  # Monthly, early on the first. Not more often: a re-pin is a reviewed change, and a bot that
+  # opens a pull request every week trains reviewers to close them without reading.
+  - cron: "0 3 1 * *"
+    displayName: Monthly base-image digest check
+    branches:
+      include: [main]
+    always: true
+
+parameters:
+  - name: reason
+    displayName: Why this run was triggered out of schedule, for example a CVE identifier
+    type: string
+    default: monthly scheduled check
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: resolve
+    displayName: resolve current digests
+    steps:
+      - script: |
+          set -euo pipefail
+          curl -sSL -o crane.tar.gz             https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz
+          tar -xzf crane.tar.gz crane
+          sudo mv crane /usr/local/bin/crane
+        displayName: Install crane
+
+      - script: |
+          set -euo pipefail
+          # One entry per tracked tag. The .NET runtime is chiseled; RagCore is a slim Python base.
+          # They are tracked together because they are re-pinned together, not because they share a
+          # base family - they do not, and their hardening checks differ. The portal images
+          # (ADR-0009) are a third base family, re-pinned with the others.
+          for pair in             "dotnet|mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled"             "ragcore|python:3.12-slim-bookworm"             "portal|node:22-bookworm-slim"
+          do
+            name="${pair%%|*}"; tag="${pair#*|}"
+            digest="$(crane digest "$tag")"
+            echo "##vso[task.setvariable variable=${name}_tag]$tag"
+            echo "##vso[task.setvariable variable=${name}_digest]$digest"
+          done
+        displayName: Resolve the tracked tags
+
+      - script: |
+          set -euo pipefail
+          changed=0
+          repin() {
+            local file="$1" image="$2" digest="$3"
+            [ -f "$file" ] || return 0
+            # Replaces whatever follows the image reference, including the placeholder that ships
+            # in the repository before the first real pin.
+            sed -i -E "s#(${image}@sha256:)[A-Za-z0-9_]+#\1${digest#sha256:}#g" "$file"
+            git diff --quiet -- "$file" || changed=1
+          }
+          repin build/docker/dotnet.Dockerfile       "mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled" "$(dotnet_digest)"
+          repin build/docker/ragcore.Dockerfile      "python:3.12-slim-bookworm"                           "$(ragcore_digest)"
+          # The Integrations Service shares RagCore's base and is re-pinned with it. It was missing
+          # from the original workflow, so its placeholder would never have been replaced at all.
+          repin build/docker/integrations.Dockerfile "python:3.12-slim-bookworm"                           "$(ragcore_digest)"
+          repin build/docker/portals.Dockerfile      "node:22-bookworm-slim"                               "$(portal_digest)"
+          echo "##vso[task.setvariable variable=changed]$changed"
+        displayName: Re-pin the Dockerfiles
+
+      # BOTH base families are scanned. A scan covering the .NET runtime only would let a High in
+      # the Python base - which RagCore and the Integrations Service both run on - go unreported.
+      #
+      # Reported, not enforced, at this step: the artifact carries the diff so a reviewer sees what
+      # changed. The enforcing scan is the one on the pull request itself, alongside the full
+      # suite. A scan that blocked here would just mean the PR never opens and nobody looks.
+      - script: |
+          set -euo pipefail
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh             | sudo sh -s -- -b /usr/local/bin v0.58.1
+          trivy image --severity HIGH,CRITICAL --format table --exit-code 0             --output vulnerability-diff-dotnet.txt "$(dotnet_tag)@$(dotnet_digest)"
+          trivy image --severity HIGH,CRITICAL --format table --exit-code 0             --output vulnerability-diff-python.txt "$(ragcore_tag)@$(ragcore_digest)"
+          trivy image --severity HIGH,CRITICAL --format table --exit-code 0             --output vulnerability-diff-portal.txt "$(portal_tag)@$(portal_digest)"
+        displayName: Scan the resolved base images
+        condition: eq(variables['changed'], '1')
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publish the re-pin and its vulnerability diff
+        condition: eq(variables['changed'], '1')
+        inputs:
+          targetPath: $(Build.SourcesDirectory)
+          artifactName: base-image-repin-$(Build.BuildId)
+
+      # Fails deliberately, so the run is not silently green while a digest has moved and nobody
+      # has opened the pull request. See the parity note at the top of this file.
+      - script: |
+          echo "##vso[task.logissue type=error]A base image digest has moved. Open a reviewed pull request from the published artifact."
+          echo "##vso[task.logissue type=error]Trigger: ${{ parameters.reason }}"
+          exit 1
+        displayName: Require a reviewed re-pin pull request
+        condition: eq(variables['changed'], '1')

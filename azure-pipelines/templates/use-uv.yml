@@ -1,0 +1,21 @@
+# Installs uv and syncs ONE Python deployable from its own lockfile.
+#
+# The two Python deployables share no package by design (ADR-0007). Each sync is a separate
+# environment from a separate lock, so a pipeline that emits or tests both must call this template
+# twice rather than syncing once and reusing it.
+parameters:
+  - name: workingDirectory
+    type: string
+
+steps:
+  - script: |
+      set -euo pipefail
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      echo "##vso[task.prependpath]$HOME/.local/bin"
+    displayName: Install uv
+
+  # --frozen: the lockfile is authoritative. A dependency change that was not committed fails here
+  # rather than resolving to something nobody reviewed.
+  - script: uv sync --all-groups --frozen
+    workingDirectory: ${{ parameters.workingDirectory }}
+    displayName: Sync (locked) - ${{ parameters.workingDirectory }}

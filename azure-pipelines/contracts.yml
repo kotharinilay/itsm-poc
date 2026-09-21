@@ -1,0 +1,174 @@
+# The API contract is an ARTIFACT emitted from the running services, not a document maintained
+# beside them. A route whose emitted shape stops matching its declared contract fails the build
+# rather than surfacing at a client.
+#
+# All THREE deployables emit, then ONE validator and ONE comparator check everything. A second
+# implementation of either would drift, and the drift would be invisible until the weaker of the
+# two was the one that mattered.
+#
+# RagCore and the Integrations Service both serve the workload audience and each emits its OWN
+# document (ADR-0007). They are never merged: the comparator diffs per deployable, and a merged
+# document would let a breaking change in one service be masked by the other's shape.
+#
+# WHAT THIS PIPELINE ASSERTS, in the order the steps run:
+#   1. The documents can be generated at all - from the running services, not from a template.
+#   2. Emission is DETERMINISTIC: the same source produces byte-identical artifacts.
+#   3. Each document is publishable: no secret or configuration material, no client-suppliable
+#      tenant/role/audience, and RFC 9457 error contracts throughout.
+#   4. No BREAKING difference against the committed contract, unless explicitly approved.
+#   5. The committed contracts are not stale.
+# Then, and only then, the versioned artifacts are published.
+#
+# Replaces .github/workflows/contracts.yml.
+
+name: contracts
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - ragcore/src/ragcore/api/*
+      - ragcore/scripts/emit_contracts.py
+      - integrations/src/integrations/api/*
+      - integrations/scripts/emit_contracts.py
+      - dotnet/src/Synthia.Api/*
+      - dotnet/src/Synthia.Contracts/*
+      - dotnet/tests/Synthia.ContractTests/*
+      - build/contracts/*
+      - build/policy/openapi-disclosure.json
+      - build/scripts/openapi_diff.py
+      - build/scripts/openapi_validate.py
+      - build/scripts/verify-contract-guards.sh
+      - azure-pipelines/contracts.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Versioned by API version and commit. The API version is the one in the path, because that is
+  # the version a client is pinned to; the commit is what makes an artifact traceable to the source
+  # that produced it.
+  CONTRACT_VERSION: v1
+
+jobs:
+  - job: openapi
+    displayName: emit, validate, compare, publish
+    steps:
+      # THE COMMITTED CONTRACTS, COPIED ASIDE BEFORE ANYTHING RUNS. The .NET emitter is a test, and
+      # it writes into build/contracts/dotnet - so by the time the comparison happens the
+      # "committed" tree in the working directory has already been overwritten by what was just
+      # generated. Comparing against it would compare a file with itself and pass unconditionally,
+      # which is the exact failure this whole pipeline exists to prevent, one level up.
+      - script: cp -r build/contracts "$(Agent.TempDirectory)/committed"
+        displayName: Copy the committed contracts aside
+
+      - task: UseDotNet@2
+        displayName: Install .NET 10 SDK
+        inputs:
+          version: 10.0.x
+
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: ragcore
+
+      # A SEPARATE environment, from a separate lock. The two services share no package by design
+      # (ADR-0007); syncing one and emitting from both would emit the Integrations document against
+      # RagCore's dependency set, which is not what ships.
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: integrations
+
+      # Emitted into a directory that is NOT the committed one, so the comparison is between what
+      # the services now produce and what the repository says they produce.
+      - script: uv run python scripts/emit_contracts.py --out "$(Agent.TempDirectory)/contracts/ragcore"
+        workingDirectory: ragcore
+        displayName: Emit RagCore contracts
+
+      # Emitted from the FastAPI application's own route models, exactly as RagCore's is, so the
+      # document cannot describe a shape the service does not accept.
+      - script: uv run python scripts/emit_contracts.py --out "$(Agent.TempDirectory)/contracts/integrations"
+        workingDirectory: integrations
+        displayName: Emit Integrations contracts
+
+      # The .NET documents come from the running application through the contract tests, so the
+      # artifact published here is produced by the same generator that serves
+      # /openapi/{audience}.json.
+      - script: dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj --filter "FullyQualifiedName~OpenApiEmissionTests" --nologo
+        workingDirectory: dotnet
+        displayName: Emit .NET contracts
+
+      - script: |
+          set -euo pipefail
+          mkdir -p "$(Agent.TempDirectory)/contracts/dotnet"
+          cp build/contracts/dotnet/*.openapi.json "$(Agent.TempDirectory)/contracts/dotnet/"
+        displayName: Collect .NET contracts
+
+      # DETERMINISM IS A GATE, not a convention. Everything downstream compares bytes: a generator
+      # that reorders a map, stamps a timestamp or embeds the host it ran on makes every build show
+      # a diff, and a comparator whose output is mostly noise is one whose real findings nobody
+      # reads. Emitting twice and comparing is the only way to catch it - a single emission always
+      # looks deterministic.
+      - script: |
+          set -euo pipefail
+          cd ragcore
+          uv run python scripts/emit_contracts.py --out "$(Agent.TempDirectory)/again/ragcore"
+          cd ../integrations
+          uv run python scripts/emit_contracts.py --out "$(Agent.TempDirectory)/again/integrations"
+          cd ../dotnet
+          dotnet test tests/Synthia.ContractTests/Synthia.ContractTests.csproj             --filter "FullyQualifiedName~OpenApiEmissionTests" --nologo
+          cd ..
+          mkdir -p "$(Agent.TempDirectory)/again/dotnet"
+          cp build/contracts/dotnet/*.openapi.json "$(Agent.TempDirectory)/again/dotnet/"
+          if ! diff -r "$(Agent.TempDirectory)/contracts" "$(Agent.TempDirectory)/again"; then
+            echo "##vso[task.logissue type=error]Emission is not deterministic: two runs over the same source produced different bytes."
+            echo "##vso[task.logissue type=error]Every gate below compares bytes, so this makes them report changes nobody made and hide the ones somebody did."
+            exit 1
+          fi
+        displayName: Emit again, and require byte-identical output
+
+      # WHAT A PUBLISHED DOCUMENT MUST SATISFY, applied to the artifact rather than to the source.
+      # A rule applied to the code can be satisfied by code the generator does not publish.
+      - script: |
+          python3 build/scripts/openapi_validate.py             --contracts "$(Agent.TempDirectory)/contracts"             --policy build/policy/openapi-disclosure.json             --version "$(CONTRACT_VERSION)"
+        displayName: Validate the emitted documents
+
+      # Proves the validator FAILS when it should. A check that has never been observed to fail is
+      # a check nobody knows the state of, and the failure mode of a contract gate is silence.
+      - script: bash build/scripts/verify-contract-guards.sh
+        displayName: Prove the contract guards catch a planted violation
+
+      # THE COMPATIBILITY GATE. Exit 1 on an unapproved breaking change, 2 when a document has no
+      # committed baseline - a new API must be published deliberately, not by whatever CI happened
+      # to generate. An approved breaking change is recorded in the register, verbatim and with an
+      # expiry; there is no flag and no variable that bypasses this.
+      #
+      # THE BASELINE IS THE COPY TAKEN BEFORE ANYTHING RAN. build/contracts in the working tree is
+      # not it: the .NET emitter has overwritten build/contracts/dotnet by now.
+      - script: |
+          python3 build/scripts/openapi_diff.py             --baseline "$(Agent.TempDirectory)/committed"             --current "$(Agent.TempDirectory)/contracts"             --approved build/contracts/approved-breaking-changes.json
+        displayName: Compare against the committed contracts
+
+      # A stale baseline is worse than none: the comparator would pass a breaking change because
+      # the thing it compares against already contains it. This catches the case where somebody
+      # changed a route and did not re-emit.
+      - script: |
+          set -euo pipefail
+          if ! diff -r "$(Agent.TempDirectory)/committed" "$(Agent.TempDirectory)/contracts"               --exclude 'approved-breaking-changes.json' > contract.diff; then
+            echo "##vso[task.logissue type=error]The committed contracts are stale. Re-emit and commit them."
+            cat contract.diff
+            exit 1
+          fi
+        displayName: Fail if the committed contracts are stale
+
+      # Versioned by API version and commit, attached to the build rather than committed by hand.
+      - task: PublishPipelineArtifact@1
+        displayName: Publish contract artifacts
+        condition: always()
+        inputs:
+          targetPath: $(Agent.TempDirectory)/contracts
+          artifactName: openapi-$(CONTRACT_VERSION)-$(Build.SourceVersion)

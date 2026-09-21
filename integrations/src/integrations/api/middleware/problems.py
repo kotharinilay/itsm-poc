@@ -5,7 +5,8 @@ Every error this service returns is `application/problem+json` carrying `type`, 
 addition to RFC 9457 and it is what lets a caller quoting an error be followed across the APIM hop
 and both queues.
 
-**Internal exception detail MUST NEVER reach a client** (constitution §Validation and errors). An
+**Internal exception detail MUST NEVER reach a client** (`BL-18`; cross-stack gap,
+``docs/governance/open-items.md`` §5). An
 unhandled exception becomes a generic 500 whose `detail` says nothing about the failure; the actual
 exception goes to telemetry, correlated by the same identifier. The split matters because this
 service holds connector credentials and talks to customer systems — a leaked stack trace here can
@@ -91,7 +92,7 @@ def problem(
 class ProblemMiddleware(BaseHTTPMiddleware):
     """Converts an unhandled exception into a problem response that discloses nothing.
 
-    Runs **outermost** (constitution §Middleware order: exception handling first), so it catches
+    Runs **outermost** (`BL-26`: exception handling first), so it catches
     failures in every middleware beneath it as well as in the endpoint.
     """
 

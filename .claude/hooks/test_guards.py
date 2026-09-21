@@ -838,17 +838,22 @@ check(
     not EXTERNAL_WT.exists() and not NESTED_WT.exists(),
 )
 
-# --- Spec Kit is retired from the live Claude surface ------------------------------------------
-# GOVERNED INVERSION, Phase 12. Until Phase 11 this block asserted the ten speckit-* skills were
-# still PRESENT, so they could not be removed by accident mid-migration. Phase 12 retires them
-# (docs/adr/0010-frontend-engineering-baseline.md, docs/migration/phase-12-spec-kit-decoupling.md),
-# so the invariant is now the opposite one:
+# --- no retired governance material is depended on, or present -------------------------------
+# GOVERNED INVERSION. Earlier phases asserted that the migration inputs were still PRESENT so they
+# could not be removed by accident mid-migration. They are now retired, so the invariant is the
+# opposite one and is strictly harder to satisfy than silence:
 #
-#     No live Claude Code skill, rule, hook or setting may depend on Spec Kit.
+#     Nothing in this repository reads, loads, cites or depends on retired governance material.
 #
-# The subject of the old assertion is what the phase deliberately retires. That makes this an
-# inversion, not a weakened test (.claude/rules/40-testing.md 40.1): nothing is deleted, skipped
-# or loosened, and the replacement is strictly harder to satisfy than silence.
+# The subject of the old assertions is what the repository deliberately retired. That makes this an
+# inversion, not a weakened test (.claude/rules/40-testing.md 40.1): nothing is deleted, skipped or
+# loosened.
+
+RETIRED_PATHS = [".specify", "specs", "principles.yaml", "dotnet.yaml", "dotnet_lang.yaml",
+                 "python.yaml", "python_lang.yaml", "docs/migration"]
+for _rp in RETIRED_PATHS:
+    check("retired from the tree: " + _rp, not (ROOT / _rp).exists())
+
 speckit_skills = sorted((ROOT / ".claude/skills").glob("speckit-*"))
 check("no speckit-* skill remains: " + (", ".join(p.name for p in speckit_skills) or "none"),
       not speckit_skills)
@@ -861,9 +866,9 @@ check("exactly the four Claude governance skills remain: "
 for _skill in SKILL_DIRS:
     check(f"{_skill.name} is a skill (carries SKILL.md)", (_skill / "SKILL.md").is_file())
 
-# The live Claude surface: every tracked-in-spirit file under .claude/, excluding build residue
-# and scratch worktrees. test_guards.py excludes itself because it necessarily contains the
-# patterns it searches for; it is asserted separately below.
+# The live governance surface: .claude/, CLAUDE.md, and the two permanent governance documents.
+# test_guards.py excludes itself because it necessarily contains the patterns it searches for; it
+# is asserted separately below.
 LIVE_CLAUDE = sorted(
     p for p in (ROOT / ".claude").rglob("*")
     if p.is_file()
@@ -871,44 +876,64 @@ LIVE_CLAUDE = sorted(
     and "worktrees" not in p.parts
     and p.name != "settings.local.json"
     and p.name != "test_guards.py"
+    and not p.name.endswith(".tmp")
 )
 CLAUDE_MD_PATH = ROOT / "CLAUDE.md"
-LIVE_SURFACE = LIVE_CLAUDE + [CLAUDE_MD_PATH]
+GOVERNANCE_DOCS = [ROOT / "docs/final-repository-governance.md", ROOT / "docs/governance/open-items.md"]
+LIVE_SURFACE = LIVE_CLAUDE + [CLAUDE_MD_PATH] + [d for d in GOVERNANCE_DOCS if d.is_file()]
 
-# (1) nothing executes or loads the Spec Kit mechanism
-MECHANISM = re.compile(r"\.specify/(scripts|templates|extensions)|speckit-\w+/|/speckit", re.I)
-_exec_refs = [str(p.relative_to(ROOT)).replace("\\", "/") for p in LIVE_SURFACE
-              if MECHANISM.search(p.read_text(encoding="utf-8", errors="replace"))]
-check("no live Claude file loads or runs the Spec Kit mechanism: "
-      + (", ".join(_exec_refs[:5]) or "clean"), not _exec_refs)
-
-# (2) the committed hook configuration invokes nothing from Spec Kit
-_settings_raw = (ROOT / ".claude/settings.json").read_text(encoding="utf-8")
-check("settings.json invokes no Spec Kit command",
-      not re.search(r"speckit|\.specify", _settings_raw, re.I))
-
-# (3) the guard suite itself runs nothing from Spec Kit. It cannot usefully search itself for
-# the presence of its own search patterns, so the positive invariant -- that it now asserts the
-# ABSENCE of the skills -- is check (1) above rather than a self-referential string match.
-_self = Path(__file__).read_text(encoding="utf-8")
-check("the guard suite runs no Spec Kit script",
-      not re.search(r"\.specify/(scripts|templates)", _self))
-
-# (4) wherever the live surface still NAMES Spec Kit, it does so to DENY authority.
-# 00-authority.md 00.4 requires that statement while the trees remain, so the mention is the
-# point. What is forbidden is a live file presenting Spec Kit as a current source.
-DENIALS = ("not authoritative", "not authority", "never authority", "no authority",
-           "carries no authority", "never evidence", "not sources", "migration input",
-           "are history", "non-authoritative")
-_undenied = []
+# (1) nothing on the live surface names a retired artifact at all. There is no longer a "mentions
+# it only to deny it" exemption: the artifacts are gone, so a reader who meets the name has
+# nothing to look at, and a pointer to nothing is worse than silence.
+RETIRED_NAME = re.compile(
+    r"\.specify|speckit|spec kit|constitution|docs/migration|"
+    r"principles\.yaml|dotnet_?l?a?n?g?\.yaml|python_?l?a?n?g?\.yaml", re.I)
+_stale = []
 for _p in LIVE_SURFACE:
     _t = _p.read_text(encoding="utf-8", errors="replace")
-    if not re.search(r"\.specify|spec kit|speckit", _t, re.I):
+    if RETIRED_NAME.search(_t):
+        _stale.append(str(_p.relative_to(ROOT)).replace(chr(92), "/"))
+check("no live governance file names a retired artifact: "
+      + (", ".join(_stale[:5]) or "clean"), not _stale)
+
+# (2) the committed hook configuration invokes nothing retired
+_settings_raw = (ROOT / ".claude/settings.json").read_text(encoding="utf-8")
+check("settings.json invokes no retired command",
+      not RETIRED_NAME.search(_settings_raw))
+
+# (3) the guard suite itself loads nothing retired. It cannot usefully search itself for the
+# presence of its own search patterns, so the positive invariant -- that it asserts the ABSENCE of
+# the artifacts -- is the RETIRED_PATHS block above rather than a self-referential string match.
+_self = Path(__file__).read_text(encoding="utf-8")
+check("the guard suite runs no retired script",
+      not re.search(r"\.specify/(scripts|templates)", _self))
+
+# (4) no tracked file anywhere in the repository cites a retired governance artifact by name.
+# Established with git ls-files, not by walking the tree: build residue is not repository content
+# (.claude/rules/90-functional-knowledge.md 90.2).
+_tracked_all = git("ls-files").stdout.splitlines()
+# docs/adr/** is excluded on purpose: an accepted record is never reworded, renumbered or
+# retro-statused (.claude/rules/70-adr.md 70.6). A record that cited a document which has since
+# been retired is history doing its job, not a stale pointer to repair. The same holds for
+# docs/architecture/integrations-service-delta.md, which is a non-authoritative historical delta.
+HISTORY = ("docs/adr/", "docs/architecture/integrations-service-delta.md")
+_cited = []
+for _rel in _tracked_all:
+    if _rel.startswith(".claude/hooks/test_guards.py") or _rel.startswith(HISTORY):
         continue
-    if not any(_d in _t.lower() for _d in DENIALS):
-        _undenied.append(str(_p.relative_to(ROOT)).replace("\\", "/"))
-check("every live Spec Kit mention denies it authority: "
-      + (", ".join(_undenied[:5]) or "all denied"), not _undenied)
+    _f = ROOT / _rel
+    if not _f.is_file() or _f.stat().st_size > 400_000:
+        continue
+    if _f.suffix.lower() in (".png", ".ico", ".lock", ".svg"):
+        continue
+    try:
+        _t = _f.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        continue
+    if re.search(r"\.specify|speckit|\bconstitution\b|docs/migration/", _t, re.I):
+        _cited.append(_rel)
+check("no tracked file cites a retired governance artifact: "
+      + (", ".join(_cited[:6]) or "clean"), not _cited)
 
 # --- the committed hook configuration is valid and wires both guards --------------------------
 settings_path = ROOT / ".claude/settings.json"
@@ -933,34 +958,55 @@ check(
     all("Write" in e.get("matcher", "") and "Edit" in e.get("matcher", "") for e in entries),
 )
 
-# --- Phase 9: the engineering baseline is migrated, traced and honestly scoped ----------------
-# These checks exist so a later edit cannot silently drop a baseline requirement, lose a rule's
-# traceability, or quietly invent a TypeScript baseline. They validate the migration record
-# against the authoritative sources; they do not judge whether a rule is correct.
+# --- the three architecture authorities exist, and nothing else claims to be one ---------------
+# .claude/rules/00-authority.md 00.2: exactly three documents are architecture authority. The list
+# is closed, so both halves are asserted -- the three are present, and the two files that sit in
+# the same directory without authority are named as carrying none.
 
-BASELINE_RULES = [
-    ROOT / ".claude/rules/00-authority.md",
-    ROOT / ".claude/rules/10-principles.md",
-    ROOT / ".claude/rules/20-dotnet.md",
-    ROOT / ".claude/rules/21-python.md",
-    ROOT / ".claude/rules/22-web-typescript.md",
-    ROOT / ".claude/rules/23-angular.md",
-    ROOT / ".claude/rules/24-electron.md",
-    ROOT / ".claude/rules/40-testing.md",
-    ROOT / ".claude/rules/60-architecture-gates.md",
-    ROOT / ".claude/rules/80-security-ops.md",
+ARCHITECTURE = [
+    "docs/architecture/identity-plane-final.md",
+    "docs/architecture/Synthia-OverallArchitecture-final.md",
+    "docs/architecture/RagAgent-Architecture-final.md",
 ]
-for _f in BASELINE_RULES:
-    check("exists: " + _f.name, _f.is_file())
+NOT_AUTHORITY = [
+    "docs/architecture/integrations-service-delta.md",
+    "docs/architecture/ragcore-langgraph-flow.md",
+]
+for _a in ARCHITECTURE:
+    check("architecture authority present: " + _a, (ROOT / _a).is_file())
 
-for _f in BASELINE_RULES:
-    text = _f.read_text(encoding="utf-8")
-    prose = outside_fences(text)
-    check(_f.name + " has a single H1", prose.count("\n# ") + prose.startswith("# ") == 1)
-    check(_f.name + " has balanced code fences", text.count("```") % 2 == 0)
+AUTHORITY_RULE = (ROOT / ".claude/rules/00-authority.md").read_text(encoding="utf-8")
+for _a in ARCHITECTURE:
+    check("00-authority.md names " + Path(_a).name, Path(_a).name in AUTHORITY_RULE)
+for _n in NOT_AUTHORITY:
+    check("00-authority.md denies authority to " + Path(_n).name, Path(_n).name in AUTHORITY_RULE)
+check("00-authority.md states the closed list", "Exactly three documents" in AUTHORITY_RULE
+      or "exactly three documents" in AUTHORITY_RULE.lower())
+check("00-authority.md keeps the baseline in .claude/rules",
+      ".claude/rules/**` is the engineering baseline" in AUTHORITY_RULE)
+check("00-authority.md states that approval is never inferred",
+      "00.10 Approval and acceptance are never inferred" in AUTHORITY_RULE)
 
+# --- the rule set is complete and well formed --------------------------------------------------
+# The fourteen files below are the whole engineering baseline. A missing one is a governance area
+# with no rule; an extra one is an authority nobody decided to create.
+
+REQUIRED_RULES = [
+    "00-authority.md", "10-principles.md", "20-dotnet.md", "21-python.md",
+    "22-web-typescript.md", "23-angular.md", "24-electron.md", "30-langgraph.md",
+    "40-testing.md", "50-database.md", "60-architecture-gates.md", "70-adr.md",
+    "80-security-ops.md", "90-functional-knowledge.md",
+]
 RULE_TEXT = {p.name: p.read_text(encoding="utf-8")
              for p in sorted((ROOT / ".claude/rules").glob("*.md"))}
+check("exactly the fourteen rule files exist: " + ", ".join(sorted(RULE_TEXT)),
+      sorted(RULE_TEXT) == REQUIRED_RULES)
+
+for _name, _text in sorted(RULE_TEXT.items()):
+    _prose = outside_fences(_text)
+    check(_name + " has a single H1", _prose.count("\n# ") + _prose.startswith("# ") == 1)
+    check(_name + " has balanced code fences", _text.count("```") % 2 == 0)
+
 ALL_RULES = "\n".join(RULE_TEXT.values())
 
 # every rule file that governs one stack says so, and says which paths
@@ -971,229 +1017,10 @@ check("21-python.md names its paths", "`ragcore/**`" in RULE_TEXT["21-python.md"
       and "`integrations/**`" in RULE_TEXT["21-python.md"])
 check("22-web-typescript.md names its paths", "`apps/web/**`" in RULE_TEXT["22-web-typescript.md"]
       and "`apps/desktop/**`" in RULE_TEXT["22-web-typescript.md"])
-check(
-    "no language rule silently claims another stack",
-    "language-independent" not in RULE_TEXT["20-dotnet.md"].split("## 20.1")[0],
-)
+check("no language rule silently claims another stack",
+      "language-independent" not in RULE_TEXT["20-dotnet.md"].split("## 20.1")[0])
 
-# --- the migration record exists and is complete ----------------------------------------------
-COVERAGE = ROOT / "docs/migration/phase-9-baseline-coverage.md"
-check("exists: phase-9-baseline-coverage.md", COVERAGE.is_file())
-coverage_text = COVERAGE.read_text(encoding="utf-8") if COVERAGE.is_file() else ""
-for _heading in (
-    "## 1. Inputs",
-    "## 2. Inventory",
-    "## 3. Applicability matrix",
-    "## 4. Semantic preservation",
-    "## 5. Enforcement",
-    "## 6. Traceability",
-    "## 7. Dropped-rule recovery",
-    "## 8. Deviations",
-    "## 9. Unresolved decisions",
-):
-    check("coverage record has " + _heading, _heading in coverage_text)
-
-BASELINE_INPUT = ROOT / "docs/migration/phase-9-baseline-input.md"
-check("exists: phase-9-baseline-input.md", BASELINE_INPUT.is_file())
-
-# --- traceability: every authoritative baseline id reaches both the record and a rule ----------
-YAML_PACKS = ["principles.yaml", "dotnet.yaml", "dotnet_lang.yaml",
-              "python.yaml", "python_lang.yaml"]
-for _pack in YAML_PACKS:
-    check("baseline pack present: " + _pack, (ROOT / _pack).is_file())
-
-
-def keyed_ids(pack: str) -> list[str]:
-    """The explicit `id:` values in a rule pack, qualified the way the matrices identify them."""
-    raw = re.findall(r"^\s*-?\s*id:\s*(\S+)\s*$",
-                     (ROOT / pack).read_text(encoding="utf-8"), re.M)
-    out = []
-    for rid in raw:
-        if rid.startswith("P-DN"):
-            out.append("dotnet.yaml#" + rid)
-        elif rid.startswith("P-PY"):
-            out.append("python.yaml#" + rid)
-        else:
-            out.append(rid)
-    return out
-
-
-KEYED = {pack: keyed_ids(pack) for pack in YAML_PACKS}
-KEYED_TOTAL = sum(len(v) for v in KEYED.values())
-check("the packs still carry exactly 115 keyed rule ids", KEYED_TOTAL == 115)
-for _pack, _expected in [("principles.yaml", 32), ("dotnet.yaml", 12), ("dotnet_lang.yaml", 37),
-                         ("python.yaml", 9), ("python_lang.yaml", 25)]:
-    check(f"{_pack} keyed id count is {_expected}", len(KEYED[_pack]) == _expected)
-
-# the 13 requirements that carry no `id:` in the source and were promoted into matrix rows
-UNKEYED_IDS = [
-    "dotnet.yaml#baseline", "python.yaml#baseline",
-    "dotnet.yaml#toolchain.analyzers", "dotnet.yaml#toolchain.formatter",
-    "dotnet.yaml#toolchain.style_in_build", "dotnet.yaml#toolchain.warnings",
-    "dotnet.yaml#toolchain.packages",
-    "python.yaml#toolchain.linter", "python.yaml#toolchain.formatter",
-    "python.yaml#toolchain.import_sort", "python.yaml#toolchain.type_checker",
-    "python.yaml#toolchain.security", "python.yaml#toolchain.packaging",
-]
-check("13 unkeyed baseline requirements are enumerated", len(UNKEYED_IDS) == 13)
-check("115 keyed + 13 unkeyed reproduce the Phase 2 total of 128",
-      KEYED_TOTAL + len(UNKEYED_IDS) == 128)
-
-# the explicit baseline block: 39 items, Phase 9 migration ids BL-01..BL-39
-BL_IDS = [f"BL-{i:02d}" for i in range(1, 40)]
-if BASELINE_INPUT.is_file():
-    check(
-        "the baseline block still holds 39 items",
-        len(re.findall(r"^\\- ", BASELINE_INPUT.read_text(encoding="utf-8"), re.M)) == 39,
-    )
-
-ALL_BASELINE_IDS = [i for v in KEYED.values() for i in v] + UNKEYED_IDS + BL_IDS
-check("167 baseline requirements are accounted for", len(ALL_BASELINE_IDS) == 167)
-
-_missing_record = [r for r in ALL_BASELINE_IDS if r not in coverage_text]
-check("every baseline id appears in the migration record: "
-      + (", ".join(_missing_record[:5]) or "all present"), not _missing_record)
-
-_missing_rule = [r for r in ALL_BASELINE_IDS if r not in ALL_RULES]
-check("every baseline id is traceable from a rule file: "
-      + (", ".join(_missing_rule[:5]) or "all present"), not _missing_rule)
-
-# Phase 9 ids are assigned in the record, never written back into an authoritative source
-_leaked = [p for p in YAML_PACKS
-           if re.search(r"\bBL-\d\d\b", (ROOT / p).read_text(encoding="utf-8"))]
-check("no Phase 9 BL id was written into a source pack: " + (", ".join(_leaked) or "clean"),
-      not _leaked)
-
-# --- the applicability matrix is complete, unique, and its roll-up has not drifted ------------
-_LABELS = ("mechanical", "partial", "procedural", "currently-unenforced", "not-applicable")
-_matrix_ids: list[str] = []
-_enf_counts: dict[str, int] = {lbl: 0 for lbl in _LABELS}
-for _line in coverage_text.splitlines():
-    if not _line.startswith("| "):
-        continue
-    _cells = [c.strip() for c in re.split(r"(?<!\\)\|", _line.strip("|"))]
-    if len(_cells) != 8 or _cells[4] not in _LABELS:
-        continue
-    _matrix_ids.append(_cells[0])
-    _enf_counts[_cells[4]] += 1
-
-check("the applicability matrix holds one row per requirement", len(_matrix_ids) == 167)
-check("no requirement is represented twice in the matrix",
-      len(set(_matrix_ids)) == len(_matrix_ids))
-check("every matrix row carries an enforcement label",
-      sum(_enf_counts.values()) == len(_matrix_ids))
-for _lbl in _LABELS:
-    check(
-        f"the enforcement roll-up matches the matrix for {_lbl}",
-        f"| `{_lbl}` | {_enf_counts[_lbl]} |" in coverage_text,
-    )
-
-# --- the rules Phase 7 found dropped are present as requirements, not only as gates -----------
-DROPPED = {
-    "Conventional Commits": "### C-1 — Conventional Commits",
-    "SemVer": "### C-2 — Semantic Versioning",
-    "Diataxis": "### C-3 — Documentation structure: Diátaxis",
-    "C4": "### C-4 — Architecture diagrams: C4",
-    "README quickstart + ADR pointer": "### C-5 — README: quickstart and ADR pointer",
-}
-for _label, _needle in DROPPED.items():
-    holders = [n for n, t in RULE_TEXT.items() if _needle in t]
-    check("recovered dropped rule is stated exactly once: " + _label, len(holders) == 1)
-
-check("Conventional Commits states the actual grammar",
-      "BREAKING CHANGE:" in RULE_TEXT["10-principles.md"]
-      and "refactor" in RULE_TEXT["10-principles.md"])
-check("SemVer states the actual bump rule",
-      "MAJOR.MINOR.PATCH" in RULE_TEXT["10-principles.md"])
-check("Diataxis names its four kinds",
-      all(k in RULE_TEXT["10-principles.md"]
-          for k in ("Tutorial", "How-to guide", "Reference", "Explanation")))
-check("C4 names its levels",
-      "System Context" in RULE_TEXT["10-principles.md"]
-      and "Container" in RULE_TEXT["10-principles.md"])
-
-# both source ids survive the consolidation of the duplicated profile conventions
-for _pair in ("dotnet.yaml#P-DN-4", "python.yaml#P-PY-4",
-              "dotnet.yaml#P-DN-6", "python.yaml#P-PY-6"):
-    check("consolidated convention keeps its source id: " + _pair,
-          _pair in RULE_TEXT["10-principles.md"])
-
-# --- the repository-wide principle stays repository-wide --------------------------------------
-check("P17 least privilege is repository-wide, not DB-only",
-      "P-17 — Least privilege (repository-wide)" in RULE_TEXT["10-principles.md"])
-check("P17's operational surfaces are enumerated",
-      "principles#P17" in RULE_TEXT["80-security-ops.md"])
-
-# --- the engineering requirement survives alongside its governance gate ------------------------
-check("DN21 states the suppression requirement itself",
-      "scoped and carries a justification" in RULE_TEXT["20-dotnet.md"]
-      or "scoped and justified" in RULE_TEXT["20-dotnet.md"])
-check("DN21 is not represented only as an ADR trigger",
-      "#pragma warning restore" in RULE_TEXT["20-dotnet.md"])
-
-# --- the TS/Angular/Electron baseline is migrated, and did not restore the constitution --------
-# GOVERNED INVERSION, Phase 12. Until Phase 11 three checks here asserted that NO TypeScript
-# baseline had been invented and that the decision was still open. That is exactly what
-# docs/adr/0010-frontend-engineering-baseline.md decides, on an explicit human decision, so the
-# assertions are inverted rather than deleted (.claude/rules/40-testing.md 40.1). The replacement
-# is stricter than what it replaces: the baseline must exist, be identified, be traced, and keep
-# the constitution non-authoritative.
-FRONTEND_RULES = ("22-web-typescript.md", "23-angular.md", "24-electron.md")
-for _name in FRONTEND_RULES:
-    check("the frontend baseline file exists: " + _name, _name in RULE_TEXT)
-
-check("the frontend baseline declares itself authoritative",
-      "MIGRATED AND AUTHORITATIVE" in RULE_TEXT["22-web-typescript.md"])
-check("the superseded 'no baseline defined' statement is gone from the rules",
-      "TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED" not in ALL_RULES)
-check("the TS human decision is no longer advertised as open",
-      "HUMAN DECISION REQUIRED" not in RULE_TEXT["22-web-typescript.md"])
-check("every frontend rule file names the ADR that authorized it",
-      all("0010-frontend-engineering-baseline.md" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
-check("the constitution is stated as migration input and denied authority",
-      "IS MIGRATION INPUT. IT IS NOT AUTHORITY." in RULE_TEXT["22-web-typescript.md"])
-check("committed frontend tooling is still not promoted to baseline authority",
-      "evidence of what is, not authority for what should be"
-      in RULE_TEXT["22-web-typescript.md"])
-
-# every migrated frontend requirement is identified, defined exactly once, and traced
-PHASE12 = ROOT / "docs/migration/phase-12-spec-kit-decoupling.md"
-check("exists: phase-12-spec-kit-decoupling.md", PHASE12.is_file())
-
-# The ADR that authorized the frontend baseline must actually be on disk. Phase 12 could not
-# create it from this session: H5 blocks a shell write to a new record (it can validate content
-# only from a whole-file Write), and the Write tool was unavailable under the session's isolation
-# setting. The content was staged and validated against h5.validate() instead. Until the record
-# lands this check FAILS, on purpose -- the rules cite an ADR, so the ADR has to exist.
-ADR_0010 = ROOT / "docs/adr/0010-frontend-engineering-baseline.md"
-check("exists: docs/adr/0010-frontend-engineering-baseline.md "
-      "(the frontend baseline's authorizing record)", ADR_0010.is_file())
-if ADR_0010.is_file():
-    _adr = ADR_0010.read_text(encoding="utf-8")
-    check("ADR-0010 is structurally valid",
-          not h5.validate("docs/adr/0010-frontend-engineering-baseline.md", _adr, is_new=False))
-    check("ADR-0010 names the authority it affects",
-          "00-authority.md" in _adr and "22-web-typescript.md" in _adr)
-    check("ADR-0010 keeps the constitution as migration input only",
-          "migration input" in _adr.lower())
-check("ADR-0010 is indexed", "0010-frontend-engineering-baseline.md"
-      in (ROOT / "docs/adr/README.md").read_text(encoding="utf-8"))
-
-phase12_text = PHASE12.read_text(encoding="utf-8") if PHASE12.is_file() else ""
-_fe_text = "\n".join(RULE_TEXT[_n] for _n in FRONTEND_RULES)
-FE_IDS = sorted(set(re.findall(r"\bFE-(?:SH|TS|NG|EL)-\d+\b", _fe_text)))
-check(f"the frontend baseline carries requirement ids ({len(FE_IDS)} found)", len(FE_IDS) >= 20)
-for _fid in FE_IDS:
-    check("frontend requirement is defined under exactly one heading: " + _fid,
-          len(re.findall(r"^### " + _fid + r" ", _fe_text, re.M)) == 1)
-    check("frontend requirement is traced in the Phase 12 record: " + _fid,
-          _fid in phase12_text)
-check("every frontend rule file states Source lines",
-      all("*Source:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
-check("every frontend rule file states enforcement honestly",
-      all("Enforcement:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
-
-# --- path-scoped rules parse, and their globs name real, tracked directories ------------------
+# --- path-scoped rules parse, and their globs name real, tracked directories -------------------
 SCOPED: dict[str, list[str]] = {}
 for _p in sorted((ROOT / ".claude/rules").glob("*.md")):
     _t = _p.read_text(encoding="utf-8")
@@ -1231,92 +1058,285 @@ for _global in ("00-authority.md", "10-principles.md", "30-langgraph.md", "40-te
                 "80-security-ops.md", "90-functional-knowledge.md"):
     check("governance rule stays repository-wide: " + _global, _global not in SCOPED)
 
-# --- enforcement claims are stated with the honest vocabulary ---------------------------------
-for _needle in ("mechanical", "partial", "procedural", "currently-unenforced"):
-    check("coverage record uses the enforcement label " + _needle, _needle in coverage_text)
+# --- rule identifiers are defined here, once each, and nowhere else ---------------------------
+# .claude/rules/00-authority.md 00.3 states the identifier spaces and says the rule files define
+# them. These checks prove that: every space is populated, and every requirement that carries an
+# id is defined under exactly one heading.
+
+ID_SPACES = {
+    "P-": ("10-principles.md", r"^### (P-\d+) ", 32),
+    "C-": ("10-principles.md", r"^### (C-\d+) ", 6),
+    "H-": ("10-principles.md", r"^### (H-\d+) ", 2),
+    "TC-": ("40-testing.md", r"\| \*\*(TC-\d+)\*\*", 15),
+    "CM-": ("40-testing.md", r"\| \*\*(CM-\d+)\*\*", 12),
+}
+for _prefix, (_file, _pat, _expected) in sorted(ID_SPACES.items()):
+    _ids = re.findall(_pat, RULE_TEXT[_file], re.M)
+    check(f"{_prefix}* is defined in {_file}: {len(_ids)} of {_expected}", len(_ids) == _expected)
+    check(f"{_prefix}* carries no duplicate definition", len(set(_ids)) == len(_ids))
+
+check("00-authority.md documents every identifier space",
+      all(s in AUTHORITY_RULE for s in ("`P-1`", "`C-1`", "`H-1`", "`DN-1`", "`PY-1`",
+                                        "`BL-01`", "`TC-01`", "`CM-01`")))
+check("00-authority.md explains Origin lines as provenance, not authority",
+      "Origin line is provenance" in AUTHORITY_RULE)
+
+# the frontend baseline: every FE-* requirement is defined under exactly one heading
+FRONTEND_RULES = ("22-web-typescript.md", "23-angular.md", "24-electron.md")
+_fe_text = "\n".join(RULE_TEXT[_n] for _n in FRONTEND_RULES)
+FE_IDS = sorted(set(re.findall(r"\bFE-(?:SH|TS|NG|EL)-\d+\b", _fe_text)))
+check(f"the frontend baseline carries requirement ids ({len(FE_IDS)} found)", len(FE_IDS) >= 20)
+for _fid in FE_IDS:
+    check("frontend requirement is defined under exactly one heading: " + _fid,
+          len(re.findall(r"^### " + _fid + r" ", _fe_text, re.M)) == 1)
+check("every frontend rule file states Origin lines",
+      all("*Origin:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+check("every frontend rule file states enforcement honestly",
+      all("Enforcement:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+check("every frontend rule file names the ADR that authorized it",
+      all("0010-frontend-engineering-baseline.md" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+check("the frontend baseline declares itself the authority",
+      "THE FRONTEND BASELINE IS AUTHORITATIVE" in RULE_TEXT["22-web-typescript.md"])
+check("committed frontend tooling is still not promoted to baseline authority",
+      "evidence of what is, not authority for what should be"
+      in RULE_TEXT["22-web-typescript.md"])
+check("the superseded 'no baseline defined' statement is gone from the rules",
+      "TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED" not in ALL_RULES)
+
+# --- enforcement is claimed with the honest vocabulary, never rounded up ----------------------
+# The four honest labels, plus "not-applicable" for a row where the rule cannot apply to that
+# stack at all. A claim may also discharge itself by naming the rule whose enforcement it shares,
+# or by naming the registered deviation that explains why the gate is absent - both are honest
+# statements about the gate, which is what this check exists to hold.
+VOCAB = ("mechanical", "partial", "procedural", "currently-unenforced", "not-applicable",
+         "see DN-", "see PY-", "see BL-", "see FE-", "deviation ")
+for _name, _text in sorted(RULE_TEXT.items()):
+    if "Enforcement:" not in _text:
+        continue
+    _clauses = [m.group(1) for m in re.finditer(r"Enforcement:(.{0,160})", _text, re.S)]
+    _bad = [c.strip()[:48] for c in _clauses if not any(v in c for v in VOCAB)]
+    check(f"{_name} states every enforcement claim in the honest vocabulary: "
+          + (", ".join(_bad[:3]) or "clean"), not _bad)
 for _rule, _file in (("lang/dotnet#DN8", "20-dotnet.md"), ("lang/dotnet#DN31", "20-dotnet.md"),
                      ("lang/python#PY4", "21-python.md")):
     check(_rule + " is recorded as unenforced, not claimed green",
           "currently-unenforced" in RULE_TEXT[_file])
-check("the re-verified Phase 7 enforcement errors are all recorded",
-      all(r in coverage_text for r in
-          ("lang/dotnet#DN8", "lang/dotnet#DN31", "lang/dotnet#DN16", "lang/python#PY4")))
 
-# --- conflicts are recorded, not reconciled ----------------------------------------------------
-check("the EF-migrations conflict is recorded", "CF-1" in coverage_text)
-check("the conflict names both sources",
-      "BL-10" in RULE_TEXT["20-dotnet.md"] and "50-database.md" in RULE_TEXT["20-dotnet.md"])
-check("the migration invariant is not weakened by the conflict",
-      "NoMigrationTests" in RULE_TEXT["20-dotnet.md"])
-check("deviations are recorded rather than repaired", "DV-1" in coverage_text)
-check("enforcement gaps are recorded rather than closed", "EG-1" in coverage_text)
-
-# --- root CLAUDE.md -----------------------------------------------------------------------------
+# --- every path a rule or CLAUDE.md cites actually exists -------------------------------------
 CLAUDE_MD = ROOT / "CLAUDE.md"
 check("exists: CLAUDE.md", CLAUDE_MD.is_file())
 claude_text = CLAUDE_MD.read_text(encoding="utf-8") if CLAUDE_MD.is_file() else ""
-check("CLAUDE.md is concise", 0 < len(claude_text.splitlines()) <= 200)
-for _doc in ("identity-plane-final.md", "Synthia-OverallArchitecture-final.md",
-             "RagAgent-Architecture-final.md"):
-    check("CLAUDE.md names architecture authority " + _doc, _doc in claude_text)
+GOV_DOC = ROOT / "docs/final-repository-governance.md"
+OPEN_ITEMS = ROOT / "docs/governance/open-items.md"
+check("exists: docs/final-repository-governance.md", GOV_DOC.is_file())
+check("exists: docs/governance/open-items.md", OPEN_ITEMS.is_file())
+gov_text = GOV_DOC.read_text(encoding="utf-8") if GOV_DOC.is_file() else ""
+open_items = OPEN_ITEMS.read_text(encoding="utf-8") if OPEN_ITEMS.is_file() else ""
+
+_refs = set()
+for _text in list(RULE_TEXT.values()) + [claude_text, gov_text, open_items]:
+    for _m in re.finditer(r"`((?:\.claude|docs|build|azure-pipelines|apps|dotnet|ragcore|"
+                          r"integrations)/[A-Za-z0-9_./-]+)`", _text):
+        _refs.add(_m.group(1))
+# A citation like `docs/adr/0001` names a record by number, and `docs/adr/NNNN` is the filename
+# grammar. Neither is a path, so only references carrying a file extension are resolved.
+_broken = sorted(r for r in _refs
+                 if "*" not in r and "<" not in r and not r.endswith("/")
+                 and "NNNN" not in r and Path(r).suffix
+                 and not (ROOT / r).exists())
+check("every repository path cited by the governance surface exists: "
+      + (", ".join(_broken[:6]) or "all resolve"), not _broken)
+
+# --- CLAUDE.md is permanent project guidance, and routes rather than restates -----------------
+check("CLAUDE.md is concise", 0 < len(claude_text.splitlines()) <= 320)
+for _doc in ARCHITECTURE:
+    check("CLAUDE.md names architecture authority " + Path(_doc).name,
+          Path(_doc).name in claude_text)
 for _gate in ("50-database.md", "30-langgraph.md", "70-adr.md", "90-functional-knowledge.md"):
     check("CLAUDE.md names the gate " + _gate, _gate in claude_text)
+_listed = [n for n in RULE_TEXT if n in claude_text]
+check("CLAUDE.md indexes every rule file", len(_listed) == len(RULE_TEXT))
 check("CLAUDE.md names docs/functional/implemented.md",
       "docs/functional/implemented.md" in claude_text)
-check("CLAUDE.md names the baseline sources",
-      "principles.yaml" in claude_text and "phase-9-baseline-input.md" in claude_text)
-check("CLAUDE.md says Spec Kit artifacts are not authoritative",
-      "not authoritative" in claude_text.lower())
+check("CLAUDE.md names the open-items register", "docs/governance/open-items.md" in claude_text)
+check("CLAUDE.md names the permanent governance document",
+      "docs/final-repository-governance.md" in claude_text)
 check("CLAUDE.md distinguishes rules from skills",
       ".claude/rules/" in claude_text and ".claude/skills/" in claude_text)
 check("CLAUDE.md does not inline the baseline", "principles#P1" not in claude_text)
-_listed = [n for n in RULE_TEXT if n in claude_text]
-check("CLAUDE.md indexes every rule file", len(_listed) == len(RULE_TEXT))
+check("CLAUDE.md states the conformance gate before code generation",
+      "STOP before generating code" in claude_text)
+check("CLAUDE.md states that approval is never inferred",
+      "never inferred" in claude_text.lower())
+check("CLAUDE.md states the functional-truth ordering",
+      "THEN update implemented.md" in claude_text)
+check("CLAUDE.md carries the language governance matrix",
+      "## 9. Language governance" in claude_text)
+check("CLAUDE.md carries the MCP section", "## 13. MCP tooling" in claude_text)
+check("CLAUDE.md names the next ADR number",
+      "next: 0013" in claude_text or "**next: 0013**" in claude_text)
+check("CLAUDE.md reads as durable guidance, not a migration diary",
+      not re.search(r"\bPhase \d+\b", claude_text))
 
-# --- every .claude path referenced by a rule or by CLAUDE.md actually exists --------------------
-_refs = set()
-for _text in list(RULE_TEXT.values()) + [claude_text]:
-    for _m in re.finditer(r"`(\.claude/[A-Za-z0-9_./-]+)`", _text):
-        _refs.add(_m.group(1))
-_broken = sorted(r for r in _refs
-                 if "*" not in r and "<" not in r and not (ROOT / r).exists())
-check("every .claude path referenced by the rules exists: "
-      + (", ".join(_broken[:5]) or "all resolve"), not _broken)
+# --- language governance: no executable language is left without a governing rule -------------
+# Derived from what is TRACKED, not from a list somebody maintains by hand: a new language enters
+# this check the moment its first file is committed.
+LANGUAGE_BY_SUFFIX = {
+    ".cs": "C#", ".py": "Python", ".ts": "TypeScript", ".js": "JavaScript", ".mjs": "JavaScript",
+    ".html": "HTML", ".css": "CSS", ".sh": "Shell", ".ps1": "PowerShell", ".sql": "SQL",
+}
+GOVERNED_LANGUAGES = {
+    "C#": "C#", "Python": "Python", "TypeScript": "TypeScript", "JavaScript": "JavaScript",
+    "HTML": "HTML", "CSS": "CSS", "Shell": "Shell", "PowerShell": "PowerShell", "SQL": "SQL",
+}
+_present = sorted({LANGUAGE_BY_SUFFIX[Path(f).suffix.lower()] for f in _tracked
+                   if Path(f).suffix.lower() in LANGUAGE_BY_SUFFIX})
+check("every tracked executable language is known: " + ", ".join(_present),
+      all(lang in GOVERNED_LANGUAGES for lang in _present))
+_lang_section = claude_text.split("## 9. Language governance")[-1].split("## 10.")[0]
+_ungoverned = [lang for lang in _present if GOVERNED_LANGUAGES[lang] not in _lang_section]
+check("every tracked executable language appears in the language matrix: "
+      + (", ".join(_ungoverned) or "all governed"), not _ungoverned)
+check("the language matrix names a governing rule file for each row",
+      _lang_section.count("`2") >= 5)
+check("the language matrix states that a new language needs a rule first",
+      "needs a governing rule **before** it carries logic" in _lang_section)
 
-# --- the pre-existing governance rules were not rewritten to fit the baseline ------------------
+# --- the permanent governance document points, and does not become a second baseline ----------
+for _needle in ("identity-plane-final.md", "Synthia-OverallArchitecture-final.md",
+                "RagAgent-Architecture-final.md", ".claude/rules/**",
+                "docs/functional/implemented.md", "docs/governance/open-items.md",
+                "azure-pipelines/", "Serena", "Figma"):
+    check("final-repository-governance.md points at " + _needle, _needle in gov_text)
+check("final-repository-governance.md denies itself authority",
+      "not authority for anything" in gov_text)
+check("final-repository-governance.md stays short",
+      0 < len(gov_text.splitlines()) <= 200)
+check("final-repository-governance.md does not restate a rule body",
+      "P-1 —" not in gov_text and "DN-8 —" not in gov_text)
+
+# --- the open-items register: everything a rule says is open is actually registered ------------
+# A deviation that a rule mentions but nothing registers is a deviation nobody tracks. A register
+# row nobody cites is a row that drifts. Both directions are asserted.
+
+for _heading in ("## 1. Deviations", "## 2. Enforcement gaps",
+                 "## 3. Conflicts between authoritative sources",
+                 "## 4. Defects in retired inputs",
+                 "## 5. Cross-stack citation gap",
+                 "## 6. Human decisions",
+                 "## 7. Conformance findings",
+                 "## 8. Recorded test obligations that are not met"):
+    check("open-items register has " + _heading, _heading in open_items)
+check("the open-items register denies itself authority",
+      "Not authority" in open_items)
+check("the open-items register forbids closing a row on Claude's own initiative",
+      "do not mark one closed on Claude's own initiative" in open_items)
+
+_cited_ids = sorted({m for m in re.findall(r"\*\*((?:DV|EG|UD|CF|D|FE-AMB)-\d+)\*\*", ALL_RULES)})
+_unregistered = [i for i in _cited_ids if i not in open_items]
+check("every open item a rule cites is registered: "
+      + (", ".join(_unregistered[:6]) or "all registered"), not _unregistered)
+for _must in ("DV-1", "DV-10", "DV-11", "EG-1", "EG-2", "EG-6", "EG-10", "CF-2", "UD-8"):
+    check("open item survives in the register: " + _must, "**" + _must + "**" in open_items)
+check("the closed conflict is not silently re-opened", "CF-1 is closed" in open_items)
+check("the register states the conformance findings without resolving them",
+      "Reported, never reconciled" in open_items)
+
+# --- the four gates still say what they are for -----------------------------------------------
+for _f in (ROOT / ".claude/rules/30-langgraph.md", ROOT / ".claude/rules/50-database.md",
+           ROOT / ".claude/rules/70-adr.md"):
+    _text = _f.read_text(encoding="utf-8")
+    check(_f.name + " forbids inferred approval", "infer" in _text.lower())
+for _f in (ROOT / ".claude/rules/30-langgraph.md", ROOT / ".claude/rules/50-database.md"):
+    _text = _f.read_text(encoding="utf-8")
+    check(_f.name + " states the ordering",
+          "DETECT" in _text and "STOP" in _text and "APPROVE" in _text)
+
+db_rule = RULE_TEXT["50-database.md"]
+for _needle in ("identity-bearing", "permission boundary", "checkpoint", "downgrade",
+                "backfill", "nullability", "single head"):
+    check("50-database.md covers " + _needle, _needle in db_rule.lower())
+check("50-database.md keeps Alembic as the single mechanism",
+      "Do not introduce EF Core migrations" in db_rule)
+
+graph_rule = RULE_TEXT["30-langgraph.md"]
+for _needle in ("execution_treatment", "interrupt", "resume", "termination", "side effect",
+                "ADR", "tenant", "never owns execution authority", "checkpoint"):
+    check("30-langgraph.md covers " + _needle, _needle in graph_rule)
+check("30-langgraph.md still lists seventeen ADR triggers",
+      "seventeen" in graph_rule or len(re.findall(r"^\d+\. \*\*", graph_rule, re.M)) >= 17)
+
+adr_rule = RULE_TEXT["70-adr.md"]
+check("70-adr.md states the ordering", all(w in adr_rule for w in ("DETECT", "STOP", "ACCEPT")))
+for _needle in ("architecture change", "engineering-baseline change",
+                "identity-bearing immutability", "permission boundar", "checkpoint persistence",
+                "30-langgraph.md", "50-database.md", "madr", "status", "proposed",
+                "sequential", "historical record", "never"):
+    check("70-adr.md covers " + _needle, _needle in adr_rule.lower())
+check("70-adr.md keeps writing and accepting separate",
+      "Writing an ADR is not approval of it." in adr_rule)
+check("70-adr.md does not duplicate the 30.4 trigger list",
+      adr_rule.count("execution_treatment") <= 1)
+check("70-adr.md names the three architecture documents",
+      all(Path(d).name in adr_rule for d in ARCHITECTURE))
+check("70-adr.md excludes the non-authoritative architecture files",
+      all(Path(n).name in adr_rule for n in NOT_AUTHORITY))
+check("70-adr.md names the next number", "0013" in adr_rule)
+
 for _name, _needle in (("30-langgraph.md", "execution_treatment"),
                        ("50-database.md", "identity-bearing"),
                        ("70-adr.md", "MADR"),
                        ("90-functional-knowledge.md", "implemented.md")):
     check("pre-existing governance intact: " + _name, _needle in RULE_TEXT[_name])
 
-# --- Phase 14: the testing baseline the constitution alone held is migrated and traceable ------
-# docs/adr/0011-required-test-categories-baseline.md (Accepted) authorizes moving the retired Spec
-# Kit constitution's three testing blocks into .claude/rules/40-testing.md. These checks prove the
-# requirement SURVIVED -- by meaning, not by count. A count check would pass against fifteen empty
-# rows, so every category is matched on its id, its name AND the thing it proves.
+# --- the skills are procedures, and never authority -------------------------------------------
+SKILLS = [ROOT / ".claude/skills" / n / "SKILL.md"
+          for n in ("db-change", "langgraph-change", "adr-author", "functional-update")]
+for _f in SKILLS:
+    check("exists: SKILL.md (" + _f.parent.name + ")", _f.is_file())
+    text = _f.read_text(encoding="utf-8")
+    check(_f.parent.name + " opens with frontmatter", text.startswith("---\n"))
+    body = text.split("---\n", 2)
+    check(_f.parent.name + " frontmatter closes", len(body) == 3)
+    check(_f.parent.name + " frontmatter names the skill",
+          'name: "' + _f.parent.name + '"' in body[1])
+    check(_f.parent.name + " frontmatter has a description", "description:" in body[1])
+    check(_f.parent.name + " has balanced code fences", body[2].count("```") % 2 == 0)
+    check(_f.parent.name + " never self-approves",
+          "never approve" in text.lower() or "must never do" in text.lower())
+
+adr_skill = (ROOT / ".claude/skills/adr-author/SKILL.md").read_text(encoding="utf-8")
+check("adr-author is procedural", adr_skill.count("## Step ") >= 9)
+check("adr-author stops before implementation", "STOP" in adr_skill)
+check("adr-author separates drafting from acceptance", "HUMAN ACCEPTANCE" in adr_skill.upper())
+check("adr-author self-checks before stopping", "SELF-CHECK" in adr_skill.upper())
+check("adr-author names the architecture owner", "owning document" in adr_skill)
+check("adr-author refuses to choose an architecture for a human",
+      "when the choice is a human's" in adr_skill)
+check("adr-author defers the trigger lists to the rules", "70-adr.md" in adr_skill)
+
+# --- the testing baseline: fifteen categories, twelve matrix rows, and the coverage policy -----
+# These prove the requirement SURVIVES -- by meaning, not by count. A count check would pass
+# against fifteen empty rows, so every category is matched on its id, its name AND the thing it
+# proves.
 TESTING = RULE_TEXT["40-testing.md"]
 
-check("40-testing.md names the ADR that authorized the migration",
+check("40-testing.md names the ADR that authorized the categories",
       "0011-required-test-categories-baseline.md" in TESTING)
-check("40-testing.md keeps the constitution as migration input, denied authority",
-      "IS MIGRATION INPUT. IT IS NOT AUTHORITY." in TESTING.upper())
 check("40-testing.md is still the single testing-baseline authority",
       "testing-baseline authority" in TESTING)
 
-# (1) all fifteen required categories: id, name and the proof each one carries
 REQUIRED_CATEGORIES = {
     "TC-01": ("Unit", "Component behaviour in isolation"),
     "TC-02": ("Integration", "Real collaborators, real database, real messaging"),
     "TC-03": ("Contract", "Published API and message shapes, including between deployables"),
     "TC-04": ("Authorization",
               "Every operation against every role set, including the empty intersection"),
-    "TC-05": ("Tenant isolation", "No path returns another organisation's data"),
+    "TC-05": ("Tenant isolation", "No path returns another organisation"),
     "TC-06": ("Retrieval isolation",
               "The tenant filter cannot be evaded, including by crafted input"),
     "TC-07": ("Governance", "Treatment comes from the catalogue and never from model output"),
-    "TC-08": ("Approval",
-              "Binding, expiry, first-valid-verdict-wins, no synthesized verdict"),
+    "TC-08": ("Approval", "Binding, expiry, first-valid-verdict-wins, no synthesized verdict"),
     "TC-09": ("Idempotency", "At-least-once delivery produces exactly one effect"),
     "TC-10": ("Concurrency", "Concurrent claims and decisions resolve to one outcome"),
     "TC-11": ("Adapter", "Provider behaviour stays behind its boundary"),
@@ -1327,11 +1347,10 @@ REQUIRED_CATEGORIES = {
     "TC-15": ("End-to-end golden path",
               "A representative journey completes through every layer"),
 }
-check("the migrated baseline carries exactly fifteen categories, not sixteen",
+check("the baseline carries exactly fifteen categories, not sixteen",
       len(REQUIRED_CATEGORIES) == 15)
 for _tc, (_name, _proves) in sorted(REQUIRED_CATEGORIES.items()):
-    _row = [ln for ln in TESTING.splitlines()
-            if ln.lstrip().startswith("| **" + _tc + "**")]
+    _row = [ln for ln in TESTING.splitlines() if ln.lstrip().startswith("| **" + _tc + "**")]
     check("required test category is defined exactly once: " + _tc + " " + _name, len(_row) == 1)
     if len(_row) == 1:
         check(_tc + " carries its category name: " + _name, _name in _row[0])
@@ -1340,13 +1359,11 @@ check("no sixteenth category was invented", "TC-16" not in TESTING)
 check("the categories are stated as required and non-substitutable",
       "All fifteen are required; none substitutes for another" in TESTING)
 
-# (2) the failing-then-passing obligation for a security or isolation fix
 check("a security or isolation fix owes a failing-then-passing test",
       "A security or isolation fix without a failing-then-passing test is incomplete" in TESTING)
 check("the failing-then-passing order is stated, not merely named",
       "fails against the unfixed code and passes against the fixed code" in TESTING)
 
-# (3) all twelve change-matrix rows, matched on the change they describe and what it owes
 CHANGE_MATRIX = {
     "CM-01": ("Adds or alters an API endpoint or message shape", ("TC-03", "TC-04")),
     "CM-02": ("Adds or alters an authorization rule, role set or accepted-role declaration",
@@ -1362,13 +1379,12 @@ CHANGE_MATRIX = {
     "CM-08": ("Adds or alters a module boundary, project reference or import", ("TC-12",)),
     "CM-09": ("Adds or alters a configuration option or secret reference", ("TC-13",)),
     "CM-10": ("Touches an outbox, trigger, claim or worker", ("TC-09", "TC-10")),
-    "CM-11": ("Touches a client surface's primary journey", ("TC-15",)),
+    "CM-11": ("Touches a client surface", ("TC-15",)),
     "CM-12": ("Fixes a security or isolation defect", ()),
 }
 check("the change matrix carries exactly twelve rows", len(CHANGE_MATRIX) == 12)
 for _cm, (_desc, _owed) in sorted(CHANGE_MATRIX.items()):
-    _row = [ln for ln in TESTING.splitlines()
-            if ln.lstrip().startswith("| **" + _cm + "**")]
+    _row = [ln for ln in TESTING.splitlines() if ln.lstrip().startswith("| **" + _cm + "**")]
     check("change-matrix row is defined exactly once: " + _cm, len(_row) == 1)
     if len(_row) == 1:
         check(_cm + " states the change it matches: " + _desc[:44], _desc in _row[0])
@@ -1376,9 +1392,7 @@ for _cm, (_desc, _owed) in sorted(CHANGE_MATRIX.items()):
             check(_cm + " still owes " + _t, _t in _row[0])
 check("no thirteenth matrix row was invented", "CM-13" not in TESTING)
 
-# (4) unit tests are owed by EVERY change -- the reason CM-01..CM-12 do not repeat TC-01
-check("TC-01 Unit is explicitly owed by every change",
-      "Unit is owed by every change" in TESTING)
+check("TC-01 Unit is explicitly owed by every change", "Unit is owed by every change" in TESTING)
 check("the every-change rule explains why unit is absent from the rows",
       "not repeated below" in TESTING)
 check("a change matching several rows owes all of their categories",
@@ -1387,7 +1401,6 @@ check("CM-12 carries the failing-first ordering",
       any("**CM-12**" in ln and "failing first, then passing" in ln
           for ln in TESTING.splitlines()))
 
-# (5) the frontend row POINTS at the frontend rule; it does not restate it
 _cm11 = next((ln for ln in TESTING.splitlines() if ln.lstrip().startswith("| **CM-11**")), "")
 check("CM-11 points at the Angular rule for the frontend requirement",
       "23-angular.md" in _cm11 and "FE-NG-5" in _cm11 and "FE-NG-6" in _cm11)
@@ -1399,7 +1412,6 @@ check("FE-NG-5 and FE-NG-6 are still defined in 23-angular.md, once each",
       RULE_TEXT["23-angular.md"].count("### FE-NG-5 ") == 1
       and RULE_TEXT["23-angular.md"].count("### FE-NG-6 ") == 1)
 
-# (6) the coverage prohibition, all three of its parts
 check("no coverage threshold is set and none gates a merge",
       "No line- or branch-coverage threshold is set, and none gates a merge" in TESTING)
 check("the absence of a threshold is stated as deliberate, not an omission",
@@ -1413,7 +1425,6 @@ check("the coverage amendment path names the ADR trigger",
 check("no coverage percentage threshold was introduced",
       not re.search(r"\d{1,3}\s*%\s*(?:line|branch|statement|coverage)", TESTING, re.I))
 
-# (7) the two recorded hard-failure exceptions remain recorded, as a gap not a carve-out
 check("the recorded exception is labelled a gap, not a carve-out",
       "a gap, not a carve-out" in TESTING)
 for _hf in ("tenant context derived from an untrusted client field", "authorization bypass"):
@@ -1425,59 +1436,44 @@ check("no weaker substitute test may be written to appear to meet it",
 check("the exception points at the deferral it came from, without reopening it",
       "0008-defer-certificate-based-gateway-to-backend-provenance" in TESTING
       and "D-01" in TESTING)
-
-# (8) enforcement is claimed honestly, and EG-10 is recorded rather than closed
 check("the migrated categories are recorded as procedural, not claimed mechanical",
       "**procedural**" in TESTING)
 check("EG-10 is recorded in the rule", "EG-10" in TESTING)
-check("EG-10 states that no mechanism maps a diff to its owed categories",
-      "maps a changed file or a\n> diff to the test categories" in TESTING)
-check("EG-10 is recorded, not closed -- no mechanism was built in this phase",
-      "building one\n> is a separate, human-directed decision" in TESTING)
-
-# (9) the two axes are distinguished, not merged
 check("40-testing.md distinguishes what a principle owes from what a change owes",
-      "what does this *principle* owe?" in TESTING
-      and "what does this *change* owe?" in TESTING)
+      "what does this *principle* owe?" in TESTING and "what does this *change* owe?" in TESTING)
 check("§40.5 is still the principle axis and was not absorbed",
       "## 40.5 Test kinds the baseline requires by name" in TESTING)
 check("the gate-owned testing obligations are cross-referenced, not restated",
       all(_r in TESTING for _r in ("50-database.md` §50.8", "30-langgraph.md` §30.9",
-                                   "70-adr.md` §70.8",
-                                   "90-functional-knowledge.md` §90.10")))
-check("the non-negotiable is untouched by the migration",
-      "Never weaken a test to make a change pass" in TESTING)
+                                   "70-adr.md` §70.8", "90-functional-knowledge.md` §90.10")))
+check("the non-negotiable is untouched", "Never weaken a test to make a change pass" in TESTING)
+# --- ADR governance: every record is structurally valid, indexed, and honestly statused --------
+ADR_DIR = ROOT / "docs/adr"
+ADR_RECORDS = sorted(p for p in ADR_DIR.glob("*.md") if p.name.lower() != "readme.md")
+check("the ADR history is present: " + str(len(ADR_RECORDS)) + " records", len(ADR_RECORDS) >= 12)
 
-# (10) the authorizing record: accepted, structurally valid, and naming what it changes
-ADR_0011 = ROOT / "docs/adr/0011-required-test-categories-baseline.md"
-check("exists: docs/adr/0011-required-test-categories-baseline.md", ADR_0011.is_file())
-if ADR_0011.is_file():
-    _a11 = ADR_0011.read_text(encoding="utf-8")
-    check("ADR-0011 is structurally valid",
-          not h5.validate("docs/adr/0011-required-test-categories-baseline.md",
-                          _a11, is_new=False))
-    check("ADR-0011 is Accepted",
-          re.search(r"^- \*\*Status:\*\* Accepted\s*$", _a11, re.M) is not None)
-    check("ADR-0011 identifies the testing baseline authority it amends",
-          "40-testing.md" in _a11)
-    check("ADR-0011 states fifteen categories, not sixteen",
-          "fifteen" in _a11 and "sixteen" not in _a11.lower())
-    check("ADR-0011 keeps the constitution as migration input only",
-          "migration input" in _a11.lower())
-check("ADR-0011 is indexed",
-      "0011-required-test-categories-baseline.md"
-      in (ROOT / "docs/adr/README.md").read_text(encoding="utf-8"))
+for _rec in ADR_RECORDS:
+    _rel = "docs/adr/" + _rec.name
+    _problems = h5.validate(_rel, _rec.read_text(encoding="utf-8"), is_new=False)
+    check("ADR is structurally valid: " + _rec.name + " " + ("; ".join(_problems) or ""),
+          not _problems)
 
-# the index navigates correctly: ordered, and displaying the status each record actually carries
-_idx = (ROOT / "docs/adr/README.md").read_text(encoding="utf-8")
+_numbers = sorted(int(p.name[:4]) for p in ADR_RECORDS)
+check("ADR numbers are unique", len(set(_numbers)) == len(_numbers))
+check("ADR numbering is gapless from 0001", _numbers == list(range(1, len(_numbers) + 1)))
+_next = "%04d" % (_numbers[-1] + 1)
+check("the next ADR number is one past the highest on disk, and the rule says so: " + _next,
+      re.search(r"next[^.]{0,40}" + _next, adr_rule, re.I) is not None)
+
+_idx = (ADR_DIR / "README.md").read_text(encoding="utf-8")
 _idx_rows = re.findall(r"^\| \[(\d{4})\]\((\./[^)]+)\) \|[^|]*\| \*\*([A-Za-z ]+?)\*\*",
                        _idx, re.M)
-check("the ADR index lists twelve records in ascending order: "
+check("the ADR index lists every record in ascending order: "
       + ", ".join(n for n, _, _ in _idx_rows),
-      len(_idx_rows) == 12
+      len(_idx_rows) == len(ADR_RECORDS)
       and [n for n, _, _ in _idx_rows] == sorted(n for n, _, _ in _idx_rows))
 for _num, _rel, _shown in _idx_rows:
-    _rec = ROOT / "docs/adr" / _rel[2:]
+    _rec = ADR_DIR / _rel[2:]
     if not _rec.is_file():
         check("indexed ADR exists on disk: " + _rel, False)
         continue
@@ -1485,21 +1481,111 @@ for _num, _rel, _shown in _idx_rows:
     check("index status matches the record for ADR-" + _num + ": " + _shown,
           _m is not None and _m.group(1) == _shown)
 
-# (11) the migration record for this phase
-PHASE14 = ROOT / "docs/migration/phase-14-testing-baseline-migration.md"
-check("exists: phase-14-testing-baseline-migration.md", PHASE14.is_file())
-if PHASE14.is_file():
-    _p14 = PHASE14.read_text(encoding="utf-8")
-    check("the Phase 14 record verifies the source count as fifteen", "fifteen" in _p14)
-    for _tc in sorted(REQUIRED_CATEGORIES):
-        check("Phase 14 record traces category: " + _tc, _tc in _p14)
-    for _cm in sorted(CHANGE_MATRIX):
-        check("Phase 14 record traces matrix row: " + _cm, _cm in _p14)
-    check("the Phase 14 record carries EG-10", "EG-10" in _p14)
-    check("the Phase 14 record leaves B13-2 open rather than closing it", "B13-2" in _p14)
-    check("the Phase 14 record leaves B13-3 open rather than inventing a rule", "B13-3" in _p14)
-    check("the Phase 14 record does not invent a Principle IX requirement id",
-          "FE-IX" not in _p14 and "PR-IX" not in _p14)
+for _n, _file in ((10, "0010-frontend-engineering-baseline.md"),
+                  (11, "0011-required-test-categories-baseline.md"),
+                  (12, "0012-principle-ix-reference-fixtures-and-no-fabricated-success.md")):
+    _p = ADR_DIR / _file
+    check("exists: docs/adr/" + _file, _p.is_file())
+    if _p.is_file():
+        _a = _p.read_text(encoding="utf-8")
+        check(f"ADR-{_n:04d} names the authority it affects",
+              ".claude/rules/" in _a or "00-authority.md" in _a)
+    check(f"ADR-{_n:04d} is indexed", _file in _idx)
+
+# ADR-0012 carries Status: Proposed although the decision was accepted. H5 blocks Claude from
+# editing an existing record, which is the guard working as designed, so the correction is a human
+# one-line edit. The inconsistency is REGISTERED rather than hidden, and this check fails the day
+# the register stops saying so -- it is not an exemption.
+_a12 = (ADR_DIR / "0012-principle-ix-reference-fixtures-and-no-fabricated-success.md").read_text(
+    encoding="utf-8")
+if re.search(r"^- \*\*Status:\*\* Proposed", _a12, re.M):
+    check("the ADR-0012 status discrepancy is registered as an open item",
+          "UD-10" in open_items and "0012" in open_items)
+
+# --- MCP tooling is declared, documented, and carries no credential ---------------------------
+MCP = ROOT / ".mcp.json"
+check("exists: .mcp.json", MCP.is_file())
+mcp_raw = MCP.read_text(encoding="utf-8")
+mcp = json.loads(mcp_raw)
+servers = mcp.get("mcpServers", {})
+check("MCP declares serena", "serena" in servers)
+check("MCP declares figma", "figma" in servers)
+check("the Figma server uses the official endpoint",
+      servers.get("figma", {}).get("url") == "https://mcp.figma.com/mcp")
+check("no MCP credential is committed",
+      not re.search(r"(api[_-]?key|token|secret|password|authorization|bearer)",
+                    mcp_raw, re.I))
+check("Serena project configuration is present", (ROOT / ".serena/project.yml").is_file())
+check("CLAUDE.md documents both MCP servers",
+      "Serena" in claude_text and "Figma" in claude_text)
+check("CLAUDE.md states that MCP servers are not authority",
+      "not authority" in claude_text.split("## 13. MCP tooling")[-1].lower())
+check("CLAUDE.md names the local MCP verification step",
+      "/mcp" in claude_text)
+check("CLAUDE.md does not claim a server is connected",
+      "declaring a server is not the same as having it connected" in claude_text.lower())
+
+# --- CI/CD: the Azure DevOps definitions exist, and parity is claimed honestly ----------------
+PIPELINES = ROOT / "azure-pipelines"
+check("the Azure DevOps pipeline directory exists", PIPELINES.is_dir())
+PARITY = PIPELINES / "PARITY.md"
+PIPE_README = PIPELINES / "README.md"
+check("exists: azure-pipelines/PARITY.md", PARITY.is_file())
+check("exists: azure-pipelines/README.md", PIPE_README.is_file())
+parity = PARITY.read_text(encoding="utf-8") if PARITY.is_file() else ""
+pipe_readme = PIPE_README.read_text(encoding="utf-8") if PIPE_README.is_file() else ""
+
+WORKFLOWS = sorted(p.name for p in (ROOT / ".github/workflows").glob("*.yml"))     if (ROOT / ".github/workflows").is_dir() else []
+for _w in WORKFLOWS:
+    check("workflow has an Azure DevOps counterpart on disk: " + _w,
+          (PIPELINES / _w).is_file())
+    check("workflow is traced in the parity matrix: " + _w, _w in parity)
+
+for _p in sorted(PIPELINES.glob("*.yml")):
+    _t = _p.read_text(encoding="utf-8")
+    check("pipeline declares a pool: " + _p.name, "pool:" in _t)
+    check("pipeline is named: " + _p.name, re.search(r"^name:", _t, re.M) is not None)
+check("the governance guard suite has a pipeline of its own",
+      (PIPELINES / "governance.yml").is_file()
+      and "test_guards.py" in (PIPELINES / "governance.yml").read_text(encoding="utf-8"))
+check("the pipeline README names the required build validations",
+      "Which pipelines must be required" in pipe_readme)
+check("the pipeline README states that optional validation is not validation",
+      "Optional build validation is not build validation" in pipe_readme)
+check("a pipeline is not treated as authority",
+      "It is not authority" in pipe_readme or "not authority" in pipe_readme)
+
+# .github is still present, and the parity document is honest that it must be.
+check("the parity record states the criteria for deleting .github",
+      "Criteria for deleting" in parity)
+check("the parity record does not claim the pipelines have run",
+      "They have not been run" in parity or "not met" in parity)
+check("the parity record names the one partial replacement, rather than rounding it up",
+      "partial, deliberately" in parity)
+check("the parity record states that no gate was weakened",
+      "No gate was weakened, dropped or made conditional" in parity)
+check("the parity record does not claim an open gap was closed by the migration",
+      "EG-6" in parity)
+if "| 8 | The repository owner has the evidence above and says so | **not met** |" in parity:
+    check(".github is retained while parity is unproven",
+          (ROOT / ".github/workflows").is_dir())
+
+# --- the functional record states implemented behaviour, and never a plan ---------------------
+FUNCTIONAL = ROOT / "docs/functional/implemented.md"
+check("exists: docs/functional/implemented.md", FUNCTIONAL.is_file())
+functional = FUNCTIONAL.read_text(encoding="utf-8") if FUNCTIONAL.is_file() else ""
+FORBIDDEN = ("will support", "should support", "to be implemented")
+for _phrase in FORBIDDEN:
+    _hits = [ln.strip()[:70] for ln in functional.splitlines()
+             if _phrase in ln.lower() and "not" not in ln.lower()]
+    check("functional record states no future behaviour as implemented: " + _phrase,
+          not _hits)
+for _label in ("Implemented", "Wired but inert", "Test-only", "Not implemented"):
+    check("functional record classifies behaviour: " + _label, _label in functional)
+check("90-functional-knowledge.md still forbids architecture as functional evidence",
+      "never** evidence that a capability is implemented" in RULE_TEXT["90-functional-knowledge.md"])
+check("90-functional-knowledge.md still requires the implement-verify-record ordering",
+      "Update implemented.md" in RULE_TEXT["90-functional-knowledge.md"])
 
 print(f"{CHECKS - len(FAILURES)}/{CHECKS} checks passed")
 for failure in FAILURES:

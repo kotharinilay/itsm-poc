@@ -1,0 +1,55 @@
+# The Synthia Integrations Service (ADR-0007).
+#
+# A THIRD PIPELINE, NOT A BRANCH OF RAGCORE'S. The two services are separate deployables with
+# separate lockfiles and separate virtual environments; a shared job would make one fail because
+# the other changed, which is the coupling the separation exists to avoid.
+#
+# Replaces .github/workflows/integrations.yml. REQUIRED for pull requests touching integrations/.
+
+name: integrations
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - integrations/*
+      - build/docker/integrations.Dockerfile
+      - azure-pipelines/integrations.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - integrations/*
+      - build/docker/integrations.Dockerfile
+      - azure-pipelines/integrations.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  CI: "true"
+
+jobs:
+  - job: lint_type_test
+    displayName: ruff, mypy, pytest
+    steps:
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: integrations
+      - template: templates/python-gates.yml
+        parameters:
+          workingDirectory: integrations
+
+  - job: boundary
+    displayName: no dependency on RagCore
+    steps:
+      # A SECOND CHECK OF THE SAME RULE, AND NOT REDUNDANT. The architecture test in
+      # integrations/tests/architecture/ fails the suite; this fails the build even when the suite
+      # is skipped, filtered or newly broken. The rule - that the two Python deployables share no
+      # import and no library - is the one whose violation would be invisible to every network and
+      # gateway check, because it never crosses a wire.
+      - script: bash build/scripts/check-boundaries.sh
+        displayName: Deployable boundaries

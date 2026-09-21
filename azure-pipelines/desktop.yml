@@ -1,0 +1,74 @@
+# The Electron security suite. Every assertion corresponds to a control
+# .claude/rules/24-electron.md states unconditionally, and each fails when its switch is flipped -
+# that is the gate (24-electron.md §24.1-§24.5).
+#
+# Replaces .github/workflows/desktop.yml. REQUIRED for pull requests touching apps/desktop/.
+
+name: desktop
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - apps/desktop/*
+      - apps/web/projects/desktop-renderer/*
+      - build/scripts/verify-desktop-security-guard.sh
+      - azure-pipelines/desktop.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - apps/desktop/*
+      # The renderer-contract suite reads the Angular bridge declaration, so a change there can
+      # break this pipeline. It must run when that file moves or its shape changes.
+      - apps/web/projects/desktop-renderer/*
+      - build/scripts/verify-desktop-security-guard.sh
+      - azure-pipelines/desktop.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  CI: "true"
+
+jobs:
+  - job: security_suite
+    displayName: typecheck, security suite, build
+    steps:
+      - task: NodeTool@0
+        displayName: Install Node 22
+        inputs:
+          versionSpec: "22.x"
+
+      - script: npm ci
+        workingDirectory: apps/desktop
+        displayName: Install
+
+      - script: npm run typecheck
+        workingDirectory: apps/desktop
+        displayName: Type check
+
+      # Catches the class of mistake a test cannot see coming: an API that must never appear
+      # anywhere in this package, on any code path, including one nobody has written yet.
+      - script: npm run lint
+        workingDirectory: apps/desktop
+        displayName: Lint
+
+      # Asserts configuration rather than driving a window, so it runs on a machine with no
+      # display. A security control that needs a real window is one CI skips.
+      - script: npx vitest run
+        workingDirectory: apps/desktop
+        displayName: Security suite
+
+      # The gate is not "the suite passes" - it is "the suite passes AND fails correctly when a
+      # setting is flipped". A suite that would stay green with sandbox off is not evidence of
+      # anything, and nobody finds out until it matters. REQUIRED CHECK.
+      - script: bash build/scripts/verify-desktop-security-guard.sh
+        displayName: Verify the security suite fails correctly
+
+      - script: npm run build
+        workingDirectory: apps/desktop
+        displayName: Build

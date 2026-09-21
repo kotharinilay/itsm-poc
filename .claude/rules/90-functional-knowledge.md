@@ -49,9 +49,9 @@ Every functional statement in `implemented.md` must be supported by an implement
 The following are **never** evidence that a capability is implemented:
 
 - A1, A2 or A3, or any other architecture document
-- `docs/adr/**`, `docs/migration/**`, `README.md`, `Synthia-Platform-Specification.md`
-- `.serena/**`, `docs/current-implementation/**` (and the `.specify/**` / `specs/**` trees deleted
-  in Phase 16, which may not be cited from git history either)
+- `docs/adr/**`, `docs/governance/**`, `README.md`, `Synthia-Platform-Specification.md`
+- `.serena/**`, `docs/current-implementation/**`, and any retired governance material that
+  survives only in git history, which may not be cited from there either
 - `docs/architecture/integrations-service-delta.md`, `docs/architecture/ragcore-langgraph-flow.md`
 - `.claude/rules/**`, `.claude/skills/**`, `.claude/hooks/**` — governance machinery describes what
   Claude must do, never what the product does

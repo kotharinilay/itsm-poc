@@ -24,11 +24,9 @@ even though this host serves it.
 `.claude/rules/10-principles.md` (repository-wide principles) apply here **in addition** to
 everything below. Neither is restated.
 
-**Authority.** These requirements were migrated in Phase 12 under
-`docs/adr/0010-frontend-engineering-baseline.md` from the **retired** Spec Kit constitution, which
-is migration input and **not** authority (`.claude/rules/22-web-typescript.md` §22.1,
-`.claude/rules/00-authority.md` §00.4). Full traceability:
-`docs/migration/phase-12-spec-kit-decoupling.md`.
+**Authority.** These requirements are stated here, authorized by
+`docs/adr/0010-frontend-engineering-baseline.md` (Accepted). The ADR records the decision; this
+file is the rule (`.claude/rules/22-web-typescript.md` §22.1, `.claude/rules/70-adr.md` §70.1).
 
 ---
 
@@ -40,7 +38,7 @@ consequence is the strongest statement in this file:
 ### FE-EL-1 — No business authorization decision exists in the renderer or in the main process
 **No business authorization decision exists in the renderer or in the main process.**
 
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical —
 `apps/desktop/tests/no-policy.spec.ts` asserts that no decision vocabulary appears in main or
 preload code, that the IPC contract exposes no authority, that the session boundary persists no
 state and returns a constant descriptor, and that no field carries identity, tenancy or a verdict.
@@ -53,19 +51,18 @@ state and returns a constant descriptor, and that no field carries identity, ten
 ### FE-EL-2 — nodeIntegration disabled, contextIsolation enabled, sandbox enabled
 **`nodeIntegration` is disabled, `contextIsolation` is enabled, and the sandbox is enabled.**
 
-*Source: `constitution#VII` (Electron block). The source qualifies the third as `sandbox=true`
-**"where compatible"**. This repository enables it **unconditionally**, and
-`apps/desktop/tests/security.spec.ts` asserts that, recording that plan Stage 4 resolved the
-qualifier. The unconditional form is stated here because it is what the repository enforces; the
-source's qualifier is recorded as **FE-AMB-1** in
-`docs/migration/phase-12-spec-kit-decoupling.md` rather than silently dropped or silently kept.*
+*Origin: `ADR-0010#VII` (Electron block). The migrated wording qualified the third as
+`sandbox=true` **"where compatible"**. This repository enables it **unconditionally**, and
+`apps/desktop/tests/security.spec.ts` asserts that. The unconditional form is stated here because
+it is what the repository enforces; the qualifier is registered as **FE-AMB-1** in
+`docs/governance/open-items.md` §5a rather than silently dropped or silently kept.*
 *Enforcement: mechanical — three `no-restricted-syntax` selectors in
 `apps/desktop/eslint.config.js` fail on the literal value that would disable any of them, plus
 `apps/desktop/tests/security.spec.ts`, which additionally asserts the switch object is frozen and
 that the switches are applied after the preload path so no caller can override one.*
 
 ### FE-EL-3 — webSecurity is never disabled; insecure content is never allowed
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical — `no-restricted-syntax`
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical — `no-restricted-syntax`
 selectors for `webSecurity` false and `allowRunningInsecureContent` true, plus
 `apps/desktop/tests/security.spec.ts`. The same suite also asserts `webviewTag` stays disabled — a
 second, weaker embedding surface — which is this repository's own addition and is a repository
@@ -79,7 +76,7 @@ convention, not a migrated requirement.*
 **Expose a narrow `contextBridge` surface. Raw `ipcRenderer` must never be exposed, and neither
 may broad Electron or Node APIs.**
 
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical — a `no-restricted-syntax`
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical — a `no-restricted-syntax`
 selector fails on exposing `ipcRenderer` through `contextBridge.exposeInMainWorld`;
 `no-restricted-imports` bars `ipcRenderer` and `contextBridge` from `src/main/**`; and
 `apps/desktop/tests/bridge-surface.spec.ts` asserts the preload exposes exactly one global,
@@ -90,7 +87,7 @@ and passes no argument through to the main process.*
 **Every IPC sender and every IPC argument must be validated.** These are two distinct checks, and
 neither substitutes for the other.
 
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical —
 `apps/desktop/src/main/ipc-guard.ts` is asserted by `apps/desktop/tests/security.spec.ts` to
 refuse an untrusted sender even with valid arguments, to refuse invalid arguments even from a
 trusted sender, to refuse an unknown channel, to refuse a subframe sender on the app origin, to be
@@ -101,13 +98,13 @@ the only way to reach a handler, and to leak no host configuration in a refusal 
 ## 24.4 Navigation, origins and transport
 
 ### FE-EL-6 — Navigation and new-window creation are restricted
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical —
 `apps/desktop/src/main/navigation.ts` with an origin allow-list, and a `setWindowOpenHandler` that
 `apps/desktop/tests/security.spec.ts` asserts denies **every** destination without exception, for
 any input.*
 
 ### FE-EL-7 — Remote resources use HTTPS/WSS under a restrictive CSP
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical —
 `apps/desktop/src/main/config.ts` requires HTTPS for the gateway and the authority and WSS for
 realtime, defaults to an unresolvable reserved domain so an unconfigured build reaches nothing,
 and freezes what it loaded; `apps/desktop/src/main/csp.ts` carries no unsafe-eval and no
@@ -117,12 +114,12 @@ rather than merges a server-supplied policy, and enforces rather than reports. A
 `docs/adr/0006-desktop-renderer-origin-and-csp-nonce.md`.*
 
 ### FE-EL-8 — shell.openExternal never receives an untrusted URL
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical —
 `apps/desktop/tests/security.spec.ts` asserts it is **stricter** than navigation: HTTPS only, and
 it never hands the renderer origin to the operating system.*
 
 ### FE-EL-9 — file:// is avoided where a safer protocol strategy applies
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical — the renderer is served
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical — the renderer is served
 over the privileged `app://renderer` scheme
 (`docs/adr/0006-desktop-renderer-origin-and-csp-nonce.md`,
 `apps/desktop/src/main/renderer-protocol.ts`), asserted by
@@ -136,7 +133,7 @@ that stays contained against traversal and refuses another origin or another sch
 ### FE-EL-10 — No remote code execution
 **No remote or dynamic code execution in the host.**
 
-*Source: `constitution#VII` (Electron block) · Enforcement: mechanical — `no-eval`,
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: mechanical — `no-eval`,
 `no-implied-eval` and `no-new-func` at `error`; `no-restricted-imports` bars `child_process`,
 `node:child_process`, `vm` and `node:vm` across the whole package; `no-restricted-properties` bars
 `process.binding`; and `apps/desktop/tests/no-policy.spec.ts` asserts the tree calls no
@@ -156,7 +153,7 @@ following hold:
 6. **The endpoint executes only a versioned, predefined, approved script, and never decides
    whether an operation is permitted.**
 
-*Source: `constitution#VII` (endpoint execution path) · Enforcement: partial — the path is
+*Origin: `ADR-0010#VII` (endpoint execution path) · Enforcement: partial — the path is
 deferred in full by `docs/adr/0004-endpoint-script-integrity-privilege-and-attestation.md`.
 `apps/desktop/src/main/endpoint-execution-boundary.ts` is a refusing placeholder, and
 `apps/desktop/tests/no-policy.spec.ts` asserts it reports itself unimplemented, throws on both
@@ -174,7 +171,7 @@ The attestation half — a client result is a claim, not proof — is
 ## 24.6 Runtime currency
 
 ### FE-EL-12 — Electron stays on a currently supported release
-*Source: `constitution#VII` (Electron block) · Enforcement: currently-unenforced — no check
+*Origin: `ADR-0010#VII` (Electron block) · Enforcement: currently-unenforced — no check
 verifies the pinned Electron major against the upstream support window.
 `apps/desktop/package.json` pins `electron: ^44.4.0`, and `npm audit --audit-level=high` in
 `.github/workflows/security.yml` reports advisories but says nothing about supported-release

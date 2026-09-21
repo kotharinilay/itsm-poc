@@ -6,8 +6,10 @@ This file states *where authority comes from*. It does not restate the rules tha
 own — those live in the other files in `.claude/rules/`. It is the file to read first when two
 sources appear to say different things.
 
-Migrated in Phase 9 (`docs/migration/phase-9-baseline-coverage.md`). The Phase 2 authority model
-(`docs/migration/phase-2-authority-model.md`) is the design record behind it.
+Everything open — every deviation, enforcement gap, source defect, conflict and human decision this
+model has produced and not closed — is registered in `docs/governance/open-items.md`. That register
+is not authority; it is the list of things this file's rules say must be recorded rather than
+repaired.
 
 ---
 
@@ -37,32 +39,53 @@ Exactly three documents are architecture authority:
 **No other repository document is architecture authority.** Specifically not:
 `docs/architecture/integrations-service-delta.md`, `docs/architecture/ragcore-langgraph-flow.md`,
 `README.md`, `Synthia-Platform-Specification.md`, `.serena/**`,
-`docs/current-implementation/**`, the retired Spec Kit constitution, or `docs/adr/0001`…`0009`
+`docs/current-implementation/**`, `docs/governance/**`, or `docs/adr/0001`…`0009`
 (historical records — see `.claude/rules/70-adr.md` §70.1).
 
 That two of the non-authoritative files sit inside `docs/architecture/` does not promote them.
 
 ## 00.3 Engineering-baseline authority
 
-The engineering baseline is the migrated `.claude/rules/` baseline, together with the five rule
-packs and the explicit baseline block it was migrated from in Phase 9:
+**`.claude/rules/**` is the engineering baseline. It is the whole of it, and nothing outside it is.**
 
-| Source | File | Rule-ID space |
+The fourteen rule files in that directory state every engineering requirement in force. There is no
+second source to consult, no pack to cross-check, and no file elsewhere in the tree that a rule
+defers to for its own content.
+
+### Rule identifiers
+
+Each requirement carries an identifier, and those identifiers are **defined by these files**:
+
+| Space | Stated in | Covers |
 |---|---|---|
-| Repository-wide principles | `principles.yaml` | `principles#P1`…`P32` |
-| .NET profile / toolchain | `dotnet.yaml` | `dotnet.yaml#baseline`, `dotnet.yaml#toolchain.*`, `P-DN-S1`…`S5`, `P-DN-1`…`6` |
-| .NET language rules | `dotnet_lang.yaml` | `lang/dotnet#DN1`…`DN37` |
-| Python profile / toolchain | `python.yaml` | `python.yaml#baseline`, `python.yaml#toolchain.*`, `P-PY-S1`…`S3`, `P-PY-1`…`6` |
-| Python language rules | `python_lang.yaml` | `lang/python#PY1`…`PY25` |
-| Explicit baseline block | `docs/migration/phase-9-baseline-input.md` | `BL-01`…`BL-38` (Phase 9 migration IDs) |
+| `P-1`…`P-32` | `10-principles.md` | language-independent design principles |
+| `C-1`…`C-6` | `10-principles.md` | repository-wide conventions — commits, versioning, docs, diagrams, ADR format |
+| `H-1`, `H-2` | `10-principles.md` §10.7 | implementation honesty and reference fixtures |
+| `DN-1`…`DN-37`, `P-DN-S1`…`S5` | `20-dotnet.md` | .NET language and strictness rules |
+| `PY-1`…`PY-25`, `P-PY-S1`…`S3` | `21-python.md` | Python language and strictness rules |
+| `BL-01`…`BL-39` | `20-dotnet.md`, `80-security-ops.md` | platform, data-access, observability, container and operational rules |
+| `FE-SH-*`, `FE-TS-*`, `FE-NG-*`, `FE-EL-*` | `22-web-typescript.md`, `23-angular.md`, `24-electron.md` | the frontend baseline |
+| `TC-01`…`TC-15`, `CM-01`…`CM-12` | `40-testing.md` | required test categories and per-change obligations |
 
-`BL-*` identifiers are **assigned by the Phase 9 migration**, because the source block carries no
-IDs of its own. They live in `docs/migration/phase-9-baseline-coverage.md` and in the rule files
-that carry the requirement. They are **not** written back into the source YAML or the input block.
+An identifier is cited by its rule file and section. **Nothing in the repository reads, parses or
+loads a rule from anywhere else.**
 
-The rule files in `.claude/rules/` are the operative statement of the baseline. The sources above
-are what they were migrated from, and are the tiebreaker if a rule file is ever found to have lost
-a requirement.
+### Origin lines
+
+Most rules carry an `*Origin:*` line naming the material the requirement was migrated from. Those
+inputs — the five root rule packs, an explicit baseline block, and a retired frontend/testing
+document — **were retired from the tree and survive only in git history.**
+
+```text
+An Origin line is provenance.  It is NOT a citation of authority, it is NOT a place to look
+something up, and a rule never means what it means because of what its origin said.
+The rule text in .claude/rules/ IS the requirement.
+```
+
+Where a rule's origin was an accepted decision rather than a retired pack, the `Origin:` line names
+that ADR — `ADR-0010` (frontend), `ADR-0011` (testing categories), `ADR-0012` (`H-1`/`H-2`). An ADR
+is the instrument that authorized the rule; it still is not the rule
+(`.claude/rules/70-adr.md` §70.1).
 
 ## 00.4 What is never authority
 
@@ -79,17 +102,16 @@ a requirement.
 - **Generated or untracked residue is not evidence of anything.** Establish repository content with
   `git ls-files`, not by walking the working tree: `bin/`, `obj/`, `.venv/`, `__pycache__/`,
   `node_modules/` and packaging output are excluded.
-- **The retired Spec Kit artifacts are not authoritative.** `.specify/**` and `specs/**` were
-  **deleted from the tree in Phase 16**
-  (`docs/migration/phase-16-principle-ix-migration-and-spec-kit-retirement.md`); they survive only
-  in git history, and nothing may cite them. They were never authority while they existed, and
-  deletion does not change that — it removes the temptation. The ten `speckit-*` skills that
-  installed the Spec Kit mechanism inside the Claude surface were **removed in Phase 12**
-  (`docs/migration/phase-12-spec-kit-decoupling.md`), and no live Claude rule, skill, hook or
-  setting depends on Spec Kit. The frontend requirement text that `.specify/memory/constitution.md`
-  once held alone was migrated in the same phase under
-  `docs/adr/0010-frontend-engineering-baseline.md`; **migration input is not authority**, and the
-  constitution's non-authoritative status above is unchanged by it.
+- **Retired governance material is not authority, and is not evidence of anything.** Material this
+  repository once governed itself with — earlier rule packs, an earlier specification-driven
+  workflow and its templates, earlier migration records — has been removed from the tree. It
+  survives in git history, where it may be read for history and **may not be cited**: not as
+  architecture, not as the baseline, not as evidence of implemented behaviour, and not as the
+  reason a current rule says what it says. A requirement that matters is stated here, now, in
+  `.claude/rules/**`.
+- **`docs/governance/open-items.md` is not authority.** It registers what is open — deviations,
+  enforcement gaps, defects, conflicts and the decisions that would close them. An open item is
+  never permission to extend the thing it records.
 
 ## 00.5 Precedence
 
@@ -131,8 +153,9 @@ between two baseline sources, and between a baseline source and a mandatory gove
 an editorial defect, not a conflict.** It needs a human editorial correction, not an ADR. Report it;
 do not repair the authoritative source on your own initiative.
 
-Phase 9 recorded editorial defects and genuine conflicts. They are listed in
-`docs/migration/phase-9-baseline-coverage.md` §8 and §9 and are **open**.
+Known editorial defects and the one genuine open conflict are registered in
+`docs/governance/open-items.md` §3 and §4. They are **open**, and recording one there is not
+closing it.
 
 ## 00.7 Deviations
 
@@ -144,9 +167,9 @@ Do not "fix" the application code as a side effect of finding it.
 Do not downgrade the rule because the implementation currently differs.
 ```
 
-Known deviations carried forward from Phase 9 are listed in
-`docs/migration/phase-9-baseline-coverage.md` §8. Closing one is a separate, human-directed act; the
-ones that would weaken a baseline rule need an ADR first.
+Known deviations are registered in `docs/governance/open-items.md` §1, with the enforcement gaps
+that accompany them in §2. Closing one is a separate, human-directed act; the ones that would weaken
+a baseline rule need an ADR first.
 
 ## 00.8 Rules, skills and hooks
 

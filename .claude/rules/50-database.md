@@ -1,6 +1,6 @@
 # 50 — Database engineering and database-change control
 
-**Category 7 of the Phase 2 authority model** (`docs/migration/phase-2-authority-model.md` §2.2, §9).
+**One of the four change gates** (`.claude/rules/60-architecture-gates.md` §60.1).
 Procedure: `.claude/skills/db-change/SKILL.md`. Deterministic guard: `.claude/hooks/db_migration_guard.py` (H2).
 
 Architecture authority for this file:
@@ -122,7 +122,7 @@ Rules:
 
 - A change that alters **which** fields are immutable, **how** immutability is enforced, or the
   **strength** of that enforcement, is an **architecture change** under A1 §12.2. Stop and require an
-  ADR before implementing (Phase 2 §6.2, §9.5). Approval alone is not sufficient.
+  ADR before implementing (`.claude/rules/70-adr.md` §70.2 D). Approval alone is not sufficient.
 - A change to **database permission boundaries** — roles, principals, grants — or moving an invariant
   out of the database into application code is likewise an architecture change requiring an ADR. A1
   §12.2 requires the database-level control specifically.
@@ -166,13 +166,11 @@ them.
 | Migration validation already exists in CI: single head, upgrade from base, models-match-DDL, every downgrade | `.github/workflows/migrations.yml`, `ragcore/tests/migrations/` |
 | Migrations run as a gated job **before** revision activation, never at application startup | `.github/workflows/migrations.yml`; `ragcore/src/ragcore/graph/checkpointer.py` |
 
-> **The baseline input now agrees with this section.** Until Phase 10 the explicit baseline block
-> read *"Migrations: EF Migrations bundle in CI/deploy step"*, recorded as conflict **CF-1**. On an
-> explicit human decision the block was amended to withdraw the EF attribution while preserving the
-> requirement it carried — one versioned migration mechanism, gated in CI/deploy, never at
-> application startup. **CF-1 is closed. Nothing in this section changed**, and nothing in it is
-> weakened by the closure. Amendment record: `docs/migration/phase-9-baseline-input.md`
-> Appendix A.1; phase record: `docs/migration/phase-10-baseline-reconciliation.md`.
+> **A retired baseline input once attributed migrations to EF.** A human withdrew that
+> attribution while preserving the requirement it carried — one versioned migration mechanism,
+> gated in CI/deploy, never at application startup. **Nothing in this section changed**, and
+> nothing in it is weakened. `.claude/rules/20-dotnet.md` BL-10 states the same rule from the .NET
+> side and points here for the procedure.
 
 **Do not change the migration mechanism under this rule.** Do not introduce EF Core migrations, a
 second migration tool, a second migration directory, or startup-time DDL.

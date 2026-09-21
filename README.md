@@ -39,15 +39,14 @@ conflict is resolved as an ADR — never settled by whichever document was read 
 
 > **Not authority.** `Synthia-Platform-Specification.md` is **history** — not architecture
 > authority, not the engineering baseline, and not evidence of implemented behaviour; see
-> [`.claude/rules/00-authority.md`](./.claude/rules/00-authority.md) §00.4. The retired Spec Kit
-> trees `.specify/**` and `specs/**` were **deleted in Phase 16** and survive only in git history.
-> The requirement text the constitution once held alone was migrated first: the frontend rules in
-> Phase 12 under
-> [`docs/adr/0010-frontend-engineering-baseline.md`](./docs/adr/0010-frontend-engineering-baseline.md),
-> the testing baseline in Phase 14 under
-> [`docs/adr/0011-required-test-categories-baseline.md`](./docs/adr/0011-required-test-categories-baseline.md),
-> and implementation honesty and reference fixtures in Phase 16 under
-> [`docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md`](./docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md).
+> [`.claude/rules/00-authority.md`](./.claude/rules/00-authority.md) §00.4. It is retained because
+> accepted records ADR-0001 to ADR-0008 cite it for their own rationale, and an accepted record is
+> never rewritten.
+
+Everything known to be unfinished — deviations, enforcement gaps, defects, conflicts and the
+decisions that would close them — is registered in
+[`docs/governance/open-items.md`](./docs/governance/open-items.md). The whole governance model on
+one page is [`docs/final-repository-governance.md`](./docs/final-repository-governance.md).
 
 ## Three deployables, and the rule between them
 
@@ -96,7 +95,9 @@ ragcore/          Orchestration, reasoning, governance, all writes, all migratio
 integrations/     Every external connector, credential and egress path
 build/            Dockerfiles, AI Gateway policy, boundary and gate scripts
 docs/adr/         Architecture decision records (MADR)
-specs/            Retired Spec Kit feature tree — history, not current governance
+docs/functional/  What the repository demonstrably does today
+docs/governance/  Open deviations, gaps, defects and decisions
+azure-pipelines/  CI/CD definitions
 .claude/          Engineering baseline, change gates, procedures and hooks
 ```
 
@@ -168,7 +169,7 @@ the portal renders with no violation.
 
 Each service answers `/health/live` and `/health/ready`; readiness goes unready when PostgreSQL is
 unreachable, liveness does not. **The workers are not runnable yet** — all seven `main()` functions
-raise by design until their container definitions land (tasks.md T324).
+raise by design until their container definitions land.
 
 Every application route requires the gateway-derived identity contract, because no deployable parses
 a token (A1 — the identity plane). APIM sets it in a deployment; locally you supply it yourself:
@@ -217,22 +218,26 @@ digest and the digest is a placeholder until somebody resolves and reviews one, 
 build fails until they do. The gate above passes the bare tag as an explicit, CI-only override and
 then starts each image, which is how the images are known to work before a digest exists.
 
-**Coding agents.** `.mcp.json` registers the [Serena](https://github.com/oraios/serena) MCP server
-(pinned release, launched through `uv`) for semantic code navigation across C#, TypeScript and Python.
-Claude Code asks you to approve it on first open. Project settings and the onboarding memories live
-in `.serena/` — start from `mem:core`. Personal overrides go in `.serena/project.local.yml`, which is
-ignored.
+**Coding agents.** `.mcp.json` registers two MCP servers, both of them tooling and neither of them
+authority. [Serena](https://github.com/oraios/serena) (pinned release, launched through `uv`) gives
+semantic code navigation across C#, TypeScript and Python; project settings and the onboarding
+memories live in `.serena/` — start from `mem:core`, and put personal overrides in
+`.serena/project.local.yml`, which is ignored. The **Figma** server (`https://mcp.figma.com/mcp`)
+is design reference for the client surfaces and is not needed for backend work; it authenticates
+interactively and no credential is committed. Claude Code asks you to approve a server on first
+open — **`/mcp` shows which are actually connected.** `CLAUDE.md` §13 says when to use each.
 
 ## Validation gates
 
 A change merges only when **all** of these pass, with no new suppressions:
 
-`dev.sh validate` runs all of them in CI's order; each is also runnable on its own. The working
+`dev.sh validate` runs all of them in the pipelines' order; each is also runnable on its own. The working
 directory matters — the Python and Node gates run from their own tree, because each is its own
 project with its own lockfile.
 
 | Gate | Command | From |
 |---|---|---|
+| Governance guards | `python3 .claude/hooks/test_guards.py` | root |
 | .NET build + analyzers | `dotnet build Synthia.sln -warnaserror` | `dotnet/` |
 | .NET format | `dotnet format Synthia.sln --verify-no-changes` | `dotnet/` |
 | .NET tests | `dotnet test Synthia.sln` | `dotnet/` |
@@ -249,7 +254,14 @@ project with its own lockfile.
 | Container images | `./build/scripts/dev.sh images` | root |
 
 **No gate is a performance figure.** No release is gated on responsiveness and no merge is blocked by
-one.
+one. No coverage percentage gates a merge either, deliberately
+([`.claude/rules/40-testing.md`](./.claude/rules/40-testing.md) §40.10).
+
+**Where the gates run.** The Azure DevOps definitions are in
+[`azure-pipelines/`](./azure-pipelines/). `.github/workflows/**` remains the currently authoritative
+execution surface until parity is proven against
+[`azure-pipelines/PARITY.md`](./azure-pipelines/PARITY.md), which also states the conditions for
+removing it.
 
 ## What this scaffold deliberately does not do
 

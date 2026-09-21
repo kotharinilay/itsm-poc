@@ -1,0 +1,87 @@
+# The Angular workspace: lint, format, types, build, unit tests, accessibility and CSP.
+# Replaces .github/workflows/web.yml. REQUIRED for pull requests touching apps/web/.
+
+name: web
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - apps/web/*
+      - azure-pipelines/web.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - apps/web/*
+      - azure-pipelines/web.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  CI: "true"
+
+jobs:
+  - job: lint_build_test
+    displayName: lint, build, test, accessibility
+    steps:
+      - task: NodeTool@0
+        displayName: Install Node 22
+        inputs:
+          versionSpec: "22.x"
+
+      - task: Cache@2
+        displayName: Cache npm
+        inputs:
+          key: 'npm | "$(Agent.OS)" | apps/web/package-lock.json'
+          path: $(Pipeline.Workspace)/.npm
+
+      - script: npm ci --cache $(Pipeline.Workspace)/.npm
+        workingDirectory: apps/web
+        displayName: Install
+
+      # Enforces the library boundaries in .claude/rules/23-angular.md FE-NG-8 - a customer library
+      # importing a staff library is an error here, not a review note.
+      - script: npx eslint .
+        workingDirectory: apps/web
+        displayName: Lint
+
+      - script: npx prettier --check .
+        workingDirectory: apps/web
+        displayName: Format check
+
+      - script: npx tsc -b --pretty
+        workingDirectory: apps/web
+        displayName: Type check
+
+      # Libraries build before applications: the workspace resolves them from dist/.
+      - script: npm run build
+        workingDirectory: apps/web
+        displayName: Build
+
+      - script: npm test
+        workingDirectory: apps/web
+        displayName: Test
+
+      # WCAG 2.2 AA on all three surfaces, no best-effort surface
+      # (.claude/rules/23-angular.md FE-NG-5).
+      #
+      # UNCONDITIONAL. A gate that decides for itself whether to run is a gate whose failure mode
+      # is silence - this step used to be conditional, and passed by never running.
+      - script: npx playwright install --with-deps chromium
+        workingDirectory: apps/web
+        displayName: Install the browser for the sweep
+
+      - script: npm run test:a11y
+        workingDirectory: apps/web
+        displayName: Accessibility sweep
+
+      # The policy SENT, not merely built: the portals are served through the reference hosting
+      # tier and the browser's own violation reports are the assertion.
+      - script: npm run test:csp
+        workingDirectory: apps/web
+        displayName: Content Security Policy

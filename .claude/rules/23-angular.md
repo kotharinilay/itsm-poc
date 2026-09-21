@@ -24,11 +24,9 @@ It does **not** govern `apps/desktop/**` (`.claude/rules/24-electron.md`), `dotn
 `.claude/rules/10-principles.md` (repository-wide principles) apply here **in addition** to
 everything below. Neither is restated.
 
-**Authority.** These requirements were migrated in Phase 12 under
-`docs/adr/0010-frontend-engineering-baseline.md` from the **retired** Spec Kit constitution, which
-is migration input and **not** authority (`.claude/rules/22-web-typescript.md` §22.1,
-`.claude/rules/00-authority.md` §00.4). Full traceability:
-`docs/migration/phase-12-spec-kit-decoupling.md`.
+**Authority.** These requirements are stated here, authorized by
+`docs/adr/0010-frontend-engineering-baseline.md` (Accepted). The ADR records the decision; this
+file is the rule (`.claude/rules/22-web-typescript.md` §22.1, `.claude/rules/70-adr.md` §70.1).
 
 ---
 
@@ -38,7 +36,7 @@ is migration input and **not** authority (`.claude/rules/22-web-typescript.md` �
 **Components are standalone.** No `NgModule` is introduced to declare a component that can declare
 its own dependencies.
 
-*Source: `constitution#Angular` ("Standalone components") · Enforcement: partial — Angular 20
+*Origin: `ADR-0010#Angular` ("Standalone components") · Enforcement: partial — Angular 20
 makes standalone the default, so a non-standalone component has to opt out explicitly; no lint
 rule forbids that opt-out. The default is the gate, and it is a real one.*
 
@@ -50,7 +48,7 @@ rule forbids that opt-out. The default is the gate, and it is a real one.*
 - **kebab-case file naming.**
 - **`.spec.ts`** for tests.
 
-*Source: `constitution#Angular` · Enforcement: procedural — the workspace follows all four
+*Origin: `ADR-0010#Angular` · Enforcement: procedural — the workspace follows all four
 (`projects/customer-features/src/lib/chat/chat-shell.{ts,html,css,spec.ts}` is the shape); none is
 mechanically checked.*
 
@@ -58,7 +56,7 @@ mechanically checked.*
 **Use Angular dependency injection, `inject()` where appropriate, and cohesive services. No global
 mutable state.**
 
-*Source: `constitution#DependencyInjection` (Angular line), `constitution#Angular` ·
+*Origin: `ADR-0010#DependencyInjection` (Angular line), `ADR-0010#Angular` ·
 Enforcement: procedural. This is the Angular realization of
 `.claude/rules/10-principles.md` P-26 (explicit injected dependencies, no service locator) and
 P-28 (stateless services), which are repository-wide and are not restated here.*
@@ -70,14 +68,14 @@ infrastructure are each centralized rather than repeated.**
 In this workspace that place is `platform-core`, which FE-NG-8 makes the only library the feature
 libraries and applications may reach for it.
 
-*Source: `constitution#Angular` · Enforcement: partial — FE-NG-8's import rules prevent a feature
+*Origin: `ADR-0010#Angular` · Enforcement: partial — FE-NG-8's import rules prevent a feature
 library from reaching around `platform-core` to another workspace project, but nothing prevents a
 feature library from re-implementing the infrastructure locally. That half is review.*
 
 ### FE-NG-7 — No state-management framework without a requirement
 **A state-management framework must not be adopted unless a requirement justifies it.**
 
-*Source: `constitution#Angular` · Enforcement: currently-unenforced — no dependency check rejects
+*Origin: `ADR-0010#Angular` · Enforcement: currently-unenforced — no dependency check rejects
 one. It is the Angular instance of `.claude/rules/10-principles.md` P-8 (no speculative
 capability), and adopting one without a stated requirement is an ADR trigger under
 `.claude/rules/70-adr.md` §70.2 B(6). Recorded as **EG-8**.*
@@ -98,14 +96,12 @@ applications  →  customer-features | staff-features  →  platform-core  →  
 - **`staff-portal` must not import `customer-features`** — the staff portal provides no facility
   to start a chat session, and that import is how the rule gets broken by accident.
 
-*Source: **not the constitution.** The direction's only prose statement was
-`specs/001-platform-scaffold/plan.md` §Dependency direction — a non-authoritative artifact
-**deleted in Phase 16**, surviving only in git history — together with `apps/web/eslint.config.js`,
-which states it in full as executable configuration. **This section is now the rule's sole prose
-authority**, which is exactly why it was migrated here before that tree was retired; it is also the
-Angular realization of `.claude/rules/10-principles.md` P-13 and P-24. Recorded as **FE-AMB-3** in
-`docs/migration/phase-12-spec-kit-decoupling.md`: the requirement is preserved, and the fact that
-its source was a retiring artifact rather than the baseline is recorded rather than hidden.*
+*Origin: **no baseline input.** The direction's only prose statement was a retiring, non-
+authoritative planning artifact, together with `apps/web/eslint.config.js`, which states it in
+full as executable configuration. **This section is now the rule's sole prose authority**, which
+is exactly why it was stated here before that artifact was retired; it is also the Angular
+realization of `.claude/rules/10-principles.md` P-13 and P-24. Registered as **FE-AMB-3** in
+`docs/governance/open-items.md` §5a.*
 *Enforcement: mechanical — six `no-restricted-imports` blocks in `apps/web/eslint.config.js`, with
 `npx eslint .` a failing step in `.github/workflows/web.yml`.*
 
@@ -121,7 +117,7 @@ The three surfaces are `customer-portal`, `staff-portal` and `desktop-renderer`.
 surface" is part of the requirement: the desktop renderer is held to the same level as the two
 browser portals.
 
-*Source: `constitution#Angular` · Enforcement: mechanical — `angular.configs.templateAccessibility`
+*Origin: `ADR-0010#Angular` · Enforcement: mechanical — `angular.configs.templateAccessibility`
 over `**/*.html` in `apps/web/eslint.config.js`, with `elements-content`,
 `label-has-associated-control` and `no-autofocus` raised to `error`; plus the axe-based Playwright
 sweep `npm run test:a11y`, a failing step in `.github/workflows/web.yml`.*
@@ -129,15 +125,15 @@ sweep `npm run test:a11y`, a failing step in `.github/workflows/web.yml`.*
 ### FE-NG-6 — The project-supported test runner
 **Use the current Angular testing defaults and the project-supported runner.**
 
-*Source: `constitution#Angular` · Enforcement: mechanical — `npm test` runs Karma/Jasmine over
+*Origin: `ADR-0010#Angular` · Enforcement: mechanical — `npm test` runs Karma/Jasmine over
 every project plus the Node-based architecture test, and is a failing step in
 `.github/workflows/web.yml`. Changing the runner is a test-placement convention change and an ADR
 trigger under `.claude/rules/70-adr.md` §70.2 B(6).*
 
 > A frontend change that **touches a client surface's primary journey** owes a frontend
 > accessibility test, and an end-to-end golden-path test where that journey is one.
-> *Source: `constitution#WhichChangeRequiresWhichCategory`, frontend row. The non-frontend rows of
-> that table are Phase 11 finding **D-11-2** and are not migrated here.*
+> *Origin: `ADR-0010`, frontend row. The non-frontend rows of that table are
+> `.claude/rules/40-testing.md` §40.9 and are not restated here.*
 
 ---
 
@@ -151,7 +147,7 @@ consequences, and none of them may be weakened by a convenience.
 - **Route guards must not be treated as security boundaries.**
 - **Presentation components must not implement authorization policy.**
 
-*Source: `constitution#VII` (Angular block) · Enforcement: mechanical —
+*Origin: `ADR-0010#VII` (Angular block) · Enforcement: mechanical —
 `apps/web/projects/platform-core/no-authz.spec.ts`, run by `npm run test:architecture` inside
 `npm test`, reads the source of the three applications and the two feature libraries and fails on
 authorization vocabulary. **Do not weaken or delete it** (`.claude/rules/40-testing.md` §40.1).*
@@ -161,18 +157,18 @@ authorization vocabulary. **Do not weaken or delete it** (`.claude/rules/40-test
 - **Angular's sanitization rules are followed.**
 - **`bypassSecurityTrust*` is avoided unless specifically justified, reviewed and constrained.**
 
-*Source: `constitution#VII` (Angular block) · Enforcement: mechanical — `no-restricted-properties`
+*Origin: `ADR-0010#VII` (Angular block) · Enforcement: mechanical — `no-restricted-properties`
 on `DomSanitizer` in `apps/web/eslint.config.js`; the CSP hosting sweep `npm run test:csp`, a
 failing step in `.github/workflows/web.yml`; and
 `docs/adr/0009-portal-delivery-one-origin-per-browser-surface.md`, which fixes how the policy
 reaches a browser as a response header with a per-response nonce.*
 
-> **FE-AMB-2, open.** The source says `bypassSecurityTrust*` is avoided *"unless specifically
+> **FE-AMB-2, open.** The migrated wording says `bypassSecurityTrust*` is avoided *"unless specifically
 > justified, reviewed and constrained"* and **does not name the instrument** of that
 > justification. The wording is preserved rather than resolved by invention. Note that the ESLint
 > rule is absolute, so today any use requires an `eslint-disable` — which
 > `.claude/rules/22-web-typescript.md` FE-SH-3 makes a suppression that must be scoped and
-> justified. Recorded in `docs/migration/phase-12-spec-kit-decoupling.md`.
+> justified. Registered as **FE-AMB-2** in `docs/governance/open-items.md` §5a.
 
 Secrets in browser code are `.claude/rules/22-web-typescript.md` FE-SH-2, which states the rule
 once for both clients.

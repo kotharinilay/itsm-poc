@@ -10,14 +10,13 @@ Autonomous ITSM agent platform (Synoptek, multi-tenant, single deployment). Repo
   Language rules are path-scoped and load only for their own tree.
 - `docs/functional/implemented.md` — what the repo demonstrably does today. Records; authorizes nothing. Check here before assuming a behaviour is missing.
 - `docs/adr/` — MADR ADRs. Architecture vs governance conflict → stop, write ADR.
-- Root `principles.yaml`, `dotnet*.yaml`, `python*.yaml` — the packs `.claude/rules/` was migrated from; the rule files are the operative statement.
+- `docs/governance/open-items.md` — every known deviation, enforcement gap, defect and open decision. Records; authorizes nothing.
+- `docs/final-repository-governance.md` — the whole authority model on one page.
 
-**NOT authority** (history): `Synthia-Platform-Specification.md`, `.serena/**` including this memory.
-`.specify/**` and `specs/**` were **deleted in Phase 16** and exist only in git history — do not cite them.
-The requirement text the retired constitution once held alone was migrated before deletion:
-frontend → `.claude/rules/{22-web-typescript,23-angular,24-electron}.md` (`docs/adr/0010`);
-testing → `.claude/rules/40-testing.md` §40.8-§40.10 (`docs/adr/0011`);
-implementation honesty and reference fixtures → `.claude/rules/10-principles.md` §10.7 H-1/H-2 (`docs/adr/0012`).
+**NOT authority** (history or tooling): `Synthia-Platform-Specification.md`, `.serena/**` including
+this memory, `docs/current-implementation/**`, `docs/governance/**`. Retired governance material
+survives only in git history and may not be cited from there either
+(`.claude/rules/00-authority.md` §00.4).
 
 ## Deployables (no app-level dependency between any two, either direction)
 - `ragcore/` — Python. Orchestration, LangGraph, governance, ALL writes, ALL Alembic migrations. See `mem:ragcore/core`.
@@ -35,8 +34,9 @@ implementation honesty and reference fixtures → `.claude/rules/10-principles.m
 
 ## Other dirs
 - `build/` — Dockerfiles (`build/docker`), APIM/infra policy, `build/scripts` (dev + guard scripts), contracts.
-- `.github/workflows/` — one workflow per tree plus boundaries/contracts/migrations/security/edge.
+- `azure-pipelines/` — the CI/CD definitions, one pipeline per concern; see `azure-pipelines/PARITY.md`.
+- `.github/workflows/` — the surface currently executing; retained until Azure DevOps parity is proven.
 - `build/contracts/` — the generated OpenAPI contracts, gated by `.github/workflows/contracts.yml`. Contracts are code-first (`.claude/rules/20-dotnet.md` BL-6).
-- `.specify/`, `specs/` — **deleted in Phase 16**. The `speckit-*` skills were removed in Phase 12.
+- `docs/governance/` — the open-items register.
 
 Related: `mem:tech_stack`, `mem:conventions`, `mem:suggested_commands`, `mem:task_completion`.

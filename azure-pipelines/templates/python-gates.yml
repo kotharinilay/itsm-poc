@@ -1,0 +1,24 @@
+# The four failing Python gates (.claude/rules/21-python.md §21.1).
+#
+# Each is a separate step so a failure names the gate that failed. Ruff lint and Ruff format are
+# distinct gates: a formatter that agrees with the linter is not the same as a formatter that ran.
+parameters:
+  - name: workingDirectory
+    type: string
+
+steps:
+  - script: uv run ruff check .
+    workingDirectory: ${{ parameters.workingDirectory }}
+    displayName: Ruff lint
+
+  - script: uv run ruff format --check .
+    workingDirectory: ${{ parameters.workingDirectory }}
+    displayName: Ruff format
+
+  - script: uv run mypy
+    workingDirectory: ${{ parameters.workingDirectory }}
+    displayName: mypy --strict
+
+  - script: uv run pytest -q
+    workingDirectory: ${{ parameters.workingDirectory }}
+    displayName: pytest

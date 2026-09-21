@@ -1,0 +1,58 @@
+# .NET build, format and test.
+# .claude/rules/40-testing.md §40.6: build, tests, format and analysis all pass or the change does
+# not merge. Replaces .github/workflows/dotnet.yml. REQUIRED for pull requests touching dotnet/.
+
+name: dotnet
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - dotnet/*
+      - azure-pipelines/dotnet.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - dotnet/*
+      - azure-pipelines/dotnet.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  CI: "true"
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  - job: build_test
+    displayName: build, format, test
+    steps:
+      - task: UseDotNet@2
+        displayName: Install .NET 10 SDK
+        inputs:
+          version: 10.0.x
+
+      - script: dotnet restore Synthia.sln
+        workingDirectory: dotnet
+        displayName: Restore
+
+      # -warnaserror is the gate. Analyzers run at latest-Recommended with EnforceCodeStyleInBuild,
+      # so a style or analysis finding fails here.
+      - script: dotnet build Synthia.sln --no-restore -warnaserror
+        workingDirectory: dotnet
+        displayName: Build (warnings as errors)
+
+      - script: dotnet format Synthia.sln --verify-no-changes --no-restore
+        workingDirectory: dotnet
+        displayName: Format check
+
+      # Runs every suite under dotnet/tests/ - unit, architecture, authorization, tenant-isolation,
+      # contract and security. A new suite is picked up here with no pipeline change.
+      - script: dotnet test Synthia.sln --no-build --verbosity normal
+        workingDirectory: dotnet
+        displayName: Test

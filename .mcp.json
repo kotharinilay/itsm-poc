@@ -16,6 +16,10 @@
         "--enable-gui-log-window",
         "false"
       ]
+    },
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
     }
   }
 }

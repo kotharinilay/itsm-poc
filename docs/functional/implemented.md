@@ -8,14 +8,13 @@ configuration, the LangGraph implementation, background workers, message publish
 the Angular and Electron implementation, dependency manifests, and the CI workflows.
 
 **What this document is not.** Not a requirements document, not an architecture document, not a
-roadmap, and not a summary of either. No repository prose — architecture documents, ADRs, migration
-notes, the platform specification, Spec Kit material or the Claude governance rules — was used as
-evidence that a capability exists. Where a capability is absent, that absence is itself evidenced by
+roadmap, and not a summary of either. No repository prose — architecture documents, ADRs, the
+platform specification or the Claude governance rules — was used as evidence that a capability
+exists. Where a capability is absent, that absence is itself evidenced by
 code: a `501` response, a `NotImplementedError`, an unconditional `None` binding, or a raised
 refusal.
 
-**Audited revision.** `de27d8156644322ee5889ba2a8c29fab99f876ea` (`de27d81`) on branch
-`speckit-to-claude`. The three commits preceding this audit (`9ab956e`, `d2d2c9d`, `de27d81`) touched
+**Audited revision.** `de27d8156644322ee5889ba2a8c29fab99f876ea` (`de27d81`). The three commits preceding this audit (`9ab956e`, `d2d2c9d`, `de27d81`) touched
 only `docs/` and `.claude/`; **no application artifact changed between `5cdcd26` and the audited
 revision**, which was verified with `git diff --stat`. The findings below were nonetheless
 re-derived from the code rather than carried forward, and several statements in the previous

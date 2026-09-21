@@ -3,8 +3,10 @@
 `/health/live` is process-only with no dependency checks. `/health/ready` covers **platform**
 dependencies: the durable store, the message transport and the secret store.
 
-**Readiness MUST NOT depend on an external customer system** (`FR-INTEG-026`, constitution
-§Health). A ServiceNow, Graph or MCP-server outage is an operational condition to be reported and
+**Readiness MUST NOT depend on an external customer system** (`FR-INTEG-026`; stated for the
+.NET stack as `BL-25`, and registered as a cross-stack gap in
+``docs/governance/open-items.md`` §5). A ServiceNow, Graph or MCP-server outage is an
+operational condition to be reported and
 degraded around, never an unready replica. A probe that failed on one would remove capacity at
 exactly the moment the fallback path needs it — and because readiness drives scaling, one customer's
 outage would scale the platform toward zero for every other customer. That is the noisy-neighbour

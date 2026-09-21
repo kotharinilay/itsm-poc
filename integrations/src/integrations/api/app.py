@@ -4,7 +4,7 @@
 the
 request context, and authorization decisions live in application and domain policy.
 
-**Middleware order is load-bearing** and is the constitution's, not a preference:
+**Middleware order is load-bearing** and is not a preference:
 
 ```text
 exception handling → correlation → trace context → identity → endpoint
@@ -84,7 +84,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     install_exception_handlers(app)
 
     # Registered in reverse of execution order — Starlette wraps each around the previous, so the
-    # LAST registered runs FIRST. Reading bottom-up gives the constitution's order.
+    # LAST registered runs FIRST. Reading bottom-up gives the required order.
     app.add_middleware(IdentityMiddleware)
     app.add_middleware(CorrelationMiddleware)
     app.add_middleware(ProblemMiddleware)

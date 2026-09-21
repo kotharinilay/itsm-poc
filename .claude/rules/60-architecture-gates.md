@@ -137,7 +137,7 @@ The two are different and are handled differently.
 | | Conformance finding | Baseline deviation |
 |---|---|---|
 | Implementation differs from | A1/A2/A3 (architecture) | the engineering baseline (`.claude/rules/`) |
-| Recorded in | `docs/functional/implemented.md` (§90.7) | `docs/migration/phase-9-baseline-coverage.md` §8 |
+| Recorded in | `docs/functional/implemented.md` (§90.7) | `docs/governance/open-items.md` §1 |
 | Resolved by | a human decision; an ADR where architecture changes | a human decision; an ADR where the *baseline* changes (§70.2 B) |
 
 Handling for both is the same in the one respect that matters: **record it, preserve the

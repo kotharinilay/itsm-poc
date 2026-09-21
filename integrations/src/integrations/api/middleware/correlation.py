@@ -75,7 +75,8 @@ def bind_correlation_id(value: str) -> None:
 class CorrelationMiddleware(BaseHTTPMiddleware):
     """Establishes the correlation identifier **before** request logging.
 
-    Ordering is load-bearing (constitution §Middleware order): correlation and trace context are
+    Ordering is load-bearing (`BL-26`; cross-stack gap, ``docs/governance/open-items.md`` §5):
+    correlation and trace context are
     established before request logging, so the first log line of a request already carries the
     identifier. A middleware that logged first would produce exactly one uncorrelated record per
     request — the record describing the request nobody can then find.

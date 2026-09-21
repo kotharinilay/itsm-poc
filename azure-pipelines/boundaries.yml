@@ -1,0 +1,48 @@
+# The cross-deployable rule (ADR-0001). No compiler catches this, because there is nothing to
+# compile across the boundary - this pipeline is what catches it.
+#
+# Replaces .github/workflows/boundaries.yml. REQUIRED on every pull request, unconditionally:
+# no path filter, because the violation this catches can be introduced from any tree.
+
+name: boundaries
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: ["*"]
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: boundary
+    displayName: no cross-deployable dependency
+    steps:
+      - script: bash build/scripts/check-boundaries.sh
+        displayName: Boundary check
+
+      # Proves the guard still fails on a planted violation. A guard nobody has seen fail is a
+      # guard nobody knows works - and this one silently stopped working once already.
+      - script: bash build/scripts/verify-boundary-guard.sh
+        displayName: Verify the guard fails correctly
+
+  - job: architecture_guards
+    displayName: architecture guards fail correctly
+    steps:
+      - task: UseDotNet@2
+        displayName: Install .NET 10 SDK
+        inputs:
+          version: 10.0.x
+
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: ragcore
+
+      # Every architecture test must fail when its violation is planted. ModuleIsolationTests did
+      # NOT work when first written - it reflected over compiled metadata, and the compiler omits a
+      # reference whose types are never used. This is what found that.
+      - script: bash build/scripts/verify-architecture-guards.sh
+        displayName: Verify the architecture guards fail correctly

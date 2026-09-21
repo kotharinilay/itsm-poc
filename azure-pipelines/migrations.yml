@@ -1,0 +1,69 @@
+# ADR-0003: Alembic owns every migration. Migrations run as a gated job before revision
+# activation, NEVER at application startup - Container Apps runs multiple replicas and scales to
+# zero, so anything at startup runs concurrently, repeatedly, at unpredictable times.
+#
+# Replaces .github/workflows/migrations.yml. REQUIRED for pull requests touching the schema.
+
+name: migrations
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - ragcore/migrations/*
+      - ragcore/src/ragcore/persistence/*
+      - azure-pipelines/migrations.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - ragcore/migrations/*
+      - ragcore/src/ragcore/persistence/*
+      - azure-pipelines/migrations.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+resources:
+  containers:
+    - container: postgres
+      image: postgres:17
+      env:
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: synthia_test
+      ports:
+        - 5432:5432
+      options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+jobs:
+  - job: alembic
+    displayName: single head, upgrade, downgrade
+    services:
+      postgres: postgres
+    steps:
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: ragcore
+
+      # pytest-alembic asserts single head, upgrade from base, models match DDL, and that EVERY
+      # downgrade succeeds. The four tests are imported explicitly by
+      # tests/migrations/test_migrations.py, so --test-alembic is not passed: it would inject a
+      # second, differently-configured copy of the same four.
+      #
+      # SYNTHIA_TEST_DB_DSN points the suite at the service container above. Without it the
+      # fixtures start their own via Testcontainers, which on an agent that already has one is a
+      # container per run for no benefit.
+      - script: uv run pytest -q -m integration
+        workingDirectory: ragcore
+        displayName: Migration and persistence tests
+        env:
+          SYNTHIA_TEST_DB_DSN: postgresql+asyncpg://postgres:postgres@localhost:5432/synthia_test
+
+      # The rest of the suite - structural, architectural, unit - needs no database, and running it
+      # here keeps a schema change from passing while breaking something that reads the models.
+      - script: uv run pytest -q -m "not integration"
+        workingDirectory: ragcore
+        displayName: Everything else

@@ -1,7 +1,6 @@
 # 70 — Architecture Decision Records and change governance
 
-**Category 8 of the Phase 2 authority model** (`docs/migration/phase-2-authority-model.md` §2.2, §6,
-§11). Procedure: `.claude/skills/adr-author/SKILL.md`. Deterministic guard:
+**One of the four change gates** (`.claude/rules/60-architecture-gates.md` §60.1). Procedure: `.claude/skills/adr-author/SKILL.md`. Deterministic guard:
 `.claude/hooks/adr_structure_guard.py` (H5).
 
 Architecture authority for this file:
@@ -17,12 +16,11 @@ Architecture authority for this file:
 No other repository document is architecture authority. `docs/architecture/integrations-service-delta.md`
 and `docs/architecture/ragcore-langgraph-flow.md` sit in the architecture directory and carry **no**
 authority. Neither does `README.md`, `Synthia-Platform-Specification.md`,
-`.serena/**`, `docs/current-implementation/**`, or the retired Spec Kit constitution. Existing
+`.serena/**`, `docs/current-implementation/**`, or `docs/governance/**`. Existing
 implementation is evidence of what **is**, never authority for what **should be**.
 
-Engineering-baseline authority for this file is the migrated `.claude/rules/` baseline itself,
-together with the baseline inputs it was migrated from. An ADR is the only instrument that changes
-it.
+Engineering-baseline authority for this file is `.claude/rules/**` itself. An ADR is the only
+instrument that changes it.
 
 ---
 
@@ -48,19 +46,18 @@ Consequences of that split, all of them binding:
   implementation unless the human asks for it directly.
 - An ADR never becomes authority by being written, by being long, or by being cited. Only human
   acceptance gives it force, and even then it governs the decision it records, nothing wider.
-- `docs/adr/0001`…`0009` are **historical records**. Per
-  `docs/migration/phase-2-authority-model.md` §11.4 and `<repository_document_policy>`, their
+- `docs/adr/0001`…`0009` are **historical records**. Their
   *contents* are not a source for reconstructing current architecture or the current baseline. Read
   them for structure and for history; never cite one as the reason a rule now says something.
 - An ADR that is *inline in A3* (ADR-001…ADR-012 in `RagAgent-Architecture-final.md` §4) is part of
   an authoritative document and is authoritative. It is a different thing from `docs/adr/NNNN`, and
-  the two numbering spaces must never be conflated. Whether that reading is confirmed is **OQ-5** in
-  the Phase 2 authority model, still open.
+  the two numbering spaces must never be conflated. Whether that reading is confirmed is **OQ-5**
+  in `docs/governance/open-items.md` §6, still open.
 
 ## 70.2 When an ADR is mandatory
 
 An ADR is mandatory — **before implementation** — in each of the following cases. This list is the
-union of the Phase 2 gates (§6.2, §6.3, §9.5, §10.4, §1.3) and is not extended here by invention.
+complete list. It is not extended here by invention, and nothing outside this file adds to it.
 
 ### A. Architecture change
 
@@ -77,7 +74,7 @@ The requested work cannot be implemented without changing architecture. Concrete
 7. changes architectural ownership between A1, A2 and A3;
 8. resolves a **genuine contradiction** between two authoritative architecture documents. Report it,
    stop, require the ADR — never pick a winner silently
-   (`docs/migration/phase-2-authority-model.md` §1.3). A cross-reference or filename mismatch is an
+   (`.claude/rules/00-authority.md` §00.6). A cross-reference or filename mismatch is an
    editorial defect, not a contradiction, and needs a human editorial decision rather than an ADR.
 
 ### B. Engineering-baseline change
@@ -189,7 +186,7 @@ Classify every proposed ADR as one or more of:
 | **Cross-domain Architecture** | more than one of the above, or a genuine A1/A2/A3 contradiction |
 
 More than one class may apply; say so. Do **not** invent further classes — a new class would be a new
-authority, and authority is set by the Phase 2 model, not by an ADR.
+authority, and authority is set by `.claude/rules/00-authority.md`, not by an ADR.
 
 ## 70.5 Required structure
 

@@ -1,0 +1,37 @@
+# RagCore: Ruff, mypy and pytest as FAILING steps (.claude/rules/21-python.md §21.1).
+# Replaces .github/workflows/ragcore.yml. REQUIRED for pull requests touching ragcore/.
+
+name: ragcore
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - ragcore/*
+      - azure-pipelines/ragcore.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - ragcore/*
+      - azure-pipelines/ragcore.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  CI: "true"
+
+jobs:
+  - job: lint_type_test
+    displayName: ruff, mypy, pytest
+    steps:
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: ragcore
+      - template: templates/python-gates.yml
+        parameters:
+          workingDirectory: ragcore

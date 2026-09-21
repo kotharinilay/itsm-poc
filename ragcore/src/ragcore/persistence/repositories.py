@@ -88,7 +88,7 @@ class _TenantScoped:
     """The shared half of every tenant-owned repository.
 
     Holds the session factory and the one predicate builder. Deliberately not a generic
-    ``Repository[T]``: the constitution prohibits a generic repository, and the reason applies
+    ``Repository[T]``: `BL-14` prohibits a generic repository, and the reason applies
     directly here — a ``get(id)`` inherited from a base class is a query path with no tenant in it,
     and it would exist on every aggregate at once.
     """

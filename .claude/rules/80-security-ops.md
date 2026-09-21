@@ -26,9 +26,8 @@ application code is an architecture change requiring an ADR, not a hardening twe
 ## 80.2 Least privilege, operationally
 
 `principles#P17` is stated once, repository-wide, in `.claude/rules/10-principles.md` P-17. It is
-**not** re-stated here. What this section adds is where it bites operationally, because Phase 7
-found the principle had survived only as one database instance
-(`docs/migration/phase-7-validation.md` §4.4) and that narrowing is now corrected.
+**not** re-stated here. What this section adds is where it bites operationally, so that the
+principle is never read as a database rule alone.
 
 P-17 governs, at minimum:
 
@@ -77,14 +76,15 @@ them (recorded as part of **EG-2**).*
 
 | Control | Requirement | Enforcement |
 |---|---|---|
-| Pinned dependencies | A committed pinned lockfile per project — `uv.lock` (RagCore, Integrations), `package-lock.json` (web, desktop), central package management for .NET | mechanical (`python.yaml#toolchain.packaging`; `dotnet.yaml#toolchain.packages` with `ManagePackageVersionsCentrally` **and** `CentralPackageTransitivePinningEnabled`) |
+| Pinned dependencies | A committed pinned lockfile per project — `uv.lock` (RagCore, Integrations), `package-lock.json` (web, desktop), central package management for .NET | mechanical (`.claude/rules/21-python.md` §21.1 packaging; `.claude/rules/20-dotnet.md` §20.1 packages, with `ManagePackageVersionsCentrally` **and** `CentralPackageTransitivePinningEnabled`) |
 | Vulnerable packages | `dotnet list package --vulnerable --include-transitive` | mechanical (`security.yml`) |
 | npm advisories | `npm audit --audit-level=high` for web and desktop | mechanical (`security.yml`) |
 | Secret scanning | Gitleaks over the repository | mechanical (`security.yml`) |
 | Base-image CVEs | resolved base images are scanned when digests are re-pinned | mechanical (`base-image-digests.yml`) |
 
-Python dependency-vulnerability auditing has **no equivalent step** in `security.yml`. Recorded as
-enforcement gap **EG-6**; not implemented in this phase (Phase 9 brief §24).
+Python dependency-vulnerability auditing has **no equivalent step**. Registered as enforcement gap
+**EG-6** in `docs/governance/open-items.md` §2; building it is a separate, human-directed
+decision.
 
 ## 80.5 Container build and runtime
 
@@ -171,6 +171,6 @@ ADR, not merely approval (`.claude/rules/50-database.md` §50.6).
 - It does not define the database authorization boundary or the graph execution-authority
   protections. Those are `.claude/rules/50-database.md` and `.claude/rules/30-langgraph.md`.
 - It does not authorize adding a scanner, analyzer or CI step to close a gap it records. That is a
-  separate, human-directed decision (Phase 9 brief §24).
+  separate, human-directed decision, registered in `docs/governance/open-items.md` §2.
 - It does not treat a passing security workflow as evidence that a rule is met
   (`.claude/rules/00-authority.md` §00.4).

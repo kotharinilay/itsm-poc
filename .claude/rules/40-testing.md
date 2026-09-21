@@ -31,8 +31,8 @@ governance decision, not an edit** (`.claude/rules/70-adr.md` §70.2 B).
 **A pre-existing violation exposed by a new rule is not a reason to delete the test that found it.**
 It is a deviation to record (`.claude/rules/00-authority.md` §00.7).
 
-*Source: `dotnet.yaml#P-PY-S3` / `python.yaml#P-PY-S3` suppression policy, and the testing
-obligations of rules 30, 50, 70 and 90, which state this prohibition identically.*
+*Origin: the .NET and Python suppression policy, and the testing obligations of rules 30, 50, 70
+and 90, which state this prohibition identically.*
 
 ## 40.2 .NET test projects
 
@@ -43,16 +43,15 @@ obligations of rules 30, 50, 70 and 90, which state this prohibition identically
 - A test project is named `<Project>.Tests`.
 - Test methods are named **`Method_State_Expected`**.
 
-*Source: `dotnet.yaml#P-DN-2` · Enforcement: partial — the `tests/` ⇔ `src/` pairing is
-structurally checkable and the repository follows it; the method-name convention is review-only, as
-the source states*
+*Origin: `P-DN-2` · Enforcement: partial — the `tests/` ⇔ `src/` pairing is
+structurally checkable and the repository follows it; the method-name convention is review-only*
 
 ### Identical strictness — no relaxed ruleset
 **Test projects inherit exactly the same strictness as `src`.** The root
 `dotnet/Directory.Build.props` applies to every project including `tests/` — the same S1…S4
 switches — and **there is no per-test override.**
 
-*Source: `dotnet.yaml#P-DN-3` · Enforcement: mechanical — `Directory.Build.props` is at the root of
+*Origin: `P-DN-3` · Enforcement: mechanical — `Directory.Build.props` is at the root of
 `dotnet/` and detects test projects **by path**, so a new test project cannot accidentally opt out.
 Test projects turn off only `GenerateDocumentationFile`, which is not a strictness switch.*
 
@@ -70,10 +69,10 @@ baseline change requiring an ADR (`.claude/rules/70-adr.md` §70.2 B).
 - Test files are named **`test_*.py`**.
 - **Descriptive test names.**
 
-*Source: `python.yaml#P-PY-2` · Enforcement: partial — `testpaths = ["tests"]` with
+*Origin: `P-PY-2` · Enforcement: partial — `testpaths = ["tests"]` with
 `--strict-markers` and `--strict-config` in both `pyproject.toml` files, and pytest is a failing CI
-step in both workflows. As the source states: pytest's own discovery convention is not a failing
-gate, and descriptive-name quality is review-only.*
+step in both pipelines. pytest's own discovery convention is not a failing gate, and
+descriptive-name quality is review-only.*
 
 `assert` is permitted in tests and banned elsewhere — `.claude/rules/21-python.md` PY-6. The
 `"tests/**/*.py" = ["S101"]` per-file-ignore is the mechanism for that split, **not** a relaxation
@@ -83,10 +82,8 @@ of the suppression policy.
 
 **Scope: `apps/web/**`, `apps/desktop/**`.**
 
-Until Phase 12 this section recorded that no authoritative source defined a test layout or naming
-convention for these stacks. `docs/adr/0010-frontend-engineering-baseline.md` migrated a frontend
-baseline, so the obligations now have a source. They are stated where they belong and are **not**
-duplicated here:
+The frontend testing obligations are stated where they belong, under the frontend baseline
+(`docs/adr/0010-frontend-engineering-baseline.md`), and are **not** duplicated here:
 
 | Obligation | Owned by |
 |---|---|
@@ -97,14 +94,13 @@ duplicated here:
 | The Electron security suite and the assertions it carries | `.claude/rules/24-electron.md` §24.1–§24.5 |
 
 The live gates — `npm test`, `npm run test:architecture`, the accessibility sweep, the CSP check,
-the Electron security suite and its meta-guard — **are not weakened** (§40.1). What changed in
-Phase 12 is that they now have a stated requirement behind them; the gates themselves are
-untouched.
+the Electron security suite and its meta-guard — **are not weakened** (§40.1). Each has a stated
+requirement behind it, and the requirement is not satisfied by the gate alone.
 
 ## 40.5 Test kinds the baseline requires by name
 
 Several principles in `.claude/rules/10-principles.md` can only be discharged by a test, and the
-source names which kind. These are obligations on the code that realizes the principle, not on this
+principle names which kind. These are obligations on the code that realizes the principle, not on this
 file.
 
 **This section is the *principle* axis only.** What a *change* owes is a separate obligation, stated
@@ -113,8 +109,8 @@ change satisfies both axes; neither list is derived from, or substitutes for, th
 
 | Principle | Test the source requires |
 |---|---|
-| **P-3** substitutability | **One shared behavioral contract suite per abstraction, executed against every implementation.** The source is explicit that substitutability is a runtime property and that no structural proxy discharges it. |
-| **P-21** idempotency | **Execute the operation two or more times with the same input and assert a single net effect** (one row, one side effect). The source is explicit that only an execution test discharges this. |
+| **P-3** substitutability | **One shared behavioral contract suite per abstraction, executed against every implementation.** Substitutability is a runtime property and that no structural proxy discharges it. |
+| **P-21** idempotency | **Execute the operation two or more times with the same input and assert a single net effect** (one row, one side effect). Only an execution test discharges this. |
 | **P-32** explicit contracts | A **structural** check that public operations verify their declared postconditions and expose an invariant check, **plus** an integration test exercising each operation against its contract across representative call sequences. |
 | **P-11** fail fast | A structural assertion that boundary types and handlers carry entry-point guards for their preconditions. |
 | **P-20** illegal states unrepresentable | A structural assertion that boundary DTOs are parsed into constrained domain types and that domain constructors reject invalid state. |
@@ -122,11 +118,11 @@ change satisfies both axes; neither list is derived from, or substitutes for, th
 | **P-31** resource release | A structural assertion that types owning released resources expose and honor a disposal/close contract used within a bounded scope. |
 | **P-30** no swallowed errors | An architecture assertion that no catch/except block is empty, comment-only, or discards an error-typed result. |
 | **P-12** Law of Demeter | An architecture assertion that no method call navigates beyond its immediate collaborator. |
-| **DN-19** no `goto` | A **custom Roslyn/structural check failing on `GotoStatementSyntax`**. The source states that review is explicitly *not* acceptable for this rule. |
+| **DN-19** no `goto` | A **custom Roslyn/structural check failing on `GotoStatementSyntax`**. Review is explicitly *not* acceptable for this rule. |
 
-Where one of these checks does not exist today it is recorded as an enforcement gap in
-`docs/migration/phase-9-baseline-coverage.md` §5 — **not** silently downgraded to review, and **not**
-implemented in this phase (Phase 9 brief §24).
+Where one of these checks does not exist today it is registered as an enforcement gap in
+`docs/governance/open-items.md` §2 — **not** silently downgraded to review, and **not** built on
+Claude's own initiative (§40.7).
 
 ## 40.6 Running the gates
 
@@ -149,8 +145,8 @@ A change runs the gates its paths touch. A change to `.claude/**` runs the gover
 
 - It does not define the DB, LangGraph, ADR or functional gates (rules 50, 30, 70, 90).
 - It does not authorize adding a new enforcement mechanism. Where a baseline rule needs a gate that
-  does not exist, it is recorded as an `ENFORCEMENT GAP`, and building it is a separate,
-  human-directed decision (Phase 9 brief §24).
+  does not exist, it is registered as an enforcement gap in `docs/governance/open-items.md` §2,
+  and building it is a separate, human-directed decision.
 - It does not make a passing suite evidence of conformance. A gate that does not fire proves nothing
   (`.claude/rules/00-authority.md` §00.4).
 
@@ -164,15 +160,10 @@ A change runs the gates its paths touch. A change to `.claude/**` runs the gover
 **"what does this *change* owe?"**. They are different axes and neither derives from the other; a
 change satisfies both or it is incomplete. Do not merge the two lists.
 
-§40.8, §40.9 and §40.10 were **appended** rather than inserted, so that every existing section
-number in this file stays stable and no cross-reference from another rule breaks.
-
-*Authorized by `docs/adr/0011-required-test-categories-baseline.md` (Accepted). Migrated from
-`.specify/memory/constitution.md` (**deleted in Phase 16**; git history only)
-§Required test categories, §Which change requires which category
-and §Coverage. **It is migration input. It is not authority.** Its non-authoritative
-status under `.claude/rules/00-authority.md` §00.4 is unchanged by having been read. This file is
-the testing-baseline authority; the constitution is not, and does not become so.*
+*Authorized by `docs/adr/0011-required-test-categories-baseline.md` (Accepted). **This file is the
+testing-baseline authority.** The ADR records the decision to state these categories; it is not
+itself the rule (`.claude/rules/70-adr.md` §70.1), and the material it migrated from was retired
+from the tree and is not authority (`.claude/rules/00-authority.md` §00.3, §00.4).*
 
 ### The fifteen categories
 
@@ -202,7 +193,7 @@ In that order: the test
 fails against the unfixed code and passes against the fixed code.
 Its absence is not made good by any other category.
 
-*Source: `constitution#Required test categories`, via ADR-0011 · Enforcement: **procedural** — the
+*Origin: `ADR-0011` · Enforcement: **procedural** — the
 suites exist and run (`ragcore/tests/`, `dotnet/tests/`, `integrations/tests/`; §40.6), but nothing
 in this repository binds a diff to the categories it owes. Reviewed, not gated. See **EG-10** in
 §40.9.*
@@ -236,13 +227,13 @@ mechanical at review rather than a matter of judgement.
 listed at the head of this file — rules 30, 50, 70 and 90 own theirs, and this matrix does not
 restate them.
 
-*Source: `constitution#Which change requires which category`, via ADR-0011 · Enforcement:
+*Origin: `ADR-0011` · Enforcement:
 **procedural**.*
 
 > **ENFORCEMENT GAP EG-10.** No deterministic mechanism in this repository maps a changed file or a
 > diff to the test categories §40.9 says it owes. The obligation is applied by a reviewer. This is
-> recorded, **not** closed: ADR-0011 does not authorize building such a mechanism, and building one
-> is a separate, human-directed decision (Phase 9 brief §24, `.claude/rules/40-testing.md` §40.7).
+> registered in `docs/governance/open-items.md` §2, **not** closed: ADR-0011 does not authorize
+> building such a mechanism, and building one is a separate, human-directed decision (§40.7).
 > A gap in the gate is never a reduction in the requirement.
 
 ## 40.10 Coverage
@@ -277,6 +268,6 @@ implementation does not currently satisfy it. Closing it is a human decision: ei
 written, or the deferred protection is restored. Neither is done under this rule, and the deferred
 architecture decision is not reopened here.
 
-*Source: `constitution#Coverage`, via ADR-0011 · Enforcement: **procedural** — the prohibition is
+*Origin: `ADR-0011` · Enforcement: **procedural** — the prohibition is
 honoured by the absence of a coverage gate in every workflow in §40.6; nothing mechanically
 prevents one being added.*

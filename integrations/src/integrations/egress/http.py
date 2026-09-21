@@ -16,8 +16,8 @@ expiry and turn a slow vendor into an expired approval that requires fresh human
   because a default would eventually be wrong for the dangerous case.
 
 **One pooled client for the process.** `httpx.AsyncClient` is constructed once and reused: a client
-per call exhausts sockets and re-resolves DNS on every request, and the constitution prohibits
-one-off unmanaged clients for exactly that reason.
+per call exhausts sockets and re-resolves DNS on every request, and `BL-32` prohibits one-off
+unmanaged clients for exactly that reason (cross-stack gap, docs/governance/open-items.md §5).
 """
 
 from __future__ import annotations

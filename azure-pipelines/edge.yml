@@ -1,0 +1,71 @@
+# The edge trust boundary: Front Door + WAF -> APIM -> backend, with APIM as the identity/trust
+# boundary (A1 §4.5).
+#
+# WHY THIS IS A SEPARATE, REQUIRED PIPELINE. Most of this boundary lives in files no compiler reads
+# - an APIM policy, a Front Door definition, two ingress manifests - and a change touching only
+# those files runs neither test suite. That is also the change most likely to open the boundary,
+# because `external: false` -> `external: true` is one word and reviews as formatting.
+#
+# The rules are declared once, in build/policy/edge-trust.json, and enforced from three places:
+# this pipeline's guard, dotnet/tests/Synthia.ArchitectureTests/EdgeTrustPolicyTests.cs, and
+# ragcore/tests/security/test_edge_trust_policy.py. Two hand-maintained lists drift; one file and
+# three readers of it cannot.
+#
+# Gateway-to-backend certificate provenance is DEFERRED and is not checked here or anywhere else
+# (docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md).
+#
+# Replaces .github/workflows/edge.yml. REQUIRED on every pull request, unconditionally.
+
+name: edge
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: ["*"]
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: edge_path
+    displayName: all traffic traverses the edge
+    steps:
+      - script: bash build/scripts/check-edge-path.sh
+        displayName: Edge path check
+
+      # Proves the guard still fails on a planted violation. Every check in the guard is a grep
+      # against a rarely-edited file, and a grep that has stopped matching reports success just as
+      # loudly as one that matches: the failure mode of this guard is silence.
+      - script: bash build/scripts/verify-edge-guard.sh
+        displayName: Verify the guard fails correctly
+
+  - job: edge_trust
+    displayName: edge trust policy holds
+    steps:
+      - task: UseDotNet@2
+        displayName: Install .NET 10 SDK
+        inputs:
+          version: 10.0.x
+
+      - template: templates/use-uv.yml
+        parameters:
+          workingDirectory: ragcore
+
+      # THE BEHAVIOURAL HALF IS GONE, and its absence is the point rather than an oversight. It
+      # asserted that a forged identity context sent from inside the network was refused on gateway
+      # provenance. That mechanism is deferred (ADR-0008) and nothing replaced it, so the assertion
+      # is no longer true and was removed rather than weakened into something that passes.
+      #
+      # What remains is the structural half: the shared policy, the APIM policies, the Front Door
+      # definition and the ingress manifests all agree, and APIM still deletes every inbound copy
+      # of the identity contract.
+      - script: dotnet test tests/Synthia.ArchitectureTests/Synthia.ArchitectureTests.csproj --filter "FullyQualifiedName~EdgeTrustPolicy"
+        workingDirectory: dotnet
+        displayName: .NET - edge trust policy
+
+      - script: uv run pytest tests/security/test_edge_trust_policy.py -v
+        workingDirectory: ragcore
+        displayName: RagCore - edge trust policy

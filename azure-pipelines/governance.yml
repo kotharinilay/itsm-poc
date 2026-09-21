@@ -1,0 +1,53 @@
+# The governance machinery validates itself.
+#
+# .claude/rules/40-testing.md §40.6: "A change to .claude/** runs the governance guard suite."
+# That obligation had no pipeline of its own on the GitHub surface - it ran only locally - so the
+# one gate that proves the gates are wired was the one nothing enforced. It is enforced here.
+#
+# The suite is deliberately NOT a pytest module and lives outside every project test root, so it
+# cannot be collected by ragcore, integrations or the .NET suites and cannot alter their results.
+# It asserts governance artifacts only: no application code, no schema, no graph behaviour.
+
+name: governance
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - .claude/*
+      - CLAUDE.md
+      - docs/adr/*
+      - docs/governance/*
+      - docs/final-repository-governance.md
+      - azure-pipelines/governance.yml
+
+pr:
+  branches:
+    include: ["*"]
+  paths:
+    include:
+      - .claude/*
+      - CLAUDE.md
+      - docs/adr/*
+      - docs/governance/*
+      - docs/final-repository-governance.md
+      - azure-pipelines/governance.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: guards
+    displayName: governance guard suite
+    steps:
+      # The suite creates real git worktrees to prove the guards detect a governed write made from
+      # one, so git must be configured with an identity.
+      - script: |
+          set -euo pipefail
+          git config --global user.email "pipeline@synthia.invalid"
+          git config --global user.name "Synthia pipeline"
+        displayName: Configure git for the worktree checks
+
+      - script: python3 .claude/hooks/test_guards.py
+        displayName: Governance guards

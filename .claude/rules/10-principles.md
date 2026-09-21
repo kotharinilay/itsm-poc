@@ -451,7 +451,7 @@ requirement rather than restating it. It is not duplicated here.
 ## 10.6 What this file does not do
 
 - It does not restate a stack's mechanism for meeting a principle. That is `20-dotnet.md`,
-  `21-python.md` or `22-web-typescript.md`.
+  `21-python.md`, `22-web-typescript.md`, `23-angular.md` or `24-electron.md`.
 - It does not define the DB, LangGraph, ADR or functional-record gates. Those are rules 50, 30, 70
   and 90, pointed to from `.claude/rules/00-authority.md` §00.9.
 - It does not authorize weakening a test to satisfy a principle. See

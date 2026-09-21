@@ -1,6 +1,6 @@
 # Conventions
 
-## Cross-cutting (constitution)
+## Cross-cutting (`.claude/rules/10-principles.md`)
 - Model proposes, deterministic governance (catalogue) decides — never let model output choose treatment/authority.
 - Authority never taken from a message, header or client; identity `(tid, oid)` derived once at the edge. Roles `end_user`, `technician`, `senior_technician`, `administrator` are disjoint — intersect role sets, never rank them. Customer and staff authz are separate models.
 - Tenant scoping on every query, cache key, message, telemetry.

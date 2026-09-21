@@ -81,12 +81,25 @@ of the suppression policy.
 
 ## 40.4 TypeScript / Angular / Electron
 
-**No authoritative source defines a test layout or naming convention for these stacks.**
-`.claude/rules/22-web-typescript.md` §22.1 explains why, and §22.3 records the gates that exist
-without a baseline behind them — `npm test`, the accessibility sweep, the CSP check, and the
-Electron security suite with its own meta-guard.
+**Scope: `apps/web/**`, `apps/desktop/**`.**
 
-**Those gates are not weakened** (§40.1). Nothing further is asserted, and no convention is invented.
+Until Phase 12 this section recorded that no authoritative source defined a test layout or naming
+convention for these stacks. `docs/adr/0010-frontend-engineering-baseline.md` migrated a frontend
+baseline, so the obligations now have a source. They are stated where they belong and are **not**
+duplicated here:
+
+| Obligation | Owned by |
+|---|---|
+| The frontend quality gate — build, test, format, lint, strict type check, architecture rules | `.claude/rules/22-web-typescript.md` FE-SH-3 |
+| `.spec.ts` naming and colocation in the Angular workspace | `.claude/rules/23-angular.md` FE-NG-2 |
+| The project-supported Angular runner and current testing defaults | `.claude/rules/23-angular.md` FE-NG-6 |
+| WCAG 2.2 AA on all three surfaces, and the a11y test a journey change owes | `.claude/rules/23-angular.md` FE-NG-5, FE-NG-6 |
+| The Electron security suite and the assertions it carries | `.claude/rules/24-electron.md` §24.1–§24.5 |
+
+The live gates — `npm test`, `npm run test:architecture`, the accessibility sweep, the CSP check,
+the Electron security suite and its meta-guard — **are not weakened** (§40.1). What changed in
+Phase 12 is that they now have a stated requirement behind them; the gates themselves are
+untouched.
 
 ## 40.5 Test kinds the baseline requires by name
 

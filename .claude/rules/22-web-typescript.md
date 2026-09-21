@@ -1,120 +1,228 @@
-# 22 — TypeScript / Angular / Electron
+---
+paths:
+  - "apps/**"
+---
+
+# 22 — Frontend baseline: TypeScript and the shared client rules
 
 ## Scope
 
-**This file governs the frontend and desktop stacks:**
+**This file governs every frontend and desktop path, and nothing else.**
 
 | Governs | Stack |
 |---|---|
-| `apps/web/**` | TypeScript / Angular (7 projects) |
-| `apps/desktop/**` | TypeScript / Electron |
-| Any future `.ts`/`.tsx` outside those trees | TypeScript |
+| `apps/web/**` | TypeScript / Angular — one workspace, 3 applications, 4 libraries |
+| `apps/desktop/**` | TypeScript / Electron — the desktop host |
 
 It does **not** govern `dotnet/**` (`.claude/rules/20-dotnet.md`) or `ragcore/**` /
-`integrations/**` (`.claude/rules/21-python.md`).
+`integrations/**` (`.claude/rules/21-python.md`). Every TypeScript file tracked in this repository
+lives under `apps/`, which is why `apps/**` is this file's whole scope.
+
+Two narrower files sit below it and load only for their own stack:
+
+| File | Governs |
+|---|---|
+| `.claude/rules/23-angular.md` | `apps/web/**` — the Angular workspace |
+| `.claude/rules/24-electron.md` | `apps/desktop/**` — the Electron host |
+
+**This file states what is genuinely common to both clients.** A rule that belongs to one stack is
+stated there and is not duplicated here.
+
+Repository-wide principles in `.claude/rules/10-principles.md` apply to `apps/**` **in addition**
+to everything here. This file states the frontend mechanism; it never relaxes a principle
+(`.claude/rules/00-authority.md` §00.5).
 
 ---
 
-## 22.1 Status — read this first
+## 22.1 Status — this is now an authoritative baseline
 
 ```text
-TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED
+TYPESCRIPT / ANGULAR / ELECTRON BASELINE — MIGRATED AND AUTHORITATIVE
+Instrument: docs/adr/0010-frontend-engineering-baseline.md
+Closes: UD-1 (Phase 9) = B-4 (Phase 7) = OQ-2 (Phase 2) = B11-2 (Phase 11)
 ```
 
-**No authoritative source in this repository defines a TypeScript, Angular or Electron engineering
-baseline.** This was established in Phase 2, re-verified in Phase 7
-(`docs/migration/phase-7-validation.md` §5.3) and verified again in Phase 9 against the actual
-sources:
+From Phase 2 through Phase 11 this file recorded that **no authoritative source defined a
+TypeScript, Angular or Electron engineering baseline**, and its §22.4 recorded the open human
+decision between three options. That decision was made in Phase 12: **option 2 — migrate a
+baseline**. The record is `docs/adr/0010-frontend-engineering-baseline.md`; the migration is
+`docs/migration/phase-12-spec-kit-decoupling.md`.
 
-- `principles.yaml` is language-agnostic by construction and names no stack.
-- `python.yaml` / `python_lang.yaml` scope themselves `language == python`.
-- `dotnet.yaml` / `dotnet_lang.yaml` scope themselves `language in [dotnet, csharp]`.
-- `docs/migration/phase-9-baseline-input.md` — the explicit baseline block, newly available for
-  Phase 9 — is **entirely .NET, data-access, observability and container-runtime scoped**. It
-  mentions the SPA client exactly once, as the *reason* .NET emits camelCase JSON (`BL-07`). That is
-  a statement about the .NET contract, **not** a TypeScript rule.
+### Where these requirements came from, and what that does not mean
 
-**Therefore this file states only what an authoritative source actually establishes.** It does not
-invent a frontend standard, and Phase 9 did not author one.
+The migration input was the **retired Spec Kit constitution**, `.specify/memory/constitution.md` —
+specifically Principle VII with its Angular and Electron blocks, the Angular line of §Dependency
+injection, §Angular, §Quality gate, §Review, and the frontend row of §"Which change requires which
+category".
 
-> **Do not manufacture TypeScript, Angular or Electron equivalents of .NET or Python rules.**
-> `mypy --strict` does not become "`strict: true` in tsconfig"; Ruff `S` does not become
-> "eslint-plugin-security"; `EnableNETAnalyzers` does not become an ESLint config. Concepts that
-> look similar across stacks are not evidence of a requirement
-> (`.claude/rules/00-authority.md` §00.5, Phase 9 brief §6).
+```text
+.specify/memory/constitution.md IS MIGRATION INPUT. IT IS NOT AUTHORITY.
+```
 
-## 22.2 What does apply — the repository-wide principles
+`.claude/rules/00-authority.md` §00.4 continues to name it non-authoritative **by path**, and
+nothing here restores that authority. Its authority semantics — Roman-numbered Principles, the
+amendment procedure, the NON-NEGOTIABLE markers, the governance sections — were deliberately
+**not** carried across. What was carried across is the requirement text, with its meaning
+preserved, re-identified under this repository's own `FE-*` identifiers.
 
-`principles.yaml` declares itself language-independent, so **`.claude/rules/10-principles.md`
-applies to `apps/web/**` and `apps/desktop/**` in full.** That is the governance these paths carry
-today, and it is real governance, not a placeholder.
+**The requirement is now stated here. Cite this file, not the constitution.** Roughly thirty-five
+source comments and lint messages under `apps/**` and `.github/workflows/**` still read
+`constitution Principle VII`. Those are stale pointers to a live rule, not evidence of a live
+dependency; `docs/migration/phase-12-spec-kit-decoupling.md` records them, and they are not
+rewritten under this phase.
 
-In particular, and without adding anything the source does not say:
+### What is still not baseline
 
-- **P-17 least privilege** is repository-wide and reaches these stacks explicitly — renderer
-  privileges, `contextIsolation`, `nodeIntegration`, preload surface, and the breadth of any token
-  or API scope the client holds. `.claude/rules/10-principles.md` P-17 is binding here.
-- **P-27 externalized configuration** — no environment-specific literal (URL, key, tenant, feature
-  toggle) in frontend or desktop source.
-- **P-29 logs as an event stream**, **P-30 no swallowed errors**, **P-31 deterministic resource
-  release**, **P-11 fail fast**, **P-20 make illegal states unrepresentable** — all apply as stated.
-- **C-1 Conventional Commits** and **C-2 SemVer** (`.claude/rules/10-principles.md` §10.5) apply to
-  every commit in this repository, including commits that touch only these trees.
-- **C-3 Diátaxis**, **C-4 C4** and **C-5 README quickstart + ADR pointer** apply to documentation
-  for these stacks.
+The committed frontend tooling remains **evidence of what is, not authority for what should be**.
+Where a committed ESLint rule, `tsconfig` flag or CI step *realizes* a requirement below, it is
+named as that requirement's enforcement mechanism. Where committed tooling goes **beyond** any
+migrated requirement it stays a repository convention and is labelled as one — it is not promoted
+to baseline by appearing in this file.
 
-The **stack-specific mechanism** for meeting any of these — which ESLint rule, which `tsconfig`
-flag, which Angular or Electron API — is exactly what no authoritative source defines. Choose a
-mechanism that meets the principle; do not record the choice here as though it were baseline.
+**Traceability.** Every rule carries `Source:`. The full table is
+`docs/migration/phase-12-spec-kit-decoupling.md`.
 
-## 22.3 Existing gates — mechanism without a baseline
+**Enforcement** vocabulary is the repository's own — `mechanical`, `partial`, `procedural`,
+`currently-unenforced` — verified against `apps/web/eslint.config.js`,
+`apps/desktop/eslint.config.js`, both `tsconfig.json` files, both `package.json` files,
+`.github/workflows/web.yml` and `.github/workflows/desktop.yml`. A rule labelled
+`currently-unenforced` is **still binding**; the gap is recorded, not an exemption.
 
-These stacks carry **strong mechanical gates that no baseline stands behind.** This is the mirror
-image of the .NET and Python situation, where the baseline exists and some gates do not.
+---
 
-| Workflow | Failing steps today |
+## 22.2 Shared client rules
+
+These hold for the browser portals and for the desktop host alike.
+
+### FE-SH-1 — No client is a security boundary
+**No client — the Angular portals, the Electron desktop, or any future surface — is a security
+boundary. Every authorization, tenancy and policy decision is made server-side and re-verified
+server-side.**
+
+This is the root requirement that `23-angular.md` §23.3 and `24-electron.md` §24.1 each realize
+for their own stack. It is stated once, here.
+
+*Rationale, preserved from the source: clients run where the platform does not control them.
+Anything a client decides is a decision an attacker can make instead.*
+
+*Source: `constitution#VII` (opening) · Enforcement: partial —
+`apps/web/projects/platform-core/no-authz.spec.ts` (`npm run test:architecture`) asserts that no
+presentation project contains authorization vocabulary, and `apps/desktop/tests/no-policy.spec.ts`
+asserts the same for the Electron main and preload code. Both are build-failing gates. The
+server-side half is owned by A1 and by `.claude/rules/80-security-ops.md`, not by this file.*
+
+### FE-SH-2 — No secret in client code
+**No secret may exist in client code.** No credential, API key, connection string or token literal
+— including in defaults, fixtures, sample configuration or comments.
+
+*Source: `constitution#VII` (Angular block: "No secret may exist in browser code"). Applied to the
+desktop renderer too, because the renderer **is** browser code:
+`apps/web/projects/desktop-renderer` is an Angular application built from the same workspace and
+loaded by the Electron host. That is the repository's own structure, not an extension of the
+source. It also realizes `.claude/rules/10-principles.md` P-27 and
+`.claude/rules/80-security-ops.md` §80.3, which reach `apps/**` independently.*
+*Enforcement: partial — Gitleaks over the repository in `.github/workflows/security.yml`. No
+TypeScript-specific credential-literal analyzer is bound; this is the frontend half of **EG-2**.*
+
+### FE-SH-3 — The frontend quality gate
+**No frontend change is complete unless all of the following hold:** the code builds; tests pass;
+formatting passes; lint passes; strict type checking passes; architecture rules pass; and the
+security and accessibility gates pass where relevant. **A change must not merge with new
+suppressions.**
+
+| Obligation | `apps/web` | `apps/desktop` |
+|---|---|---|
+| builds | `npm run build` | `npm run build` |
+| tests pass | `npm test` | `npx vitest run` |
+| formatting passes | `npx prettier --check .` | none configured — see DV-12 |
+| lint passes | `npx eslint .` | `npm run lint` |
+| strict type checking passes | `npx tsc -b --pretty` | `npm run typecheck` |
+| architecture rules pass | `npm run test:architecture` | `apps/desktop/tests/no-policy.spec.ts` |
+| security / accessibility | `npm run test:a11y`, `npm run test:csp` | `build/scripts/verify-desktop-security-guard.sh` |
+
+*Source: `constitution#QualityGate`, `constitution#Review` · Enforcement: mechanical — every
+command above is a failing step in `.github/workflows/web.yml` or `.github/workflows/desktop.yml`.
+**One exception:** `apps/desktop` configures no formatter, so the "formatting passes" obligation
+has no desktop mechanism. Recorded as deviation **DV-12**; the configuration is not changed here
+(`.claude/rules/00-authority.md` §00.7).*
+
+> "No new suppressions" is the frontend statement of what `.claude/rules/20-dotnet.md` DN-21 and
+> `.claude/rules/21-python.md` §21.1 state for their stacks. **An `eslint-disable` comment is a
+> suppression**: scope it narrowly and justify it, or do not add it. Adding a blanket or
+> unjustified one is an ADR trigger under `.claude/rules/70-adr.md` §70.2 B(3).
+> *Enforcement: procedural — no check counts ESLint suppressions. Recorded as **EG-7**.*
+
+### FE-SH-4 — A client-reported result is a claim, not proof
+**A result reported by a client is a claim, not proof.** A client-attested outcome must not be
+presented as a confirmed resolution.
+
+*Source: `constitution#VIII`, `constitution#VII` (endpoint execution path) · Enforcement:
+not-applicable today — nothing executes on an endpoint
+(`docs/adr/0004-endpoint-script-integrity-privilege-and-attestation.md`;
+`apps/desktop/src/main/endpoint-execution-boundary.ts` is a refusing placeholder, asserted by
+`apps/desktop/tests/no-policy.spec.ts`). The recording half — `server_confirmed`,
+`client_attested`, `contradicted` — is backend behaviour and is **not** governed by this file.*
+
+---
+
+## 22.3 TypeScript rules
+
+### FE-TS-1 — Strict TypeScript
+**TypeScript runs in strict mode, and strict type checking is a failing gate.**
+
+*Source: `constitution#Angular` ("strict TypeScript"), `constitution#QualityGate` ("strict type
+checking passes") · Enforcement: mechanical — `apps/web/tsconfig.json` and
+`apps/desktop/tsconfig.json` both set `"strict": true`; `npx tsc -b --pretty` and
+`npm run typecheck` are failing CI steps.*
+
+> **Beyond the baseline, recorded as repository convention rather than promoted to it:** both
+> `tsconfig.json` files additionally set `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+> `noUnusedLocals`, `noUnusedParameters`, `noImplicitOverride` and `noFallthroughCasesInSwitch`;
+> `apps/web` adds `noPropertyAccessFromIndexSignature` and `noImplicitReturns`, and its
+> `angularCompilerOptions` set `strictTemplates`, `strictInjectionParameters` and
+> `strictInputAccessModifiers`. Both ESLint configs set `@typescript-eslint/no-explicit-any` to
+> `error`. **The migrated requirement is "strict TypeScript"; the above is how this repository
+> currently meets and exceeds it.** Relaxing one of the extras is a convention change; relaxing
+> `"strict": true` itself is an ADR trigger under `.claude/rules/70-adr.md` §70.2 B(5).
+
+### FE-TS-2 — Typed API contracts
+**Contracts crossing the client boundary are typed.** A request, response or IPC payload is
+modelled as a TypeScript type, never consumed as `any` or as an untyped object.
+
+*Source: `constitution#Angular` ("Typed API contracts") · Enforcement: partial —
+`@typescript-eslint/no-explicit-any` at `error` in both configs removes the commonest escape, and
+`apps/desktop/src/ipc-contracts/index.ts` types the IPC surface (asserted by
+`apps/desktop/tests/bridge-surface.spec.ts` and `renderer-contract.spec.ts`). That a client type
+matches the **published** contract is gated on the emitting side by
+`.github/workflows/contracts.yml`, not on the consuming side; that half is review.*
+
+### FE-TS-3 — The repository-wide principles, and their TypeScript mechanisms
+This file does **not** restate `.claude/rules/10-principles.md`. It names the mechanism where the
+frontend has one, so a principle is not enforced twice in two wordings:
+
+| Principle | TypeScript mechanism in this repository |
 |---|---|
-| `.github/workflows/web.yml` | `npx eslint .`, `npx prettier --check .`, `npx tsc -b`, `npm run build`, `npm test`, accessibility sweep (`test:a11y`), Content Security Policy check (`test:csp`) |
-| `.github/workflows/desktop.yml` | `npm run typecheck`, `npm run lint`, Electron security suite (`vitest`), a guard verifying the security suite fails correctly (`build/scripts/verify-desktop-security-guard.sh`), `npm run build` |
+| **P-29** logs as an event stream | `no-console` at `error` in both ESLint configs, allowing `warn`/`error` only, switched off for the two build-script paths whose whole output is a report |
+| **P-30** no swallowed errors | review — no ESLint rule is bound for an empty `catch` |
+| **P-27** externalized configuration | `apps/desktop/src/main/config.ts` reads and freezes host configuration; `apps/web/projects/customer-portal/src/app/platform.config.ts` binds the portal's. See also FE-SH-2 |
+| **P-17** least privilege | `24-electron.md` §24.2–§24.3 for renderer privilege; `.claude/rules/80-security-ops.md` §80.2 for the operational surfaces |
+| **P-8** no speculative capability | `23-angular.md` FE-NG-7 is the frontend instance the source states explicitly |
+| **P-13 / P-24** separation, low coupling | `23-angular.md` FE-NG-8 (the workspace dependency direction) |
+| **C-1 / C-2** Conventional Commits, SemVer | `.claude/rules/10-principles.md` §10.5 — repository-wide, including commits touching only `apps/**` |
 
-```text
-EXISTING IMPLEMENTATION / REPOSITORY CONVENTION — NOT BASELINE AUTHORITY
-```
+*Source: `principles.yaml` via `.claude/rules/10-principles.md`; `constitution#Commits` for
+C-1/C-2 · Enforcement: as stated per row.*
 
-Per Phase 9 brief §7 Case C and `.claude/rules/00-authority.md` §00.4:
+---
 
-- **These configurations are evidence of what is, not authority for what should be.** The presence
-  of an ESLint config, a `tsconfig` setting or an Electron security assertion does **not** make it a
-  baseline rule, and it must not be promoted to one by being written into this file.
-- **Equally, they are not to be weakened.** They are live gates protecting real behavior — notably
-  the Electron security suite and the CSP check. Nothing in this phase relaxes them, and
-  `.claude/rules/40-testing.md` §40.6 forbids weakening a test to make a change pass.
-- Preserving them is not the same as ratifying them. Ratification is the human decision below.
+## 22.4 What this file does not do
 
-## 22.4 The open decision
-
-```text
-NO AUTHORITATIVE EQUIVALENT — HUMAN DECISION REQUIRED
-Affected stacks: TypeScript, Angular (apps/web), Electron (apps/desktop)
-```
-
-Carried forward as blocker **B-4** (`docs/migration/phase-7-validation.md` §16) and open question
-**OQ-2** (`docs/migration/phase-2-authority-model.md`). Recorded in
-`docs/migration/phase-9-baseline-coverage.md` §9 as **UD-1**.
-
-The three candidate answers, unchanged and still a human's to choose:
-
-1. **Principles-only** — `.claude/rules/10-principles.md` is the whole baseline for these stacks,
-   and the existing CI gates are tooling choices below the baseline. This is the *de facto* state
-   today.
-2. **A separately supplied TS/Angular/Electron baseline** — a rule pack equivalent to
-   `python.yaml` + `python_lang.yaml` is authored and supplied as a migration input, then migrated
-   into this file by a later phase.
-3. **Deliberately ungoverned** — an explicit, recorded decision that these stacks carry no
-   engineering baseline beyond the principles.
-
-Option 2 and option 3 both need an ADR (`.claude/rules/70-adr.md` §70.2 B). Option 1 needs an
-explicit human confirmation that the *de facto* state is the intended one.
-
-**Until that decision is made, Phase 9 asserts nothing further about these stacks.** This file is
-deliberately short. It is not a stub awaiting filler — its shortness is the accurate report.
+- It does not restate the Angular rules (`.claude/rules/23-angular.md`) or the Electron rules
+  (`.claude/rules/24-electron.md`).
+- It does not restate `.claude/rules/10-principles.md`, which applies to `apps/**` in full.
+- It does not define the DB, LangGraph, ADR or functional-record gates. Those are rules 50, 30, 70
+  and 90, and they reach a frontend change exactly as they reach any other.
+- It does not make any committed ESLint, `tsconfig`, Playwright or Vitest configuration
+  authoritative. §22.1 says why.
+- It does not authorize weakening a test, a lint rule or a CI step to make a frontend change pass
+  (`.claude/rules/40-testing.md` §40.1).

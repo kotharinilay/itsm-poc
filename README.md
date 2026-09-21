@@ -11,16 +11,38 @@ falls back to manual resolution. That is the designed outcome, not a defect.
 
 Each is authoritative on its own axis. **No document may be reinterpreted to override another.**
 
-| Document | Authoritative on |
+**Architecture — exactly these three, and nothing else:**
+
+| Document | Owns |
 |---|---|
-| [`Synthia-Platform-Specification.md`](./Synthia-Platform-Specification.md) | **Architecture** — structure, boundaries, trust model, data ownership |
-| [`.specify/memory/constitution.md`](./.specify/memory/constitution.md) | **Engineering governance** — how software is built, tested, reviewed, secured |
-| [`specs/001-platform-scaffold/plan.md`](./specs/001-platform-scaffold/plan.md) | **Technical realization** |
-| [`specs/001-platform-scaffold/tasks.md`](./specs/001-platform-scaffold/tasks.md) | **Executable work** |
-| [`docs/adr/`](./docs/adr/) | Recorded architectural decisions |
+| [`docs/architecture/identity-plane-final.md`](./docs/architecture/identity-plane-final.md) | The principal, tenant binding, authority semantics, work-item immutability |
+| [`docs/architecture/Synthia-OverallArchitecture-final.md`](./docs/architecture/Synthia-OverallArchitecture-final.md) | Topology, zones, trust boundaries, the stores and their lifecycle |
+| [`docs/architecture/RagAgent-Architecture-final.md`](./docs/architecture/RagAgent-Architecture-final.md) | Graph topology and state, node contracts, execution authority, retrieval, release gates |
+
+**Engineering and governance:**
+
+| Source | Authoritative on |
+|---|---|
+| [`.claude/rules/`](./.claude/rules/) | The engineering baseline and the four change gates — .NET, Python, frontend, testing, security, database, LangGraph, ADR |
+| [`CLAUDE.md`](./CLAUDE.md) | The map of the above: which authority answers which question |
+| [`.claude/skills/`](./.claude/skills/) | The procedures that apply a gate — `db-change`, `langgraph-change`, `adr-author`, `functional-update`. A procedure, never authority |
+
+**Functional knowledge and history:**
+
+| Source | Records |
+|---|---|
+| [`docs/functional/implemented.md`](./docs/functional/implemented.md) | What this repository demonstrably does today. It records; it authorizes nothing |
+| [`docs/adr/`](./docs/adr/) | Recorded architectural decisions, MADR, sequentially numbered |
 
 Where architecture and engineering governance genuinely conflict, **implementation stops** and the
 conflict is resolved as an ADR — never settled by whichever document was read first.
+
+> **Not authority.** `Synthia-Platform-Specification.md`, `.specify/**` (including the retired Spec
+> Kit constitution) and `specs/**` are **history**, retained pending a later retirement phase. They
+> are not architecture authority, not the engineering baseline, and not evidence of implemented
+> behaviour — see [`.claude/rules/00-authority.md`](./.claude/rules/00-authority.md) §00.4. The
+> frontend engineering rules the constitution once held alone were migrated in Phase 12 under
+> [`docs/adr/0010-frontend-engineering-baseline.md`](./docs/adr/0010-frontend-engineering-baseline.md).
 
 ## Three deployables, and the rule between them
 
@@ -69,7 +91,8 @@ ragcore/          Orchestration, reasoning, governance, all writes, all migratio
 integrations/     Every external connector, credential and egress path
 build/            Dockerfiles, AI Gateway policy, boundary and gate scripts
 docs/adr/         Architecture decision records (MADR)
-specs/            Specification, plan, tasks, contracts, checklists
+specs/            Retired Spec Kit feature tree — history, not current governance
+.claude/          Engineering baseline, change gates, procedures and hooks
 ```
 
 ## Getting started
@@ -143,7 +166,7 @@ unreachable, liveness does not. **The workers are not runnable yet** — all sev
 raise by design until their container definitions land (tasks.md T324).
 
 Every application route requires the gateway-derived identity contract, because no deployable parses
-a token (constitution Principle I). APIM sets it in a deployment; locally you supply it yourself:
+a token (A1 — the identity plane). APIM sets it in a deployment; locally you supply it yourself:
 
 ```bash
 curl -s localhost:8000/api/customer/v1/sessions -X POST \
@@ -221,7 +244,7 @@ project with its own lockfile.
 | Container images | `./build/scripts/dev.sh images` | root |
 
 **No gate is a performance figure.** No release is gated on responsiveness and no merge is blocked by
-one (constitution §Non-functional commitments).
+one.
 
 ## What this scaffold deliberately does not do
 
@@ -232,5 +255,6 @@ one (constitution §Non-functional commitments).
   credential does.
 
 If you are looking for where a behaviour lives and cannot find it, check
-[`specs/001-platform-scaffold/tasks.md`](./specs/001-platform-scaffold/tasks.md) §Deferred before
-assuming it was missed — the omissions are recorded on purpose.
+[`docs/functional/implemented.md`](./docs/functional/implemented.md) before assuming it was missed
+— it classifies behaviour as implemented, wired but inert, test-only or not implemented, and the
+omissions are recorded on purpose.

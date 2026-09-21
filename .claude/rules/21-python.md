@@ -1,3 +1,8 @@
+---
+paths:
+  - "ragcore/**"
+  - "integrations/**"
+---
 # 21 — Python engineering rules
 
 ## Scope
@@ -7,7 +12,7 @@
 | Governs | Does not govern |
 |---|---|
 | `ragcore/**` — `src/`, `workers/`, `tests/`, `migrations/` | `dotnet/**` (`.claude/rules/20-dotnet.md`) |
-| `integrations/**` — `src/`, `workers/`, `tests/` | `apps/web/**`, `apps/desktop/**` (`.claude/rules/22-web-typescript.md`) |
+| `integrations/**` — `src/`, `workers/`, `tests/` | `apps/web/**`, `apps/desktop/**` (`.claude/rules/22-web-typescript.md`, `.claude/rules/23-angular.md`, `.claude/rules/24-electron.md`) |
 | `ragcore/pyproject.toml`, `integrations/pyproject.toml` and their lockfiles | `build/docker/**`, `.github/workflows/**` (`.claude/rules/80-security-ops.md`) |
 
 Source scoping is the packs' own: `python.yaml` and `python_lang.yaml` both declare

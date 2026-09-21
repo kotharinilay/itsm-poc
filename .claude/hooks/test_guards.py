@@ -838,9 +838,77 @@ check(
     not EXTERNAL_WT.exists() and not NESTED_WT.exists(),
 )
 
-# --- Spec Kit machinery is intact -------------------------------------------------------------
-speckit = sorted((ROOT / ".claude/skills").glob("speckit-*/SKILL.md"))
-check("Spec Kit skills still present", len(speckit) == 10)
+# --- Spec Kit is retired from the live Claude surface ------------------------------------------
+# GOVERNED INVERSION, Phase 12. Until Phase 11 this block asserted the ten speckit-* skills were
+# still PRESENT, so they could not be removed by accident mid-migration. Phase 12 retires them
+# (docs/adr/0010-frontend-engineering-baseline.md, docs/migration/phase-12-spec-kit-decoupling.md),
+# so the invariant is now the opposite one:
+#
+#     No live Claude Code skill, rule, hook or setting may depend on Spec Kit.
+#
+# The subject of the old assertion is what the phase deliberately retires. That makes this an
+# inversion, not a weakened test (.claude/rules/40-testing.md 40.1): nothing is deleted, skipped
+# or loosened, and the replacement is strictly harder to satisfy than silence.
+speckit_skills = sorted((ROOT / ".claude/skills").glob("speckit-*"))
+check("no speckit-* skill remains: " + (", ".join(p.name for p in speckit_skills) or "none"),
+      not speckit_skills)
+
+SKILL_DIRS = sorted(p for p in (ROOT / ".claude/skills").iterdir() if p.is_dir())
+check("exactly the four Claude governance skills remain: "
+      + ", ".join(p.name for p in SKILL_DIRS),
+      [p.name for p in SKILL_DIRS]
+      == ["adr-author", "db-change", "functional-update", "langgraph-change"])
+for _skill in SKILL_DIRS:
+    check(f"{_skill.name} is a skill (carries SKILL.md)", (_skill / "SKILL.md").is_file())
+
+# The live Claude surface: every tracked-in-spirit file under .claude/, excluding build residue
+# and scratch worktrees. test_guards.py excludes itself because it necessarily contains the
+# patterns it searches for; it is asserted separately below.
+LIVE_CLAUDE = sorted(
+    p for p in (ROOT / ".claude").rglob("*")
+    if p.is_file()
+    and "__pycache__" not in p.parts
+    and "worktrees" not in p.parts
+    and p.name != "settings.local.json"
+    and p.name != "test_guards.py"
+)
+CLAUDE_MD_PATH = ROOT / "CLAUDE.md"
+LIVE_SURFACE = LIVE_CLAUDE + [CLAUDE_MD_PATH]
+
+# (1) nothing executes or loads the Spec Kit mechanism
+MECHANISM = re.compile(r"\.specify/(scripts|templates|extensions)|speckit-\w+/|/speckit", re.I)
+_exec_refs = [str(p.relative_to(ROOT)).replace("\\", "/") for p in LIVE_SURFACE
+              if MECHANISM.search(p.read_text(encoding="utf-8", errors="replace"))]
+check("no live Claude file loads or runs the Spec Kit mechanism: "
+      + (", ".join(_exec_refs[:5]) or "clean"), not _exec_refs)
+
+# (2) the committed hook configuration invokes nothing from Spec Kit
+_settings_raw = (ROOT / ".claude/settings.json").read_text(encoding="utf-8")
+check("settings.json invokes no Spec Kit command",
+      not re.search(r"speckit|\.specify", _settings_raw, re.I))
+
+# (3) the guard suite itself runs nothing from Spec Kit. It cannot usefully search itself for
+# the presence of its own search patterns, so the positive invariant -- that it now asserts the
+# ABSENCE of the skills -- is check (1) above rather than a self-referential string match.
+_self = Path(__file__).read_text(encoding="utf-8")
+check("the guard suite runs no Spec Kit script",
+      not re.search(r"\.specify/(scripts|templates)", _self))
+
+# (4) wherever the live surface still NAMES Spec Kit, it does so to DENY authority.
+# 00-authority.md 00.4 requires that statement while the trees remain, so the mention is the
+# point. What is forbidden is a live file presenting Spec Kit as a current source.
+DENIALS = ("not authoritative", "not authority", "never authority", "no authority",
+           "carries no authority", "never evidence", "not sources", "migration input",
+           "are history", "non-authoritative")
+_undenied = []
+for _p in LIVE_SURFACE:
+    _t = _p.read_text(encoding="utf-8", errors="replace")
+    if not re.search(r"\.specify|spec kit|speckit", _t, re.I):
+        continue
+    if not any(_d in _t.lower() for _d in DENIALS):
+        _undenied.append(str(_p.relative_to(ROOT)).replace("\\", "/"))
+check("every live Spec Kit mention denies it authority: "
+      + (", ".join(_undenied[:5]) or "all denied"), not _undenied)
 
 # --- the committed hook configuration is valid and wires both guards --------------------------
 settings_path = ROOT / ".claude/settings.json"
@@ -876,6 +944,8 @@ BASELINE_RULES = [
     ROOT / ".claude/rules/20-dotnet.md",
     ROOT / ".claude/rules/21-python.md",
     ROOT / ".claude/rules/22-web-typescript.md",
+    ROOT / ".claude/rules/23-angular.md",
+    ROOT / ".claude/rules/24-electron.md",
     ROOT / ".claude/rules/40-testing.md",
     ROOT / ".claude/rules/60-architecture-gates.md",
     ROOT / ".claude/rules/80-security-ops.md",
@@ -1061,14 +1131,105 @@ check("DN21 states the suppression requirement itself",
 check("DN21 is not represented only as an ADR trigger",
       "#pragma warning restore" in RULE_TEXT["20-dotnet.md"])
 
-# --- no TypeScript baseline was invented -------------------------------------------------------
-check("the TS/Angular/Electron gap is recorded verbatim",
-      "TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED"
+# --- the TS/Angular/Electron baseline is migrated, and did not restore the constitution --------
+# GOVERNED INVERSION, Phase 12. Until Phase 11 three checks here asserted that NO TypeScript
+# baseline had been invented and that the decision was still open. That is exactly what
+# docs/adr/0010-frontend-engineering-baseline.md decides, on an explicit human decision, so the
+# assertions are inverted rather than deleted (.claude/rules/40-testing.md 40.1). The replacement
+# is stricter than what it replaces: the baseline must exist, be identified, be traced, and keep
+# the constitution non-authoritative.
+FRONTEND_RULES = ("22-web-typescript.md", "23-angular.md", "24-electron.md")
+for _name in FRONTEND_RULES:
+    check("the frontend baseline file exists: " + _name, _name in RULE_TEXT)
+
+check("the frontend baseline declares itself authoritative",
+      "MIGRATED AND AUTHORITATIVE" in RULE_TEXT["22-web-typescript.md"])
+check("the superseded 'no baseline defined' statement is gone from the rules",
+      "TYPESCRIPT/ANGULAR/ELECTRON-SPECIFIC BASELINE NOT DEFINED" not in ALL_RULES)
+check("the TS human decision is no longer advertised as open",
+      "HUMAN DECISION REQUIRED" not in RULE_TEXT["22-web-typescript.md"])
+check("every frontend rule file names the ADR that authorized it",
+      all("0010-frontend-engineering-baseline.md" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+check("the constitution is stated as migration input and denied authority",
+      "IS MIGRATION INPUT. IT IS NOT AUTHORITY." in RULE_TEXT["22-web-typescript.md"])
+check("committed frontend tooling is still not promoted to baseline authority",
+      "evidence of what is, not authority for what should be"
       in RULE_TEXT["22-web-typescript.md"])
-check("existing TS tooling is not promoted to baseline authority",
-      "NOT BASELINE AUTHORITY" in RULE_TEXT["22-web-typescript.md"])
-check("the TS decision is named as a human decision",
-      "HUMAN DECISION REQUIRED" in RULE_TEXT["22-web-typescript.md"])
+
+# every migrated frontend requirement is identified, defined exactly once, and traced
+PHASE12 = ROOT / "docs/migration/phase-12-spec-kit-decoupling.md"
+check("exists: phase-12-spec-kit-decoupling.md", PHASE12.is_file())
+
+# The ADR that authorized the frontend baseline must actually be on disk. Phase 12 could not
+# create it from this session: H5 blocks a shell write to a new record (it can validate content
+# only from a whole-file Write), and the Write tool was unavailable under the session's isolation
+# setting. The content was staged and validated against h5.validate() instead. Until the record
+# lands this check FAILS, on purpose -- the rules cite an ADR, so the ADR has to exist.
+ADR_0010 = ROOT / "docs/adr/0010-frontend-engineering-baseline.md"
+check("exists: docs/adr/0010-frontend-engineering-baseline.md "
+      "(the frontend baseline's authorizing record)", ADR_0010.is_file())
+if ADR_0010.is_file():
+    _adr = ADR_0010.read_text(encoding="utf-8")
+    check("ADR-0010 is structurally valid",
+          not h5.validate("docs/adr/0010-frontend-engineering-baseline.md", _adr, is_new=False))
+    check("ADR-0010 names the authority it affects",
+          "00-authority.md" in _adr and "22-web-typescript.md" in _adr)
+    check("ADR-0010 keeps the constitution as migration input only",
+          "migration input" in _adr.lower())
+check("ADR-0010 is indexed", "0010-frontend-engineering-baseline.md"
+      in (ROOT / "docs/adr/README.md").read_text(encoding="utf-8"))
+
+phase12_text = PHASE12.read_text(encoding="utf-8") if PHASE12.is_file() else ""
+_fe_text = "\n".join(RULE_TEXT[_n] for _n in FRONTEND_RULES)
+FE_IDS = sorted(set(re.findall(r"\bFE-(?:SH|TS|NG|EL)-\d+\b", _fe_text)))
+check(f"the frontend baseline carries requirement ids ({len(FE_IDS)} found)", len(FE_IDS) >= 20)
+for _fid in FE_IDS:
+    check("frontend requirement is defined under exactly one heading: " + _fid,
+          len(re.findall(r"^### " + _fid + r" ", _fe_text, re.M)) == 1)
+    check("frontend requirement is traced in the Phase 12 record: " + _fid,
+          _fid in phase12_text)
+check("every frontend rule file states Source lines",
+      all("*Source:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+check("every frontend rule file states enforcement honestly",
+      all("Enforcement:" in RULE_TEXT[_n] for _n in FRONTEND_RULES))
+
+# --- path-scoped rules parse, and their globs name real, tracked directories ------------------
+SCOPED: dict[str, list[str]] = {}
+for _p in sorted((ROOT / ".claude/rules").glob("*.md")):
+    _t = _p.read_text(encoding="utf-8")
+    if not _t.startswith("---\n"):
+        continue
+    _end = _t.find("\n---\n", 3)
+    check(_p.name + " frontmatter is terminated", _end != -1)
+    if _end == -1:
+        continue
+    _fm = _t[4:_end]
+    _globs = re.findall(r'^\s*-\s*"([^"]+)"\s*$', _fm, re.M)
+    check(_p.name + " frontmatter declares a paths list",
+          _fm.lstrip().startswith("paths:") and bool(_globs))
+    check(_p.name + " has exactly one H1 after its frontmatter",
+          _t[_end + 5:].lstrip().startswith("# "))
+    SCOPED[_p.name] = _globs
+
+check("exactly the five language/stack rules are path-scoped: " + ", ".join(sorted(SCOPED)),
+      sorted(SCOPED) == ["20-dotnet.md", "21-python.md", "22-web-typescript.md",
+                         "23-angular.md", "24-electron.md"])
+
+_tracked = git("ls-files").stdout.splitlines()
+for _name, _globs in sorted(SCOPED.items()):
+    for _g in _globs:
+        _prefix = _g.split("*")[0].rstrip("/")
+        check(f"{_name} scope '{_g}' names a real directory",
+              bool(_prefix) and (ROOT / _prefix).is_dir())
+        check(f"{_name} scope '{_g}' matches tracked files",
+              any(f.startswith(_prefix + "/") for f in _tracked))
+
+# a governance/gate rule stays unscoped: a gate is detected BEFORE a file is opened, so scoping
+# one to the paths it governs would load it only after the moment it exists to catch.
+for _global in ("00-authority.md", "10-principles.md", "30-langgraph.md", "40-testing.md",
+                "50-database.md", "60-architecture-gates.md", "70-adr.md",
+                "80-security-ops.md", "90-functional-knowledge.md"):
+    check("governance rule stays repository-wide: " + _global, _global not in SCOPED)
 
 # --- enforcement claims are stated with the honest vocabulary ---------------------------------
 for _needle in ("mechanical", "partial", "procedural", "currently-unenforced"):

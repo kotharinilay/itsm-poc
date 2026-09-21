@@ -79,8 +79,14 @@ a requirement.
 - **Generated or untracked residue is not evidence of anything.** Establish repository content with
   `git ls-files`, not by walking the working tree: `bin/`, `obj/`, `.venv/`, `__pycache__/`,
   `node_modules/` and packaging output are excluded.
-- **The retired Spec Kit artifacts are not authoritative.** `.specify/**`, `specs/**` and the
-  `speckit-*` skills remain in the tree pending a later retirement phase. They are history.
+- **The retired Spec Kit artifacts are not authoritative.** `.specify/**` and `specs/**` remain in
+  the tree pending a later retirement phase. They are history. The ten `speckit-*` skills that
+  installed the Spec Kit mechanism inside the Claude surface were **removed in Phase 12**
+  (`docs/migration/phase-12-spec-kit-decoupling.md`), and no live Claude rule, skill, hook or
+  setting depends on Spec Kit. The frontend requirement text that `.specify/memory/constitution.md`
+  once held alone was migrated in the same phase under
+  `docs/adr/0010-frontend-engineering-baseline.md`; **migration input is not authority**, and the
+  constitution's non-authoritative status above is unchanged by it.
 
 ## 00.5 Precedence
 

@@ -1,4 +1,6 @@
-# Clients (`apps/web`, `apps/desktop`) — never security boundaries (constitution VII)
+# Clients (`apps/web`, `apps/desktop`) — never security boundaries
+
+Governing rules: `.claude/rules/22-web-typescript.md` (shared + TypeScript), `.claude/rules/23-angular.md`, `.claude/rules/24-electron.md`.
 
 ## Angular workspace `apps/web/projects/`
 - Apps: `customer-portal`, `staff-portal`, `desktop-renderer` (loaded by Electron).

@@ -1,3 +1,7 @@
+---
+paths:
+  - "dotnet/**"
+---
 # 20 — .NET / C# engineering rules
 
 ## Scope
@@ -7,7 +11,7 @@
 | Governs | Does not govern |
 |---|---|
 | `dotnet/**` — every project in `Synthia.sln`, including `dotnet/tests/**` | `ragcore/**`, `integrations/**` (Python — `.claude/rules/21-python.md`) |
-| Any future `.csproj`/`.fsproj`/`.vbproj` in this repository | `apps/web/**`, `apps/desktop/**` (TypeScript/Angular/Electron — `.claude/rules/22-web-typescript.md`) |
+| Any future `.csproj`/`.fsproj`/`.vbproj` in this repository | `apps/web/**`, `apps/desktop/**` (TypeScript/Angular/Electron — `.claude/rules/22-web-typescript.md`, `.claude/rules/23-angular.md`, `.claude/rules/24-electron.md`) |
 | `dotnet/Directory.Build.props`, `dotnet/Directory.Packages.props`, `dotnet/.editorconfig` | `build/docker/**` and `.github/workflows/**` (`.claude/rules/80-security-ops.md`) |
 
 Source scoping is the packs' own: `dotnet.yaml` and `dotnet_lang.yaml` both declare

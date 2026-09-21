@@ -21,6 +21,12 @@ sit in that directory and carry **no** authority.
 explicit baseline block in `docs/migration/phase-9-baseline-input.md`. Migrated into
 `.claude/rules/` in Phase 9; the mapping is `docs/migration/phase-9-baseline-coverage.md`.
 
+The **frontend baseline** (TypeScript, Angular, Electron) was migrated separately in Phase 12 from
+the frontend blocks of the retired Spec Kit constitution, under
+`docs/adr/0010-frontend-engineering-baseline.md`; the mapping is
+`docs/migration/phase-12-spec-kit-decoupling.md`. **Migration input is not authority** — the
+constitution remains non-authoritative (`00-authority.md` §00.4).
+
 ## 3. Authority hierarchy
 
 ```text
@@ -41,7 +47,9 @@ authorities: **stop, record both sides, do not pick a winner** (`00-authority.md
 | `10-principles.md` | repository-wide — P1–P32, plus Conventional Commits, SemVer, Diátaxis, C4 |
 | `20-dotnet.md` | **.NET / C# only** — `dotnet/**` |
 | `21-python.md` | **Python only** — `ragcore/**`, `integrations/**` |
-| `22-web-typescript.md` | **TypeScript / Angular / Electron** — `apps/web/**`, `apps/desktop/**` |
+| `22-web-typescript.md` | **frontend, both clients** — `apps/**`: shared client rules + TypeScript |
+| `23-angular.md` | **Angular only** — `apps/web/**` |
+| `24-electron.md` | **Electron only** — `apps/desktop/**` |
 | `30-langgraph.md` | LangGraph workflow change control |
 | `40-testing.md` | repository-wide testing policy |
 | `50-database.md` | database engineering and change control |
@@ -50,8 +58,15 @@ authorities: **stop, record both sides, do not pick a winner** (`00-authority.md
 | `80-security-ops.md` | repository-wide security and operational policy |
 | `90-functional-knowledge.md` | the implemented-truth record |
 
-Each language file states the paths it governs. **A rule is never carried to another stack by
-analogy.**
+Each language file states the paths it governs, and carries a `paths:` frontmatter block so it
+**loads only when Claude touches those files**. The nine repository-wide rules above carry no
+`paths:` and load every session. Five of them (`00`, `10`, `40`, `60`, `80`) state policy that
+applies to any change; the four gate rules (`30`, `50`, `70`, `90`) are detected *before* a file is
+opened, so scoping one to the paths it governs would load it only after the moment it exists to
+catch.
+
+**A rule is never carried to another stack by analogy.** A rule you cannot see does not cease to
+apply — open the file for the stack you are working in.
 
 ## 5. `.claude/skills/` — procedural workflows
 
@@ -105,9 +120,14 @@ updating it never substitutes for a gate.
 
 ## 10. Retired Spec Kit artifacts are not authoritative
 
-`.specify/**`, `specs/**`, the `speckit-*` skills and the retired Spec Kit constitution remain in the
-tree pending a later retirement phase. They are history — not architecture authority, not
-engineering baseline, not evidence of implemented behavior.
+`.specify/**` and `specs/**` remain in the tree pending a later retirement phase. They are history —
+not architecture authority, not engineering baseline, not evidence of implemented behavior.
+
+The ten `speckit-*` skills were removed in Phase 12, and **no live Claude rule, skill, hook or
+setting depends on Spec Kit** (`docs/migration/phase-12-spec-kit-decoupling.md`). Source comments
+and lint messages under `apps/**` and `.github/workflows/**` still cite `constitution Principle
+VII`; those are stale pointers to rules that now live in `22-web-typescript.md`, `23-angular.md`
+and `24-electron.md`. Cite the rule files, never the constitution.
 
 ## Non-negotiables
 

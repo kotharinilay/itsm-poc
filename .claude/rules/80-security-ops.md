@@ -41,7 +41,7 @@ P-17 governs, at minimum:
 | Service Bus | send/listen rights scoped per queue or topic, never namespace-wide | procedural |
 | Container runtime | non-root, no added capabilities, read-only root filesystem where feasible | partial (§80.5) |
 | CI tokens | least-scoped `GITHUB_TOKEN` permissions per workflow | procedural |
-| Browser / renderer (`apps/web`, `apps/desktop`) | context isolation, minimal preload surface, minimal token scope | partial (the Electron security suite; `.claude/rules/22-web-typescript.md` §22.3) |
+| Browser / renderer (`apps/web`, `apps/desktop`) | context isolation, minimal preload surface, minimal token scope | partial (the Electron security suite; `.claude/rules/24-electron.md` §24.2, §24.3) |
 
 **Never grant broad or wildcard rights for convenience** — that is the rule, and it is the same rule
 in every row.

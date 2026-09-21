@@ -1290,6 +1290,217 @@ for _name, _needle in (("30-langgraph.md", "execution_treatment"),
                        ("90-functional-knowledge.md", "implemented.md")):
     check("pre-existing governance intact: " + _name, _needle in RULE_TEXT[_name])
 
+# --- Phase 14: the testing baseline the constitution alone held is migrated and traceable ------
+# docs/adr/0011-required-test-categories-baseline.md (Accepted) authorizes moving the retired Spec
+# Kit constitution's three testing blocks into .claude/rules/40-testing.md. These checks prove the
+# requirement SURVIVED -- by meaning, not by count. A count check would pass against fifteen empty
+# rows, so every category is matched on its id, its name AND the thing it proves.
+TESTING = RULE_TEXT["40-testing.md"]
+
+check("40-testing.md names the ADR that authorized the migration",
+      "0011-required-test-categories-baseline.md" in TESTING)
+check("40-testing.md keeps the constitution as migration input, denied authority",
+      "IS MIGRATION INPUT. IT IS NOT AUTHORITY." in TESTING.upper())
+check("40-testing.md is still the single testing-baseline authority",
+      "testing-baseline authority" in TESTING)
+
+# (1) all fifteen required categories: id, name and the proof each one carries
+REQUIRED_CATEGORIES = {
+    "TC-01": ("Unit", "Component behaviour in isolation"),
+    "TC-02": ("Integration", "Real collaborators, real database, real messaging"),
+    "TC-03": ("Contract", "Published API and message shapes, including between deployables"),
+    "TC-04": ("Authorization",
+              "Every operation against every role set, including the empty intersection"),
+    "TC-05": ("Tenant isolation", "No path returns another organisation's data"),
+    "TC-06": ("Retrieval isolation",
+              "The tenant filter cannot be evaded, including by crafted input"),
+    "TC-07": ("Governance", "Treatment comes from the catalogue and never from model output"),
+    "TC-08": ("Approval",
+              "Binding, expiry, first-valid-verdict-wins, no synthesized verdict"),
+    "TC-09": ("Idempotency", "At-least-once delivery produces exactly one effect"),
+    "TC-10": ("Concurrency", "Concurrent claims and decisions resolve to one outcome"),
+    "TC-11": ("Adapter", "Provider behaviour stays behind its boundary"),
+    "TC-12": ("Architecture dependency",
+              "Module boundaries, banned APIs, the no-cross-deployable-dependency rule"),
+    "TC-13": ("Configuration validation", "Options bind, validate and fail fast at start"),
+    "TC-14": ("Security", "are actually unreachable"),
+    "TC-15": ("End-to-end golden path",
+              "A representative journey completes through every layer"),
+}
+check("the migrated baseline carries exactly fifteen categories, not sixteen",
+      len(REQUIRED_CATEGORIES) == 15)
+for _tc, (_name, _proves) in sorted(REQUIRED_CATEGORIES.items()):
+    _row = [ln for ln in TESTING.splitlines()
+            if ln.lstrip().startswith("| **" + _tc + "**")]
+    check("required test category is defined exactly once: " + _tc + " " + _name, len(_row) == 1)
+    if len(_row) == 1:
+        check(_tc + " carries its category name: " + _name, _name in _row[0])
+        check(_tc + " carries what it proves: " + _proves[:48], _proves in _row[0])
+check("no sixteenth category was invented", "TC-16" not in TESTING)
+check("the categories are stated as required and non-substitutable",
+      "All fifteen are required; none substitutes for another" in TESTING)
+
+# (2) the failing-then-passing obligation for a security or isolation fix
+check("a security or isolation fix owes a failing-then-passing test",
+      "A security or isolation fix without a failing-then-passing test is incomplete" in TESTING)
+check("the failing-then-passing order is stated, not merely named",
+      "fails against the unfixed code and passes against the fixed code" in TESTING)
+
+# (3) all twelve change-matrix rows, matched on the change they describe and what it owes
+CHANGE_MATRIX = {
+    "CM-01": ("Adds or alters an API endpoint or message shape", ("TC-03", "TC-04")),
+    "CM-02": ("Adds or alters an authorization rule, role set or accepted-role declaration",
+              ("TC-04", "TC-14")),
+    "CM-03": ("Touches a query, repository, view or retrieval path", ("TC-05", "TC-06")),
+    "CM-04": ("Adds or alters a catalogue entry, treatment policy or gate condition",
+              ("TC-07", "TC-04")),
+    "CM-05": ("Touches approval, consent, verdict or the resume path",
+              ("TC-08", "TC-10", "TC-09")),
+    "CM-06": ("Adds or alters an external side effect", ("TC-09", "TC-11")),
+    "CM-07": ("Adds or alters a migration, table or published view",
+              ("TC-02", "TC-05", "TC-12")),
+    "CM-08": ("Adds or alters a module boundary, project reference or import", ("TC-12",)),
+    "CM-09": ("Adds or alters a configuration option or secret reference", ("TC-13",)),
+    "CM-10": ("Touches an outbox, trigger, claim or worker", ("TC-09", "TC-10")),
+    "CM-11": ("Touches a client surface's primary journey", ("TC-15",)),
+    "CM-12": ("Fixes a security or isolation defect", ()),
+}
+check("the change matrix carries exactly twelve rows", len(CHANGE_MATRIX) == 12)
+for _cm, (_desc, _owed) in sorted(CHANGE_MATRIX.items()):
+    _row = [ln for ln in TESTING.splitlines()
+            if ln.lstrip().startswith("| **" + _cm + "**")]
+    check("change-matrix row is defined exactly once: " + _cm, len(_row) == 1)
+    if len(_row) == 1:
+        check(_cm + " states the change it matches: " + _desc[:44], _desc in _row[0])
+        for _t in _owed:
+            check(_cm + " still owes " + _t, _t in _row[0])
+check("no thirteenth matrix row was invented", "CM-13" not in TESTING)
+
+# (4) unit tests are owed by EVERY change -- the reason CM-01..CM-12 do not repeat TC-01
+check("TC-01 Unit is explicitly owed by every change",
+      "Unit is owed by every change" in TESTING)
+check("the every-change rule explains why unit is absent from the rows",
+      "not repeated below" in TESTING)
+check("a change matching several rows owes all of their categories",
+      "matching several rows owes all of their categories" in TESTING)
+check("CM-12 carries the failing-first ordering",
+      any("**CM-12**" in ln and "failing first, then passing" in ln
+          for ln in TESTING.splitlines()))
+
+# (5) the frontend row POINTS at the frontend rule; it does not restate it
+_cm11 = next((ln for ln in TESTING.splitlines() if ln.lstrip().startswith("| **CM-11**")), "")
+check("CM-11 points at the Angular rule for the frontend requirement",
+      "23-angular.md" in _cm11 and "FE-NG-5" in _cm11 and "FE-NG-6" in _cm11)
+check("CM-11 still owes the end-to-end golden path itself", "TC-15" in _cm11)
+for _fe_body in ("WCAG 2.2 Level AA, on every surface", "The project-supported test runner"):
+    check("the frontend requirement text is NOT duplicated into 40-testing.md: " + _fe_body,
+          _fe_body not in TESTING)
+check("FE-NG-5 and FE-NG-6 are still defined in 23-angular.md, once each",
+      RULE_TEXT["23-angular.md"].count("### FE-NG-5 ") == 1
+      and RULE_TEXT["23-angular.md"].count("### FE-NG-6 ") == 1)
+
+# (6) the coverage prohibition, all three of its parts
+check("no coverage threshold is set and none gates a merge",
+      "No line- or branch-coverage threshold is set, and none gates a merge" in TESTING)
+check("the absence of a threshold is stated as deliberate, not an omission",
+      "This is deliberate, not" in TESTING and "omission" in TESTING)
+check("coverage may be measured and reported as information",
+      "may** be measured and reported as information" in TESTING)
+check("coverage cannot become a merge gate without an accepted ADR",
+      "must not** become a merge gate" in TESTING and "accepted ADR" in TESTING)
+check("the coverage amendment path names the ADR trigger",
+      "70-adr.md` §70.2 B(6)" in TESTING)
+check("no coverage percentage threshold was introduced",
+      not re.search(r"\d{1,3}\s*%\s*(?:line|branch|statement|coverage)", TESTING, re.I))
+
+# (7) the two recorded hard-failure exceptions remain recorded, as a gap not a carve-out
+check("the recorded exception is labelled a gap, not a carve-out",
+      "a gap, not a carve-out" in TESTING)
+for _hf in ("tenant context derived from an untrusted client field", "authorization bypass"):
+    check("the recorded hard-failure exception survives: " + _hf, _hf in TESTING)
+check("the exception states the obligation is unchanged and simply NOT MET",
+      "The obligation in §40.8 is unchanged" in TESTING and "NOT MET" in TESTING)
+check("no weaker substitute test may be written to appear to meet it",
+      "appears to meet it by asserting something weaker" in TESTING)
+check("the exception points at the deferral it came from, without reopening it",
+      "0008-defer-certificate-based-gateway-to-backend-provenance" in TESTING
+      and "D-01" in TESTING)
+
+# (8) enforcement is claimed honestly, and EG-10 is recorded rather than closed
+check("the migrated categories are recorded as procedural, not claimed mechanical",
+      "**procedural**" in TESTING)
+check("EG-10 is recorded in the rule", "EG-10" in TESTING)
+check("EG-10 states that no mechanism maps a diff to its owed categories",
+      "maps a changed file or a\n> diff to the test categories" in TESTING)
+check("EG-10 is recorded, not closed -- no mechanism was built in this phase",
+      "building one\n> is a separate, human-directed decision" in TESTING)
+
+# (9) the two axes are distinguished, not merged
+check("40-testing.md distinguishes what a principle owes from what a change owes",
+      "what does this *principle* owe?" in TESTING
+      and "what does this *change* owe?" in TESTING)
+check("§40.5 is still the principle axis and was not absorbed",
+      "## 40.5 Test kinds the baseline requires by name" in TESTING)
+check("the gate-owned testing obligations are cross-referenced, not restated",
+      all(_r in TESTING for _r in ("50-database.md` §50.8", "30-langgraph.md` §30.9",
+                                   "70-adr.md` §70.8",
+                                   "90-functional-knowledge.md` §90.10")))
+check("the non-negotiable is untouched by the migration",
+      "Never weaken a test to make a change pass" in TESTING)
+
+# (10) the authorizing record: accepted, structurally valid, and naming what it changes
+ADR_0011 = ROOT / "docs/adr/0011-required-test-categories-baseline.md"
+check("exists: docs/adr/0011-required-test-categories-baseline.md", ADR_0011.is_file())
+if ADR_0011.is_file():
+    _a11 = ADR_0011.read_text(encoding="utf-8")
+    check("ADR-0011 is structurally valid",
+          not h5.validate("docs/adr/0011-required-test-categories-baseline.md",
+                          _a11, is_new=False))
+    check("ADR-0011 is Accepted",
+          re.search(r"^- \*\*Status:\*\* Accepted\s*$", _a11, re.M) is not None)
+    check("ADR-0011 identifies the testing baseline authority it amends",
+          "40-testing.md" in _a11)
+    check("ADR-0011 states fifteen categories, not sixteen",
+          "fifteen" in _a11 and "sixteen" not in _a11.lower())
+    check("ADR-0011 keeps the constitution as migration input only",
+          "migration input" in _a11.lower())
+check("ADR-0011 is indexed",
+      "0011-required-test-categories-baseline.md"
+      in (ROOT / "docs/adr/README.md").read_text(encoding="utf-8"))
+
+# the index navigates correctly: ordered, and displaying the status each record actually carries
+_idx = (ROOT / "docs/adr/README.md").read_text(encoding="utf-8")
+_idx_rows = re.findall(r"^\| \[(\d{4})\]\((\./[^)]+)\) \|[^|]*\| \*\*([A-Za-z ]+?)\*\*",
+                       _idx, re.M)
+check("the ADR index lists eleven records in ascending order: "
+      + ", ".join(n for n, _, _ in _idx_rows),
+      len(_idx_rows) == 11
+      and [n for n, _, _ in _idx_rows] == sorted(n for n, _, _ in _idx_rows))
+for _num, _rel, _shown in _idx_rows:
+    _rec = ROOT / "docs/adr" / _rel[2:]
+    if not _rec.is_file():
+        check("indexed ADR exists on disk: " + _rel, False)
+        continue
+    _m = re.search(r"^- \*\*Status:\*\* (\w+)", _rec.read_text(encoding="utf-8"), re.M)
+    check("index status matches the record for ADR-" + _num + ": " + _shown,
+          _m is not None and _m.group(1) == _shown)
+
+# (11) the migration record for this phase
+PHASE14 = ROOT / "docs/migration/phase-14-testing-baseline-migration.md"
+check("exists: phase-14-testing-baseline-migration.md", PHASE14.is_file())
+if PHASE14.is_file():
+    _p14 = PHASE14.read_text(encoding="utf-8")
+    check("the Phase 14 record verifies the source count as fifteen", "fifteen" in _p14)
+    for _tc in sorted(REQUIRED_CATEGORIES):
+        check("Phase 14 record traces category: " + _tc, _tc in _p14)
+    for _cm in sorted(CHANGE_MATRIX):
+        check("Phase 14 record traces matrix row: " + _cm, _cm in _p14)
+    check("the Phase 14 record carries EG-10", "EG-10" in _p14)
+    check("the Phase 14 record leaves B13-2 open rather than closing it", "B13-2" in _p14)
+    check("the Phase 14 record leaves B13-3 open rather than inventing a rule", "B13-3" in _p14)
+    check("the Phase 14 record does not invent a Principle IX requirement id",
+          "FE-IX" not in _p14 and "PR-IX" not in _p14)
+
 print(f"{CHECKS - len(FAILURES)}/{CHECKS} checks passed")
 for failure in FAILURES:
     print("FAILED: " + failure)

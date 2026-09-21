@@ -107,6 +107,10 @@ Several principles in `.claude/rules/10-principles.md` can only be discharged by
 source names which kind. These are obligations on the code that realizes the principle, not on this
 file.
 
+**This section is the *principle* axis only.** What a *change* owes is a separate obligation, stated
+in §40.8 (the required categories TC-01…TC-15) and §40.9 (the per-change matrix CM-01…CM-12). A
+change satisfies both axes; neither list is derived from, or substitutes for, the other.
+
 | Principle | Test the source requires |
 |---|---|
 | **P-3** substitutability | **One shared behavioral contract suite per abstraction, executed against every implementation.** The source is explicit that substitutability is a runtime property and that no structural proxy discharges it. |
@@ -149,3 +153,129 @@ A change runs the gates its paths touch. A change to `.claude/**` runs the gover
   human-directed decision (Phase 9 brief §24).
 - It does not make a passing suite evidence of conformance. A gate that does not fire proves nothing
   (`.claude/rules/00-authority.md` §00.4).
+
+---
+
+## 40.8 Required test categories — TC-01 … TC-15
+
+### The two testing axes
+
+§40.5 above answers **"what does this *principle* owe?"**. The three sections below answer
+**"what does this *change* owe?"**. They are different axes and neither derives from the other; a
+change satisfies both or it is incomplete. Do not merge the two lists.
+
+§40.8, §40.9 and §40.10 were **appended** rather than inserted, so that every existing section
+number in this file stays stable and no cross-reference from another rule breaks.
+
+*Authorized by `docs/adr/0011-required-test-categories-baseline.md` (Accepted). Migrated from
+`.specify/memory/constitution.md` §Required test categories, §Which change requires which category
+and §Coverage. **It is migration input. It is not authority.** Its non-authoritative
+status under `.claude/rules/00-authority.md` §00.4 is unchanged by having been read. This file is
+the testing-baseline authority; the constitution is not, and does not become so.*
+
+### The fifteen categories
+
+**All fifteen are required; none substitutes for another.**
+
+| ID | Category | Proves |
+|---|---|---|
+| **TC-01** | Unit | Component behaviour in isolation |
+| **TC-02** | Integration | Real collaborators, real database, real messaging |
+| **TC-03** | Contract | Published API and message shapes, including between deployables |
+| **TC-04** | Authorization | Every operation against every role set, including the empty intersection |
+| **TC-05** | Tenant isolation | No path returns another organisation's data |
+| **TC-06** | Retrieval isolation | The tenant filter cannot be evaded, including by crafted input |
+| **TC-07** | Governance | Treatment comes from the catalogue and never from model output |
+| **TC-08** | Approval | Binding, expiry, first-valid-verdict-wins, no synthesized verdict |
+| **TC-09** | Idempotency | At-least-once delivery produces exactly one effect |
+| **TC-10** | Concurrency | Concurrent claims and decisions resolve to one outcome |
+| **TC-11** | Adapter | Provider behaviour stays behind its boundary |
+| **TC-12** | Architecture dependency | Module boundaries, banned APIs, the no-cross-deployable-dependency rule |
+| **TC-13** | Configuration validation | Options bind, validate and fail fast at start |
+| **TC-14** | Security | The prohibitions stated by the baseline and the architecture are actually unreachable |
+| **TC-15** | End-to-end golden path | A representative journey completes through every layer |
+
+**A security or isolation fix without a failing-then-passing test is incomplete.**
+
+In that order: the test
+fails against the unfixed code and passes against the fixed code.
+Its absence is not made good by any other category.
+
+*Source: `constitution#Required test categories`, via ADR-0011 · Enforcement: **procedural** — the
+suites exist and run (`ragcore/tests/`, `dotnet/tests/`, `integrations/tests/`; §40.6), but nothing
+in this repository binds a diff to the categories it owes. Reviewed, not gated. See **EG-10** in
+§40.9.*
+
+## 40.9 Which change owes which category — CM-01 … CM-12
+
+§40.8 says what each category *proves*. This section says when it is *owed*, so the obligation is
+mechanical at review rather than a matter of judgement.
+
+**A change matching several rows owes all of their categories.**
+**TC-01 Unit is owed by every change and is therefore not repeated below.**
+
+| ID | A change that… | Owes |
+|---|---|---|
+| **CM-01** | Adds or alters an API endpoint or message shape | TC-03 Contract; TC-04 Authorization |
+| **CM-02** | Adds or alters an authorization rule, role set or accepted-role declaration | TC-04 Authorization; TC-14 Security |
+| **CM-03** | Touches a query, repository, view or retrieval path | TC-05 Tenant isolation; TC-06 Retrieval isolation where retrieval is involved |
+| **CM-04** | Adds or alters a catalogue entry, treatment policy or gate condition | TC-07 Governance; TC-04 Authorization |
+| **CM-05** | Touches approval, consent, verdict or the resume path | TC-08 Approval; TC-10 Concurrency; TC-09 Idempotency |
+| **CM-06** | Adds or alters an external side effect | TC-09 Idempotency; TC-11 Adapter |
+| **CM-07** | Adds or alters a migration, table or published view | TC-02 Integration; TC-05 Tenant isolation; TC-12 Architecture dependency |
+| **CM-08** | Adds or alters a module boundary, project reference or import | TC-12 Architecture dependency |
+| **CM-09** | Adds or alters a configuration option or secret reference | TC-13 Configuration validation |
+| **CM-10** | Touches an outbox, trigger, claim or worker | TC-09 Idempotency; TC-10 Concurrency |
+| **CM-11** | Touches a client surface's primary journey | Frontend accessibility — owned by `.claude/rules/23-angular.md` **FE-NG-5** and **FE-NG-6**, not restated here; **plus** TC-15 End-to-end golden path where the journey is one |
+| **CM-12** | Fixes a security or isolation defect | The relevant category above, **failing first, then passing** (§40.8) |
+
+**CM-11 is an obligation of this matrix; the frontend *requirement* it points at is owned by
+`.claude/rules/23-angular.md`.** The two are not duplicated
+(`.claude/rules/00-authority.md` §00.5). The same division holds for the gate-owned obligations
+listed at the head of this file — rules 30, 50, 70 and 90 own theirs, and this matrix does not
+restate them.
+
+*Source: `constitution#Which change requires which category`, via ADR-0011 · Enforcement:
+**procedural**.*
+
+> **ENFORCEMENT GAP EG-10.** No deterministic mechanism in this repository maps a changed file or a
+> diff to the test categories §40.9 says it owes. The obligation is applied by a reviewer. This is
+> recorded, **not** closed: ADR-0011 does not authorize building such a mechanism, and building one
+> is a separate, human-directed decision (Phase 9 brief §24, `.claude/rules/40-testing.md` §40.7).
+> A gap in the gate is never a reduction in the requirement.
+
+## 40.10 Coverage
+
+**No line- or branch-coverage threshold is set, and none gates a merge.** This is deliberate, not
+an omission.
+
+The gate is behavioural: each category in §40.8 is required, and every protection the baseline and
+the architecture name as a hard failure must have a test that fails when the protection is removed.
+A percentage target would be satisfiable without any of that, and would reward exercising code over
+proving a guarantee.
+
+Coverage **may** be measured and reported as information. It **must not** become a merge gate
+without an accepted ADR amending this section — that is a change to a mandatory engineering
+convention under `.claude/rules/70-adr.md` §70.2 B(6), and approval alone is not sufficient.
+
+### The recorded exception — a gap, not a carve-out
+
+Two hard failures —
+**tenant context derived from an untrusted client field**, and **authorization bypass** —
+have **no** failing-then-passing test at the backend, because the protection they tested
+was deferred and not replaced (`docs/adr/0008-defer-certificate-based-gateway-to-backend-provenance.md`,
+open item **D-01**).
+
+```text
+The obligation in §40.8 is unchanged.  It is simply NOT MET for that pair.
+```
+
+**No test may be written that appears to meet it by asserting something weaker.** This is a
+deviation recorded under `.claude/rules/00-authority.md` §00.7 — the requirement stands and the
+implementation does not currently satisfy it. Closing it is a human decision: either the tests are
+written, or the deferred protection is restored. Neither is done under this rule, and the deferred
+architecture decision is not reopened here.
+
+*Source: `constitution#Coverage`, via ADR-0011 · Enforcement: **procedural** — the prohibition is
+honoured by the absence of a coverage gate in every workflow in §40.6; nothing mechanically
+prevents one being added.*

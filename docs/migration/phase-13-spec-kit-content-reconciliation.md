@@ -71,6 +71,14 @@ taken on trust.
 - **No check was added, removed or inverted by Phase 13.** The total was 611 before this phase's
   edit to the suite and 611 after.
 
+- **The fixtures were re-anchored a second time, for the same reason.** After the repository owner
+  placed ADR-0011 (`6e43a51`), the history became **eleven** records and the same seven fixtures
+  failed again, one number up. They were re-anchored `ten → eleven` and `0011 → 0012`. The total
+  stayed **611**, because — unlike ADR-0010 — no check is conditioned on ADR-0011 being on disk.
+  The suite is **611/611**. This is the expected, intended behaviour: the suite pins the real ADR
+  history exactly, so every new record makes it fail until it is re-anchored, which is what makes
+  the assertion worth having.
+
 ### The 7 failures, and why they were failing
 
 All seven were fixtures pinned to the pre-ADR-0010 history. They are **not** violations that
@@ -442,15 +450,21 @@ change being obviously needed, or from the session running unattended
   matrix*** with status `Proposed`, classified under `70-adr.md` §70.4 as **Engineering Baseline**.
 - **Stopped.** Nothing was written into `40-testing.md`.
 
-**The draft could not be placed at `docs/adr/0011-…md` from this session.** H5
+**The draft could not be placed from this session, and was placed by the repository owner.** H5
 (`.claude/hooks/adr_structure_guard.py`) blocks every *shell* write to a new ADR path, because it can
 only validate content carried by a whole-file `Write`; and the `Write` tool required worktree
 isolation, which this phase was explicitly instructed not to use. This is the **same mechanical
 obstacle Phase 12 hit** with ADR-0010, and routing around H5 was refused for the same reason: it is
-exactly the behaviour the governance model exists to prevent. The full record text is held for the
-repository owner to place. See §12.
+exactly the behaviour the governance model exists to prevent.
 
-**D-11-2 remains OPEN**, with an explicit documented reason and a drafted decision awaiting a human.
+The repository owner then placed the record themselves, in commit `6e43a51` *"added during phase 13
+adr"*, at `docs/adr/0011-required-test-categories-baseline.md`, **with status `Proposed`**. Phase 13
+then added its row to `docs/adr/README.md` (`.claude/rules/70-adr.md` §70.6 — the index is not a
+record, and H5 exits 0 on it). Indexing a `Proposed` record asserts nothing about acceptance.
+
+**D-11-2 remains OPEN.** The record exists and is indexed; it has **not** been accepted, and nothing
+has been written into `.claude/rules/40-testing.md`. Acceptance is a human act and is never inferred
+(`.claude/rules/00-authority.md` §00.10).
 
 ---
 
@@ -607,7 +621,8 @@ modified to create a mutation case:
 | # | Blocker | Why it blocks deletion | What closes it |
 |---|---|---|---|
 | **BL-13-1** | **D-11-2 is open.** The constitution's §Required test categories (16), §Which change requires which category (12 rows) and §Coverage policy exist in **no** current authority | `.specify/memory/constitution.md` is inside the Phase 14 deletion set. Deleting it destroys a binding engineering requirement that nothing else states | A human **accepts ADR-0011**, then the three blocks are migrated into `.claude/rules/40-testing.md` and the suite re-run |
-| **BL-13-2** | **ADR-0011 is not on disk.** H5 blocks shell writes to a new ADR path; the `Write` tool needs worktree isolation, which this phase was instructed not to use | An ADR that does not exist cannot be accepted | The repository owner places the drafted record at `docs/adr/0011-required-test-categories-baseline.md` and updates `docs/adr/README.md` in the same change (`70-adr.md` §70.6) |
+| ~~**BL-13-2**~~ | ~~ADR-0011 is not on disk~~ | — | **CLOSED.** The repository owner placed the record in `6e43a51` with status `Proposed`; Phase 13 indexed it in `docs/adr/README.md` |
+| **BL-13-3** | **The placed ADR-0011 carries a factual error.** Four lines say *"sixteen named categories"*; the constitution's table has exactly **fifteen** rows. The enumerated name list in the same record is correct at 15 names — only the count word is wrong | A record should not be accepted while it misstates its own source | The repository owner overwrites the record with the corrected draft. Claude cannot: H5 blocks a write to an **existing** record, and `70-adr.md` §70.6 makes amending one a human-directed act |
 
 ### Non-blocking findings recorded
 
@@ -635,8 +650,13 @@ NOT READY FOR PHASE 14 — SPEC KIT TREE DELETION
    `.specify/**` today would lose a binding engineering-baseline requirement. This is precisely the
    condition §14 of the Phase 13 brief names: *"all replacement content needed for retirement exists
    under current authority."* It does not yet.
-2. **BL-13-2 — ADR-0011 not placed.** The decision that would authorize the migration is drafted but
-   could not be written to `docs/adr/` from this session, and has not been accepted by a human.
+2. **BL-13-3 — the placed ADR-0011 misstates its own source.** It says *"sixteen named categories"*
+   in four places where the constitution's table has **fifteen** rows. It should be corrected before
+   it is considered for acceptance.
+
+**BL-13-2 is closed:** ADR-0011 now exists at
+`docs/adr/0011-required-test-categories-baseline.md` with status `Proposed`, and is indexed. What
+remains is **acceptance**, which is a human act, and the migration that acceptance would authorize.
 
 Everything else the brief requires is met: ADR-0010 exists and is Accepted; the Phase 12 count is
 reconciled; B12-2 is closed; D-11-1 is closed; D-11-3 is closed; no current authority or active
@@ -787,7 +807,7 @@ historical paths in §15.3; and the contracts pipeline regenerates `build/contra
 
 ## 16. Change inventory for this phase
 
-40 files modified. No file added, deleted, renamed or moved.
+41 files modified, one of them the ADR index. No file added, deleted, renamed or moved by Phase 13; `docs/adr/0011-required-test-categories-baseline.md` was added by the repository owner in `6e43a51`.
 
 | Area | Files | Nature |
 |---|---|---|
@@ -796,7 +816,8 @@ historical paths in §15.3; and the contracts pipeline regenerates `build/contra
 | `.github/workflows/desktop.yml` | 1 | header comment |
 | `dotnet/src/**` | 2 | XML doc comments |
 | `ragcore/tests/contracts/test_api_surface.py` | 1 | module docstring |
-| `.claude/hooks/test_guards.py` | 1 | ADR fixture constants re-anchored `0010 → 0011`, `9 → 10` |
+| `.claude/hooks/test_guards.py` | 1 | ADR fixture constants re-anchored `0010 → 0011 → 0012`, `9 → 10 → 11` (twice: once for ADR-0010, once after the owner placed ADR-0011) |
+| `docs/adr/README.md` | 1 | index row added for ADR-0011 (`70-adr.md` §70.6); no status changed |
 
 Not modified: `.specify/**`, `specs/**`, `docs/architecture/**`, `docs/functional/implemented.md`,
 `docs/adr/**`, `.claude/rules/**`, `.claude/skills/**`, `.claude/settings.json`,

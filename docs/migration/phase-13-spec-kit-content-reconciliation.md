@@ -390,7 +390,7 @@ by content.
 
 | Constitution block | Status against `40-testing.md` | Detail |
 |---|---|---|
-| **§Required test categories** — 16 named categories, *"All are required; none substitutes for another"*, plus *"a security or isolation fix without a failing-then-passing test is incomplete"* | **MISSING** | §40.5 names test kinds required by **principles** (P-3, P-11, P-20, P-21, P-25, P-30, P-31, P-32, P-12, DN-19). That is a different axis. No file in `.claude/rules/` lists the sixteen categories or states their non-substitutability |
+| **§Required test categories** — 15 named categories, *"All are required; none substitutes for another"*, plus *"a security or isolation fix without a failing-then-passing test is incomplete"* | **MISSING** | §40.5 names test kinds required by **principles** (P-3, P-11, P-20, P-21, P-25, P-30, P-31, P-32, P-12, DN-19). That is a different axis. No file in `.claude/rules/` lists the fifteen categories or states their non-substitutability |
 | **§Which change requires which category** — a 12-row matrix binding a kind of change to the categories it owes, *"so the obligation is mechanical at review rather than a matter of judgement"*, with unit tests owed by every change | **MISSING** | No equivalent anywhere in `.claude/rules/`. §40.5 answers *"what does this principle owe?"*; this answers *"what does this change owe?"*. Neither derives from the other |
 | **§Coverage** — *"No line- or branch-coverage threshold is set, and none gates a merge"*, deliberate, and coverage **must not** become a gate without amending the section | **MISSING** | `40-testing.md` is silent on coverage. Losing a prohibition silently permits the thing it forbade |
 | the recorded coverage exception — two Principle VIII hard failures (*tenant context from an untrusted client field*, *authorization bypass*) have no backend test because the protection was deferred | **MISSING** (the statement; the underlying gap is ADR-0008 **D-01**, which is recorded) | must be carried across as a recorded gap, not repaired |
@@ -423,7 +423,7 @@ owned by `23-angular.md`.
 
 ### 6.2 Why this could not simply be written into `40-testing.md`
 
-Adding sixteen required categories, a twelve-row obligation matrix and a coverage prohibition to
+Adding fifteen required categories, a twelve-row obligation matrix and a coverage prohibition to
 `.claude/rules/40-testing.md` **is a change to the engineering baseline**. `.claude/rules/70-adr.md`
 §70.2 B(6) makes a change to a mandatory engineering convention — naming test placement explicitly —
 an ADR trigger, and **ADR-0010 set the precedent one phase earlier**: constitution requirement text is

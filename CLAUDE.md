@@ -103,7 +103,7 @@ When a change touches both the graph and checkpoint persistence, **DB ordering w
 
 ## 8. ADR requirements — `.claude/rules/70-adr.md`
 
-MADR in `docs/adr/`, four-digit sequential numbering (next: **0010**), a status field, and
+MADR in `docs/adr/`, four-digit sequential numbering (next: **0013**), a status field, and
 `Context` / `Decision` / `Consequences`. Required **before implementation** for an architecture,
 identity/authority, engineering-baseline, LangGraph-architecture or DB-authorization-boundary
 decision.

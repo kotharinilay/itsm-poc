@@ -1,6 +1,6 @@
 # 0010. A migrated TypeScript / Angular / Electron engineering baseline
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-21
 - **Deciders:** Repository owner
 - **Supersedes:** nothing

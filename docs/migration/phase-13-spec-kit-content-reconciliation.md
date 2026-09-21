@@ -620,7 +620,7 @@ modified to create a mutation case:
 
 | # | Blocker | Why it blocks deletion | What closes it |
 |---|---|---|---|
-| **BL-13-1** | **D-11-2 is open.** The constitution's §Required test categories (16), §Which change requires which category (12 rows) and §Coverage policy exist in **no** current authority | `.specify/memory/constitution.md` is inside the Phase 14 deletion set. Deleting it destroys a binding engineering requirement that nothing else states | A human **accepts ADR-0011**, then the three blocks are migrated into `.claude/rules/40-testing.md` and the suite re-run |
+| **BL-13-1** | **D-11-2 is open.** The constitution's §Required test categories (15), §Which change requires which category (12 rows) and §Coverage policy exist in **no** current authority | `.specify/memory/constitution.md` is inside the Phase 14 deletion set. Deleting it destroys a binding engineering requirement that nothing else states | A human **accepts ADR-0011**, then the three blocks are migrated into `.claude/rules/40-testing.md` and the suite re-run |
 | ~~**BL-13-2**~~ | ~~ADR-0011 is not on disk~~ | — | **CLOSED.** The repository owner placed the record in `6e43a51` with status `Proposed`; Phase 13 indexed it in `docs/adr/README.md` |
 | **BL-13-3** | **The placed ADR-0011 carries a factual error.** Four lines say *"sixteen named categories"*; the constitution's table has exactly **fifteen** rows. The enumerated name list in the same record is correct at 15 names — only the count word is wrong | A record should not be accepted while it misstates its own source | The repository owner overwrites the record with the corrected draft. Claude cannot: H5 blocks a write to an **existing** record, and `70-adr.md` §70.6 makes amending one a human-directed act |
 

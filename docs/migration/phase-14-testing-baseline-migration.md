@@ -58,13 +58,17 @@ source, so §2 of the Phase 14 brief's stop condition did not fire.
 **The source table has exactly fifteen rows.** No sixteenth category exists and none was invented.
 The change matrix has exactly twelve rows.
 
-> **Residual editorial defect, reported not repaired.**
-> `docs/migration/phase-13-spec-kit-content-reconciliation.md` line 623 still describes the source
-> as *"§Required test categories (16)"*. That is a stale count in a **phase record**, corrected
-> everywhere it mattered (the ADR, and BL-13-3's own row on line 625, which states fifteen
-> correctly). It is an editorial defect under `.claude/rules/00-authority.md` §00.6 — reported
-> here, and **not** edited, because a phase record is history and amending one is a human-directed
-> act.
+> **Residual editorial defect — reported, then corrected on the owner's instruction.**
+> `docs/migration/phase-13-spec-kit-content-reconciliation.md` line 623 described the source as
+> *"§Required test categories (16)"*. It was an editorial defect under
+> `.claude/rules/00-authority.md` §00.6, not a conflict: the count was already correct everywhere
+> it mattered (the ADR, and BL-13-3's own row on line 625, which states fifteen correctly).
+>
+> Phase 14 **reported** it rather than repairing it, because amending a phase record is a
+> human-directed act. The repository owner then directed the correction, and line 623 now reads
+> **(15)**. The surrounding rows are unchanged: BL-13-3 and §14 item 2 still quote the ADR's
+> original *"sixteen named categories"* wording, because there they are describing the error that
+> was fixed, and rewriting those quotations would destroy the record of it.
 
 ## 4. Category mapping — source → `40-testing.md` §40.8
 
@@ -355,7 +359,7 @@ block was modified. Recorded as an observation, not repaired.
 | **DV-13** — `apps/web` `npx tsc -b` fails on 2 pre-existing `readHostedConfig` errors (a deviation from FE-SH-3) | **OPEN — verified still failing identically** | Repairing it would be an application change, out of scope (§15 of the brief) |
 | **DV-14** — `dotnet format --verify-no-changes` fails locally on 12 files for Windows CRLF reasons | **OPEN — verified still failing** | Same |
 | **EG-10** — no mechanism maps a diff to its owed categories | **NEWLY RECORDED** | Building one is a separate human decision |
-| Editorial: Phase 13 record line 623 still says *"(16)"* | **REPORTED, not repaired** | A phase record is history; §00.6 makes an editorial correction a human act |
+| Editorial: Phase 13 record line 623 said *"(16)"* | **CLOSED** — corrected to **(15)** | Reported by Phase 14 rather than repaired, then corrected on the repository owner's explicit instruction. The quotations of the original error in BL-13-3 and §14 are deliberately left intact |
 
 **Closed by this phase:** **D-11-2 / BL-13-1** (the testing baseline is migrated into current
 authority) and **BL-13-3** (the ADR's count error, corrected by the owner before acceptance).

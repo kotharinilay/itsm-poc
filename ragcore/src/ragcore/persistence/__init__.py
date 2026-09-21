@@ -1,6 +1,6 @@
 """SQLAlchemy models, repositories, unit of work. Every query applies tenant_id.
 
-**PostgreSQL is the authoritative durable store for platform state** (constitution Principle IV).
+**PostgreSQL is the authoritative durable store for platform state** (A1 §4.5, A2 P03).
 Three things are *not* here, and each has an owner elsewhere:
 
 * **The case** belongs to ServiceNow, which remains its system of record. This schema holds a

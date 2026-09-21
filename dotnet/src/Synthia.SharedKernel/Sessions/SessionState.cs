@@ -6,7 +6,7 @@ namespace Synthia.SharedKernel.Sessions;
 /// <remarks>
 /// <b>Nine, not four.</b> The three <c>Awaiting*</c> states persist indefinitely — losing the
 /// realtime connection changes nothing, because the connection is a notification leaf and never a
-/// link on a consequential path (constitution Principle III).
+/// link on a consequential path (A3 §6.3).
 /// </remarks>
 public enum SessionState
 {

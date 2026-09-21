@@ -1,6 +1,7 @@
 """Security guards. **Every prohibition is proven unreachable, not merely stated.**
 
-Constitution §Coverage: every protection named as a hard failure must have a test that fails when
+.claude/rules/40-testing.md §40.10: every protection named as a hard failure must have a test that
+fails when
 the protection is removed. These cover the prohibitions this slice establishes.
 
 **The gateway-provenance tests are gone, and their absence is the finding.** They asserted that a

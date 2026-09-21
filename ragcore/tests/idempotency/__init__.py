@@ -1,1 +1,1 @@
-"""The idempotency verification category (constitution §Required test categories)."""
+"""The idempotency verification category (.claude/rules/40-testing.md §40.8)."""

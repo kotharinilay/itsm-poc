@@ -4,7 +4,7 @@ using NetArchTest.Rules;
 namespace Synthia.ArchitectureTests;
 
 /// <summary>
-/// APIs the constitution prohibits outright (T034).
+/// APIs the baseline prohibits outright — .claude/rules/20-dotnet.md §20.9, §20.10 (T034).
 /// </summary>
 /// <remarks>
 /// Most of these are also analyzer-enforced at build time. They are asserted again here because
@@ -102,7 +102,7 @@ public sealed class BannedApiTests
     [Fact]
     public void No_production_code_reads_a_tasks_Result()
     {
-        // Never block (constitution §Async). CA1849 catches this at build time; asserted here too,
+        // Never block (.claude/rules/20-dotnet.md BL-23). CA1849 catches this at build time; asserted here too,
         // because an analyzer can be suppressed at a call site with a pragma and a plausible
         // reason, and a test cannot be suppressed without deleting it — which shows in a diff.
         // `.Wait()` and `.GetAwaiter().GetResult()` are covered by IdentityDisciplineTests.
@@ -119,7 +119,7 @@ public sealed class BannedApiTests
     public void No_production_catch_of_Exception_swallows_it()
     {
         // CA1031 is an error, so the general catch should not be here at all — but the rule the
-        // constitution states is narrower and is the one worth asserting: a general catch that does
+        // .claude/rules/10-principles.md P-30 states is narrower and is the one worth asserting: a general catch that does
         // not rethrow turns every unanticipated failure into a success nobody sees.
         List<string> offending = [];
 

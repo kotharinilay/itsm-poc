@@ -67,8 +67,9 @@ class ConsentVerdict(Enum):
     """An end user's decision on an operation affecting their own account or device.
 
     Two members, mirroring ``data-model.md`` ``consent.verdict`` and the two consent trigger kinds.
-    A boolean would collapse this to ``True``/``False`` at every call site, which the constitution
-    prohibits as "a boolean parameter flag that hides behaviour" (Principle VI).
+    A boolean would collapse this to ``True``/``False`` at every call site, which the baseline
+    prohibits as "a boolean parameter flag that hides behaviour"
+    (.claude/rules/10-principles.md P-20).
     """
 
     GRANTED = "granted"

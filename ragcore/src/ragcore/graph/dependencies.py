@@ -1,6 +1,6 @@
 """What the graph needs, declared explicitly and passed in.
 
-**Explicit dependency injection, no service locator** (constitution §Dependency injection). The
+**Explicit dependency injection, no service locator** (.claude/rules/10-principles.md P-26). The
 builder closes over one frozen :class:`GraphDependencies`; no node reaches for a global, a module
 singleton or a registry, and there is no container to ask at runtime.
 

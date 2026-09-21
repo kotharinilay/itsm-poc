@@ -2,7 +2,7 @@
 
 Everything upstream of this function is a suggestion. Everything downstream has already been
 decided. **Side-effecting tools MUST NOT be reachable from an unconstrained agent loop**
-(constitution Principle III), and this module is what stands between the two.
+(A3 §6.3), and this module is what stands between the two.
 
 **The gate is a pure function.** No clock, no database, no catalogue lookup, no model call — the
 caller resolves all of that and hands it in. Three consequences follow, and all three are the

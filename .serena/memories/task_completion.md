@@ -13,5 +13,5 @@ Also:
 - Schema change → new Alembic revision in `ragcore/migrations/versions/` (sequential `NNNN_name.py`); published views are versioned (`vw_*_v1`) — add new version, don't mutate.
 - Contract change → contracts are **code-first** (`.claude/rules/20-dotnet.md` BL-6); regenerate under `build/contracts/` and run `./build/scripts/dev.sh contracts` (`build/scripts/openapi_diff.py` / `openapi_validate.py`).
 - Architectural decision changed → ADR in `docs/adr/` + update docs.
-- Required test kinds: `.claude/rules/40-testing.md` §40.5, plus the gate rules' own obligations (30 §30.9, 50 §50.8). The retired constitution's per-change category matrix is **not** fully mirrored there — open finding D-11-2 in `docs/migration/phase-11-retirement-readiness.md`.
+- Required test kinds: `.claude/rules/40-testing.md` §40.5, plus the gate rules' own obligations (30 §30.9, 50 §50.8). The fifteen required categories (TC-01…TC-15) and the per-change matrix (CM-01…CM-12) are §40.8 and §40.9, migrated in Phase 14 under `docs/adr/0011-required-test-categories-baseline.md`; D-11-2 is closed.
 - Commit: Conventional Commits with tree scope.

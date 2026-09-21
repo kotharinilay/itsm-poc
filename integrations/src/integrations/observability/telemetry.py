@@ -11,7 +11,7 @@ identifier is what keeps one journey legible across the APIM hop and both queues
 telemetry *workspace* was considered and rejected — it would have made the identifier harder to
 follow across the seam, which is the property worth more.
 
-**Telemetry is not audit** (constitution Principle VIII). Separate stores, separate retention, and a
+**Telemetry is not audit** (A2 §8.1). Separate stores, separate retention, and a
 question only audit can answer MUST NOT be answerable from here.
 """
 
@@ -32,8 +32,8 @@ _INSTRUMENTATION_SCOPE: Final = "synthia.integrations"
 def configure_telemetry(observability: ObservabilitySettings) -> None:
     """Install tracing and metrics for the process.
 
-    Sampling is decided **per correlated journey** rather than per request (constitution
-    §Observability, FR-OPS-012). A strategy that could retain the command half of an execution and
+    Sampling is decided **per correlated journey** rather than per request (A2 P10,
+    FR-OPS-012). A strategy that could retain the command half of an execution and
     discard the result half would make the two-hop journey unreconstructable, which is precisely
     what the correlation requirement exists to prevent.
 

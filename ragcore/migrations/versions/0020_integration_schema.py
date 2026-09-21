@@ -11,8 +11,8 @@ database would need an ordering discipline nothing enforces. The gated job appli
 two different contracts that change for different reasons and are owned by different authorities:
 
 * ``platform.governance_record`` says **whether and by whom** a capability may be used — treatment,
-  accepted roles, risk tier. That is deterministic governance's decision (constitution Principle
-  III), and it stays with RagCore.
+  accepted roles, risk tier. That is deterministic governance's decision (A3
+  §6.3), and it stays with RagCore.
 * ``integration.connector_binding`` says **how** it runs — connector, endpoint, signing profile,
   idempotency policy. That is the Integrations Service's.
 

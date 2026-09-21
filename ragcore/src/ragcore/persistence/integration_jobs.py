@@ -55,7 +55,8 @@ if TYPE_CHECKING:  # pragma: no cover — import-time typing only
 class OutboxPort(Protocol):
     """What this module needs from the outbox. **Declared here because this is the consumer.**
 
-    Ports belong to the consuming module (constitution Principle V). One method, because one method
+    Ports belong to the consuming module (.claude/rules/10-principles.md P-5). One method, because
+    one method
     is what dispatch uses — a wider port would invite this module to reach for the trigger path too,
     and an integration command is not a trigger.
     """

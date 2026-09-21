@@ -4,7 +4,7 @@ using Synthia.SharedKernel.Identity;
 namespace Synthia.ArchitectureTests;
 
 /// <summary>
-/// The edge trust boundary, asserted against the shared registry (constitution Principle I).
+/// The edge trust boundary, asserted against the shared registry (A1 §4.5).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -260,7 +260,7 @@ public sealed class EdgeTrustPolicyTests
     [Fact]
     public void Every_audience_has_a_gateway_policy_that_derives_identity()
     {
-        // The surface decides which authorization model applies (constitution Principle II), and
+        // The surface decides which authorization model applies (A1 §6), and
         // the surface is the route. One policy per audience is what makes that structural: there is
         // no shared branch in which the customer path could read a role claim.
         using JsonDocument policy = Policy();
@@ -303,7 +303,7 @@ public sealed class EdgeTrustPolicyTests
     public void The_customer_gateway_policy_never_reads_a_role_claim()
     {
         // Any person acting on a customer surface is an end user, INCLUDING STAFF, and their staff
-        // roles must not be consulted there (constitution Principle II). This is the one place a
+        // roles must not be consulted there (A1 §6). This is the one place a
         // person could promote themselves by holding a role elsewhere, so the absence is asserted
         // rather than reviewed.
         string xml = File.ReadAllText(RepositoryPath("build", "infra", "apim", "customer.v1.xml"));

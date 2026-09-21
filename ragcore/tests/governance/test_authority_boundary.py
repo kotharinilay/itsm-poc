@@ -66,7 +66,7 @@ from tests.support.fakes import (
 pytestmark = pytest.mark.governance
 
 WINDOW = timedelta(minutes=15)
-"""The execution validity window. Fifteen minutes, per constitution Principle III."""
+"""The execution validity window. Fifteen minutes, per A3 §8.5."""
 
 # Bound to typed names rather than inlined into ``parametrize``, whose parameter type is
 # ``Iterable[object]`` and would erase the enum type the sort key needs.

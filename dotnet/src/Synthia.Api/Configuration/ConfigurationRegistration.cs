@@ -25,7 +25,7 @@ internal static class ConfigurationRegistration
     /// Adds Key Vault as a configuration source when one is configured.
     /// </summary>
     /// <remarks>
-    /// Ordering matters and is fixed by the constitution: <c>appsettings.json</c>, then
+    /// Ordering matters and is fixed by .claude/rules/20-dotnet.md BL-16: <c>appsettings.json</c>, then
     /// <c>appsettings.{Environment}.json</c>, then environment variables, then secret references —
     /// later overriding earlier. The vault is added last so a secret always wins over a placeholder
     /// left in a file.

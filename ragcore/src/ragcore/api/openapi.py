@@ -169,7 +169,7 @@ def authority_findings(document: Mapping[str, Any], audience: str) -> list[str]:
     """Every place in ``document`` a client could assert tenant, role or audience.
 
     **A position rule, not a name rule.** The platform derives tenant, roles and audience and never
-    accepts them (constitution P-I, contracts §README rule 1), so what must not exist is a *channel*
+    accepts them (A1 §4.5, contracts §README rule 1), so what must not exist is a *channel*
     — a parameter or a request-body field. A name rule would be satisfied by renaming the field
     rather than by removing the channel, which is a rule that looks enforced and is not.
 

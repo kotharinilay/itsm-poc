@@ -14,7 +14,7 @@ Autonomous ITSM agent platform (Synoptek, multi-tenant, single deployment). Repo
 
 **NOT authority** (history, pending a later retirement phase): `Synthia-Platform-Specification.md`,
 `.specify/**` (the retired Spec Kit constitution), `specs/**`, `.serena/**` including this memory.
-The frontend rules the constitution once held alone are now `.claude/rules/{22-web-typescript,23-angular,24-electron}.md`
+The frontend rules the retired Spec Kit constitution once held alone are now `.claude/rules/{22-web-typescript,23-angular,24-electron}.md`
 (`docs/adr/0010-frontend-engineering-baseline.md`).
 
 ## Deployables (no app-level dependency between any two, either direction)

@@ -1,6 +1,7 @@
 """The API shell. **FastAPI owns transport; it owns no business policy.**
 
-Constitution §FastAPI architecture: endpoints contain no business policy, dependencies establish the
+.claude/rules/10-principles.md P-13: endpoints contain no business policy, dependencies establish
+the
 request context, and authorization decisions live in application and domain policy.
 
 **Middleware order is load-bearing** and is the constitution's, not a preference:

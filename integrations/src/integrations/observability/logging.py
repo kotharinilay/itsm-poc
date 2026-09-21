@@ -1,6 +1,7 @@
 """Structured logging. **Constant templates, and no secret ever reaches a record.**
 
-Constitution Principle VIII: logs and telemetry MUST NOT leak secrets, access tokens, authorization
+.claude/rules/80-security-ops.md §80.3: logs and telemetry MUST NOT leak secrets, access tokens,
+authorization
 headers, sensitive customer payloads, or any cross-tenant information. This service is the one that
 holds connector credentials, so the rule binds hardest here.
 

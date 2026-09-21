@@ -81,7 +81,7 @@ public static class SessionSortKeys
 /// <b>Every module carries its own copy, deliberately.</b> Hoisting eight lines into a shared type
 /// would force six isolated modules onto a common dependency to remove a duplication that costs
 /// nothing — and duplication across a boundary is cheaper than a false shared contract
-/// (constitution Principle VI).
+/// (.claude/rules/10-principles.md P-6).
 /// </para>
 /// </remarks>
 internal static class KeysetTranslation

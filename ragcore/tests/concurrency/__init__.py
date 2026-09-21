@@ -1,1 +1,1 @@
-"""The concurrency verification category (constitution §Required test categories)."""
+"""The concurrency verification category (.claude/rules/40-testing.md §40.8)."""

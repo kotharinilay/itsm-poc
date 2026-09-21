@@ -8,7 +8,7 @@ namespace Synthia.Persistence.Conventions;
 /// <remarks>
 /// <para>
 /// <b>This is the "no unfiltered path" rule made structural.</b> Tenant isolation MUST apply at
-/// every layer and MUST NOT rest on a single chokepoint (constitution Principle IV) — but within
+/// every layer and MUST NOT rest on a single chokepoint (A1 §4.5, A2 P03) — but within
 /// this layer, the filter being unavoidable is the point. A repository method cannot omit the
 /// organisation because there is no method that takes it, and no query that does not have it.
 /// </para>

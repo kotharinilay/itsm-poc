@@ -43,7 +43,7 @@ public sealed class ApiConventionTests : IClassFixture<WebApplicationFixture>
     [Fact]
     public void Every_route_sits_under_a_known_audience()
     {
-        // The surface decides which authorization model applies (constitution Principle II), and
+        // The surface decides which authorization model applies (A1 §6), and
         // the surface is the route prefix. A route outside these prefixes would be authorized by
         // nothing, because IdentityContextMiddleware would not recognise it as an audience.
         string[] prefixes = ["/api/customer/v1", "/api/staff/v1", "/api/workload/v1"];
@@ -142,8 +142,8 @@ public sealed class ApiConventionTests : IClassFixture<WebApplicationFixture>
     [Fact]
     public async Task A_malformed_correlation_id_is_replaced_rather_than_echoed()
     {
-        // Accepted only when well formed; generated when missing or invalid (constitution
-        // §Correlation). Echoing an arbitrary client string back would make the header a reflection
+        // Accepted only when well formed; generated when missing or invalid
+        // (.claude/rules/20-dotnet.md BL-27). Echoing an arbitrary client string back would make the header a reflection
         // point, and a log-injection vector one hop later.
         using HttpClient client = _fixture.CreateClient();
 

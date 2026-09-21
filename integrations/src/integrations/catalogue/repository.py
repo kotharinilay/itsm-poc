@@ -5,8 +5,8 @@ Implements :class:`~integrations.application.ports.CataloguePort` and
 
 **Every query is parameterised and every tenant-scoped query carries the organisation.** There is no
 code path here that can issue an unfiltered read — not because a reviewer checks, but because the
-only statements in this module are the ones below and each one binds `:tenant_id`. Constitution
-Principle IV: a code path able to issue an unfiltered query MUST NOT exist.
+only statements in this module are the ones below and each one binds `:tenant_id`. A1 §4.5,
+A2 P03: a code path able to issue an unfiltered query MUST NOT exist.
 
 **Views only.** `vw_governance_catalogue_v1` for what a capability is,
 `vw_tenant_entitlement_v1` for whether an organisation may use it, `vw_session_summary_v1` and

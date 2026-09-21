@@ -1,6 +1,6 @@
 """One test per hard failure. **Each fails when its protection is removed.**
 
-Constitution Principle VIII names seven things that are hard failures, never warnings:
+.claude/rules/80-security-ops.md §80.3 names seven things that are hard failures, never warnings:
 
 1. cross-tenant data leakage
 2. consequential execution without required authority

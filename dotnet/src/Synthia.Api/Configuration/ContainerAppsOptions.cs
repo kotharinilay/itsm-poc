@@ -27,7 +27,7 @@ public sealed class ContainerAppsOptions
     /// How long in-flight requests are given after <c>SIGTERM</c>, in seconds.
     /// </summary>
     /// <remarks>
-    /// Twenty-five seconds, matching the platform's drain (constitution §Containers). Setting the
+    /// Twenty-five seconds, matching the platform's drain (.claude/rules/80-security-ops.md §80.5). Setting the
     /// host's own shutdown timeout to the same value is what makes the two agree: a host that gives
     /// up sooner drops requests the platform was still waiting for, and one that gives up later is
     /// killed mid-request anyway.

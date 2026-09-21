@@ -10,7 +10,7 @@ namespace Synthia.ArchitectureTests;
 /// <remarks>
 /// <para>
 /// <b>RagCore owns every state-changing operation; the .NET modular monolith is read-only</b>
-/// (ADR-0001, constitution Principle V, contracts §README rule 3). This walks the routing table the
+/// (ADR-0001, .claude/rules/10-principles.md P-24, contracts §README rule 3). This walks the routing table the
 /// application actually builds, so a <c>MapPost</c> added anywhere fails here rather than at review.
 /// </para>
 /// <para>

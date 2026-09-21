@@ -37,8 +37,8 @@ class TenantSource(Enum):
 class TenantContext:
     """The trusted tenant binding for one unit of work.
 
-    **Tenant context MUST NEVER be accepted from an untrusted client field** (constitution
-    Principle I). Construct through the ``from_*`` classmethods, each of which names its
+    **Tenant context MUST NEVER be accepted from an untrusted client field** (A1
+    §4.5). Construct through the ``from_*`` classmethods, each of which names its
     provenance — there is deliberately no ``from_request``, no ``from_header`` and no
     ``parse``. If a caller holds a tenant identifier that came from a client and wants a
     context for it, this API gives them nowhere to go. That is the intended outcome.

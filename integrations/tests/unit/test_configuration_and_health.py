@@ -1,6 +1,6 @@
 """Configuration validation and health semantics.
 
-Constitution §Required test categories: *Configuration validation — options bind, validate and fail
+.claude/rules/40-testing.md §40.8: *Configuration validation — options bind, validate and fail
 fast at start.* These cover the two rules that are easy to state and easy to lose.
 """
 

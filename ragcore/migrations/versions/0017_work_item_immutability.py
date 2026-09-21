@@ -3,7 +3,7 @@
 Revision ID: 0017_work_item_immutability
 Revises: 0016_ingestion_run
 
-**This is the structural control, not a convention** (constitution Principle III, spec FR-EXEC-008).
+**This is the structural control, not a convention** (A1 §12.2, spec FR-EXEC-008).
 Six fields carry authority: ``tenant_id``, ``session_id``, ``requested_by_oid``, ``case_reference``,
 ``governed_action`` and ``target``. An application-side check protects only the code paths that
 remember to call it; a trigger protects the row from every path, including a migration, a console

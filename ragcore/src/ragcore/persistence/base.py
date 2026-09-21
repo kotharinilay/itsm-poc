@@ -1,6 +1,6 @@
 """The declarative base, the schema, and the column conventions every table obeys.
 
-**PostgreSQL is the single authoritative durable store** (constitution Principle IV). Everything
+**PostgreSQL is the single authoritative durable store** (A2 §8.1). Everything
 mapped from this module lives in the ``platform`` schema, which Alembic owns outright. The
 ``langgraph`` schema belongs to the checkpointer's own ``setup()`` and no class here reaches into
 it — see :mod:`ragcore.graph.checkpointer` for why that separation is structural rather than
@@ -26,7 +26,7 @@ Retention (spec FR-SESS-007) is likewise a removal, not a flag.
 
 **Immutable columns are not enforced here.** The work item's authority fields are protected by a
 database trigger, at the permission boundary, because an application convention is exactly the kind
-of protection a future code path forgets (constitution Principle III, spec FR-EXEC-008).
+of protection a future code path forgets (A1 §12.2, spec FR-EXEC-008).
 """
 
 from __future__ import annotations
@@ -81,8 +81,8 @@ class TenantScoped:
     **Denormalised deliberately.** ``message`` could reach its tenant through ``chat_session`` and
     ``approval`` through ``work_item``; both carry ``tenant_id`` anyway. A filter that depends on a
     join is a filter a future query can drop by changing the join, and the rule this platform
-    enforces is that **no code path able to issue an unfiltered query may exist** (constitution
-    Principle IV). A column on the row makes the filter local to the table.
+    enforces is that **no code path able to issue an unfiltered query may exist** (A1 §4.5,
+    A2 P03). A column on the row makes the filter local to the table.
 
     The column is **not** nullable and has no default. A missing tenant is a failed insert, not a
     row that quietly belongs to nobody.

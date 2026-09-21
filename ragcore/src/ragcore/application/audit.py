@@ -22,7 +22,7 @@ outcome is written as a claim. Nothing here can upgrade one into a confirmation,
 outcome arrives from the verification stage and this module has no arithmetic that touches it
 (ADR-0004).
 
-**Telemetry MUST NEVER answer an audit question** (constitution Principle VIII, spec FR-OPS-004).
+**Telemetry MUST NEVER answer an audit question** (A2 §8.1, spec FR-OPS-004).
 This module writes to the audit sink and to nothing else — it has no logger, and the absence is
 deliberate: a writer that also logged would be one somebody could later "simplify" into logging
 only.

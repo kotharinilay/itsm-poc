@@ -21,7 +21,7 @@ public readonly record struct TenantAdmissionRecord(
 /// </summary>
 /// <remarks>
 /// <b>This is tenant admission: trusted identity plus platform tenant-registry state, and nothing
-/// else</b> (constitution Principle I). It runs before a scope exists, which makes it the one
+/// else</b> (A1 §4.5). It runs before a scope exists, which makes it the one
 /// bootstrap in the read path — see the implementation for why that is safe and how it is fenced.
 /// </remarks>
 public interface ITenantRegistry

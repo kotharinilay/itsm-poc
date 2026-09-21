@@ -56,7 +56,7 @@ public static class TenantSortKeys
     /// the default is <c>-createdAt</c>, but this resource's sortable set is <c>displayName</c> and
     /// <c>status</c> and contains no timestamp. Keyset paging needs a deterministic order, so the
     /// default is the registry's natural one — ascending by name — and the divergence is recorded
-    /// rather than resolved silently (constitution Principle X).
+    /// rather than resolved silently (.claude/rules/70-adr.md).
     /// </remarks>
     public const string Default = "displayName";
 

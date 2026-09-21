@@ -1,6 +1,7 @@
 """Outbound HTTP. **Every call carries an explicit timeout, and no client is built ad hoc.**
 
-Constitution §Resilience. The timeout rule is specific to this platform rather than general hygiene:
+.claude/rules/21-python.md PY-17. The timeout rule is specific to this platform rather than general
+hygiene:
 an execution runs inside a fifteen-minute authorization window that now spans **two hops** — RagCore
 to here, and here to the external system — so one call without a timeout can hold work past its
 expiry and turn a slow vendor into an expired approval that requires fresh human authorization.

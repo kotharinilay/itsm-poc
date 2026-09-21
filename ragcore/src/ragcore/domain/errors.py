@@ -1,7 +1,7 @@
 """Domain errors.
 
 Errors and invalid state surface at the earliest point they can be detected, and no caught
-error is silently swallowed (constitution Principle VIII).
+error is silently swallowed (.claude/rules/10-principles.md P-30).
 """
 
 from __future__ import annotations

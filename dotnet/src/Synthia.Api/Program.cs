@@ -24,7 +24,7 @@ using Synthia.SharedKernel.Identity;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// Configuration sources, in the order the constitution fixes: appsettings.json, then
+// Configuration sources, in the order .claude/rules/20-dotnet.md BL-16 fixes: appsettings.json, then
 // appsettings.{Environment}.json, then environment variables — all established by CreateBuilder —
 // then secret references from Key Vault, added last so a secret always wins over a placeholder.
 KeyVaultOptions keyVault = builder.AddSynthiaKeyVault();
@@ -69,7 +69,7 @@ builder.Services.AddSynthiaHealthChecks("ReadDatabase");
 
 WebApplication app = builder.Build();
 
-// MIDDLEWARE ORDER IS FIXED BY THE CONSTITUTION and is not a matter of taste:
+// MIDDLEWARE ORDER IS FIXED BY .claude/rules/20-dotnet.md BL-26 and is not a matter of taste:
 //   exception handling -> correlation -> request logging -> trace context -> authentication
 //   -> authorization -> validation -> endpoint.
 //

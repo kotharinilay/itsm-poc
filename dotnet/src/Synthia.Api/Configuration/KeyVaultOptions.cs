@@ -6,7 +6,7 @@ namespace Synthia.Api.Configuration;
 /// Where secret material comes from.
 /// </summary>
 /// <remarks>
-/// <b>Key Vault is the sole source of secret material</b> (constitution Principle IV), reached
+/// <b>Key Vault is the sole source of secret material</b> (A2 P09), reached
 /// through managed identity. There is deliberately no client-secret or certificate-path setting
 /// here: a credential configured to read the vault would be a standing secret outside the vault,
 /// which is the problem the vault exists to remove.

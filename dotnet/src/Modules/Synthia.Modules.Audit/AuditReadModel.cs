@@ -13,7 +13,7 @@ namespace Synthia.Modules.Audit;
 /// </summary>
 /// <remarks>
 /// <b>Audit is not telemetry.</b> Separate stores, separate retention — seven years against thirty
-/// days — and telemetry MUST NEVER answer an audit question (constitution Principle VIII). This
+/// days — and telemetry MUST NEVER answer an audit question (A2 §8.1). This
 /// reads the audit store, and it is the only thing that can answer these questions.
 /// </remarks>
 public interface IAuditReadModel

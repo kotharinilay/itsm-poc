@@ -49,7 +49,7 @@ public readonly record struct HumanIdentity(EntraTenantId TenantId, PrincipalId 
 /// <remarks>
 /// <para>
 /// Services MUST NOT parse an access token and consume only the closed Gateway-derived header
-/// contract (constitution Principle I). This type is the in-process shape of that contract.
+/// contract (A1 §4.5). This type is the in-process shape of that contract.
 /// </para>
 /// <para>
 /// <b>There is deliberately no public constructor and no setter.</b> An instance can only come from
@@ -101,7 +101,7 @@ public sealed class AuthenticatedPrincipal
     /// <remarks>
     /// <b>This is where the surface rule becomes structural rather than remembered.</b> Any person
     /// acting on a customer surface is an end user — including staff — and their staff roles MUST
-    /// NOT be consulted there (constitution Principle II). Rather than trusting every call site to
+    /// NOT be consulted there (A1 §6). Rather than trusting every call site to
     /// remember that, the customer audience returns a set that simply does not contain them.
     /// </remarks>
     public RoleSet AuthorizableRoles =>

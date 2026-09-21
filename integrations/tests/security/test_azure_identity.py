@@ -21,10 +21,11 @@ equally a violation on an audience nobody can reach.
 **It reads the shared registry rather than restating it.** Two hand-maintained lists drift, and the
 drift is invisible until the weaker one is the one somebody checked against.
 
-**The helpers below are duplicated from RagCore's enforcer deliberately** (constitution
-Principle VI). Each tree scans only itself, so neither suite reads the other's files — extracting a
-shared test package would be the build-level dependency between deployables that ADR-0001 and
-ADR-0007 exist to prevent, and it would be a dependency created for the convenience of a test.
+**The helpers below are duplicated from RagCore's enforcer deliberately**
+(.claude/rules/10-principles.md P-6). Each tree scans only itself, so neither suite reads the
+other's files — extracting a shared test package would be the build-level dependency between
+deployables that ADR-0001 and ADR-0007 exist to prevent, and it would be a dependency created for
+the convenience of a test.
 """
 
 from __future__ import annotations

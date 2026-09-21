@@ -13,7 +13,7 @@ namespace Synthia.Modules.Governance;
 /// fixtures until Stage 11 seeds them.
 /// <para>
 /// Nothing decided here in any case: <b>deterministic governance lives in RagCore and the model
-/// only proposes</b> (constitution Principle III). This module is a read model for a catalogue,
+/// only proposes</b> (A3 §6.3). This module is a read model for a catalogue,
 /// never a place a treatment is chosen. Its read surface arrives when a route needs one.
 /// </para>
 /// </remarks>

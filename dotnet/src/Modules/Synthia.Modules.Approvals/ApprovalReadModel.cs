@@ -67,7 +67,7 @@ public static class ApprovalSortKeys
     /// none, but that resource's sortable set is <c>decidedAt</c> and <c>expiresAt</c> — it does
     /// not contain <c>createdAt</c>, so the stated default is unsatisfiable there. Keyset paging
     /// needs a deterministic order, so the nearest sortable timestamp is used and the divergence
-    /// is recorded here rather than resolved silently (constitution Principle X).
+    /// is recorded here rather than resolved silently (.claude/rules/70-adr.md).
     /// </remarks>
     public const string UnexecutedDefault = "decidedAt";
 
@@ -118,7 +118,7 @@ public static class ApprovalSortKeys
 /// <remarks>
 /// Each module carries its own copy. See the note in <c>Synthia.Modules.Sessions</c>: Contracts and
 /// Persistence are siblings that may not reference each other, and duplication across a boundary is
-/// cheaper than forcing six isolated modules onto a shared dependency (constitution Principle VI).
+/// cheaper than forcing six isolated modules onto a shared dependency (.claude/rules/10-principles.md P-6).
 /// </remarks>
 internal static class KeysetTranslation
 {

@@ -1,6 +1,6 @@
 """The workload principal. **No token parsing, and the token's tenant is not the customer's.**
 
-Identity is derived exactly once, at APIM (constitution Principle I). This service consumes only the
+Identity is derived exactly once, at APIM (A1 §4.5). This service consumes only the
 closed `X-Idp-*` contract APIM writes and **MUST NOT parse an access token** — there is no JWT
 library here and adding one is an architectural change, not a convenience.
 

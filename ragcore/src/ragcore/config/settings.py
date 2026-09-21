@@ -6,8 +6,9 @@ tested. Construction happens once, in the lifespan handler, and a failure there 
 that does not start — which is where a configuration defect is cheapest.
 
 **No secret value is ever held here.** Every credential is a *reference* — a Key Vault secret
-name — resolved through managed identity at the point of use. The constitution's rule is
-absolute: no credential in source, in tests, or in committed local configuration. The types below
+name — resolved through managed identity at the point of use.
+.claude/rules/80-security-ops.md §80.3 is absolute: no credential in source, in tests, or in
+committed local configuration. The types below
 enforce the readable half of that: a field named ``*_secret_name`` holds a name, and a reviewer
 seeing a value in one knows immediately that something is wrong.
 
@@ -125,7 +126,7 @@ class ModelGatewaySettings(BaseSettings):
     """The AI Gateway — the sole model egress.
 
     **Every model call passes through here**, reasoning and embeddings alike, and no component
-    reaches a provider directly (constitution §Model access). There is deliberately no
+    reaches a provider directly (A2 §9). There is deliberately no
     ``provider``, no ``api_key`` and no ``model_endpoint`` field: a service that could name a
     provider is a service that could bypass the gateway's metering, budgets and content safety.
     """
@@ -190,7 +191,7 @@ class ModelGatewaySettings(BaseSettings):
 class RetrievalSettings(BaseSettings):
     """Azure AI Search — the **derived** grounding index.
 
-    Derived, not authoritative (constitution Principle IV): a lost index is rebuilt by re-running
+    Derived, not authoritative (A2 §8.1): a lost index is rebuilt by re-running
     ingestion, never restored from a backup. Nothing here is a source of truth, and nothing
     retrieved through it confers authority.
 
@@ -377,7 +378,7 @@ class NotificationSettings(BaseSettings):
 
 
 class CacheSettings(BaseSettings):
-    """Redis — **transient only**, and never an authority (constitution Principle IV).
+    """Redis — **transient only**, and never an authority (A2 §8.1).
 
     **There is no password field here and there will not be one.**
     ``build/policy/azure-identity.json`` names ``password`` and ``access key`` as forbidden
@@ -550,7 +551,7 @@ class Settings(BaseSettings):
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     execution_window_minutes: int = Field(default=15, ge=1, le=15)
-    """The execution validity window (constitution Principle III).
+    """The execution validity window (A3 §8.5).
 
     Bounded **above** as well as below. It is configurable so a deployment can be stricter and
     for no other reason; raising it past fifteen minutes would weaken a control the specification

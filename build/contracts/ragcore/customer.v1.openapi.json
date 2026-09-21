@@ -16,7 +16,7 @@
       },
       "ConsentRequest": {
         "additionalProperties": false,
-        "description": "A consent decision — **the only way consent is ever recorded**.\n\nOne field, an enum of two. Deliberately not a boolean: ``consent(True)`` says nothing at a\ncall site, and the constitution prohibits a boolean flag that hides behaviour.",
+        "description": "A consent decision — **the only way consent is ever recorded**.\n\nOne field, an enum of two. Deliberately not a boolean: ``consent(True)`` says nothing at a\ncall site, and .claude/rules/10-principles.md P-20 prohibits a boolean flag that\nhides behaviour.",
         "properties": {
           "verdict": {
             "$ref": "#/components/schemas/ConsentVerdict"
@@ -29,7 +29,7 @@
         "type": "object"
       },
       "ConsentVerdict": {
-        "description": "An end user's decision on an operation affecting their own account or device.\n\nTwo members, mirroring ``data-model.md`` ``consent.verdict`` and the two consent trigger kinds.\nA boolean would collapse this to ``True``/``False`` at every call site, which the constitution\nprohibits as \"a boolean parameter flag that hides behaviour\" (Principle VI).",
+        "description": "An end user's decision on an operation affecting their own account or device.\n\nTwo members, mirroring ``data-model.md`` ``consent.verdict`` and the two consent trigger kinds.\nA boolean would collapse this to ``True``/``False`` at every call site, which the baseline\nprohibits as \"a boolean parameter flag that hides behaviour\"\n(.claude/rules/10-principles.md P-20).",
         "enum": [
           "granted",
           "refused"

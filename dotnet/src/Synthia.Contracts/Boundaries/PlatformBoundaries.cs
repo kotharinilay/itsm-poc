@@ -40,7 +40,7 @@ public enum MonolithRelationship
 /// <summary>
 /// One named boundary, and this deployable's declared relationship to it.
 /// </summary>
-/// <param name="Name">The boundary, in the vocabulary the plan and constitution use.</param>
+/// <param name="Name">The boundary, in the vocabulary A2 §5 uses.</param>
 /// <param name="Owner">Which deployable owns the behaviour.</param>
 /// <param name="Relationship">What, if anything, the monolith does about it.</param>
 /// <param name="Rationale">Why the relationship is what it is, citing the governing document.</param>
@@ -57,7 +57,7 @@ public sealed record PlatformBoundary(
 /// <para>
 /// <b>This is a boundary register, not a set of ports.</b> A port would be a speculative
 /// abstraction: a provider-neutral interface MUST NOT be created until a real second provider
-/// exists (constitution Principle VI), and for every entry below marked
+/// exists (.claude/rules/10-principles.md P-8), and for every entry below marked
 /// <see cref="MonolithRelationship.None"/> there is no first provider in this deployable either —
 /// the behaviour lives in RagCore, which is written in Python and can never implement a .NET
 /// interface.
@@ -130,7 +130,7 @@ public static class PlatformBoundaries
             KeyVault,
             BoundaryOwner.Platform,
             MonolithRelationship.ConsumesAsInfrastructure,
-            "Key Vault is the sole source of secret material (constitution Principle IV). The " +
+            "Key Vault is the sole source of secret material (A2 P09). The " +
             "monolith resolves secrets through managed identity as a configuration source, which " +
             "is infrastructure, not an application dependency."),
         new(
@@ -144,7 +144,7 @@ public static class PlatformBoundaries
             BoundaryOwner.RagCore,
             MonolithRelationship.None,
             "Model access routes exclusively through the AI Gateway from RagCore. No module holds " +
-            "a provider endpoint (constitution §Model access)."),
+            "a provider endpoint (A2 §9)."),
         new(
             ServiceNow,
             BoundaryOwner.RagCore,
@@ -156,7 +156,7 @@ public static class PlatformBoundaries
             BoundaryOwner.RagCore,
             MonolithRelationship.None,
             "Behind its port in RagCore. The monolith never calls Graph — identity is derived once " +
-            "at the Gateway and arrives as headers (constitution Principle I)."),
+            "at the Gateway and arrives as headers (A1 §4.5)."),
         new(
             Realtime,
             BoundaryOwner.RagCore,

@@ -1,1 +1,1 @@
-"""The unit verification category (constitution §Required test categories)."""
+"""The unit verification category (.claude/rules/40-testing.md §40.8)."""

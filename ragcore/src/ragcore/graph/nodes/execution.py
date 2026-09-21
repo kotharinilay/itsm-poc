@@ -1,6 +1,6 @@
 """Execution and verification nodes — the last mile, and the last check.
 
-**The endpoint executes; it MUST NEVER decide** (constitution Principle III). These nodes hold no
+**The endpoint executes; it MUST NEVER decide** (A3 §6.3). These nodes hold no
 policy. :func:`make_execute` re-reads the disposition the gate wrote and refuses to run without
 it, then invokes a port that has already been told what to do.
 

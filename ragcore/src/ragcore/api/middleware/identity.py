@@ -1,7 +1,7 @@
 """Identity, derived once at the Gateway and consumed — never parsed, never accepted.
 
 **No token parsing.** Identity is derived exactly once, at APIM, and both deployables consume the
-same closed header contract (constitution Principle I). This middleware reads those headers and
+same closed header contract (A1 §4.5). This middleware reads those headers and
 nothing else. There is no JWT library imported here and no public key to rotate, because there is
 no token to validate at this tier.
 

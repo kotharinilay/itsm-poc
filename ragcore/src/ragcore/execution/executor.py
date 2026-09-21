@@ -13,7 +13,7 @@ the first as the second on the day they differ — which is the day it matters.
 * ``contradicted`` — a server-side read disagreed with the claim. Treated as a failure, because a
   claim the platform has actively disproved is worse than one it never checked.
 
-**The verification workflow is split, and the split is the control** (constitution Principle III,
+**The verification workflow is split, and the split is the control** (A3 §6.3,
 `FR-INTEG-009`, T295). Verification is a **server-side read against the external system**, so the
 call belongs to the Integrations Service along with every other external call. What stays here is
 the **conclusion**: whether the platform may tell a user the issue is resolved.
@@ -27,7 +27,7 @@ access ADR-0007 removed from it — so each half is where it is because the othe
 result of the invocation, and this module's job is to carry it faithfully into
 :attr:`ExecutionReport.may_report_resolution` without upgrading it.
 
-**This module executes; it MUST NEVER decide** (constitution Principle III). :func:`execute` takes
+**This module executes; it MUST NEVER decide** (A3 §6.3). :func:`execute` takes
 a :class:`~ragcore.governance.gate.GateOutcome` and refuses to run without ``PROCEED``. That check
 is deliberately redundant with the graph's routing: routing decides which node runs, this decides
 whether the effect happens, and the check sits at the point of effect so a path that reached here

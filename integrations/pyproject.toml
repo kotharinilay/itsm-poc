@@ -12,7 +12,7 @@ license = { text = "Proprietary" }
 #
 # NEITHER PROJECT DEPENDS ON THE OTHER, AND NO SHARED LIBRARY EXISTS BETWEEN THEM. The
 # correlation middleware, the problem-details shape, the settings base and the telemetry setup
-# below are DUPLICATED from RagCore deliberately. Constitution Principle VI: DRY applies within a
+# below are DUPLICATED from RagCore deliberately. .claude/rules/10-principles.md P-6: DRY applies within a
 # module boundary, and duplication across boundaries is cheaper than a false shared contract. A
 # `synthia-common` package would be a build-level dependency between two deployables required to
 # have none — and it would not appear as a cross-tree path, so `build/scripts/check-boundaries.sh`
@@ -64,8 +64,9 @@ build-backend = "hatchling.build"
 packages = ["src/integrations"]
 
 # ---------------------------------------------------------------------------
-# Ruff — constitution §Python baseline. The FORMATTER IS AUTHORITATIVE.
-# Identical selection to RagCore's, because the constitution names one selection for the
+# Ruff — .claude/rules/21-python.md §21.1. The FORMATTER IS AUTHORITATIVE.
+# Identical selection to RagCore's, because .claude/rules/21-python.md §21.1 names one
+# selection for the
 # repository rather than one per project.
 # ---------------------------------------------------------------------------
 [tool.ruff]
@@ -81,7 +82,8 @@ select = ["E", "F", "B", "I", "UP", "S", "PTH", "SIM", "ASYNC", "DTZ", "N"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-# S101 (assert) — the constitution permits `assert` in tests and prohibits it everywhere else.
+# S101 (assert) — .claude/rules/21-python.md PY-6 permits `assert` in tests and prohibits it
+# everywhere else.
 "tests/**/*.py" = ["S101"]
 
 [tool.ruff.lint.flake8-tidy-imports]

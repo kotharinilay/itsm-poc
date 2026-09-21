@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Central Package Management (constitution §.NET baseline). A version lives here and nowhere else:
+    Central Package Management (.claude/rules/20-dotnet.md §20.1). A version lives here and nowhere else:
     a project that sets its own Version attribute on a PackageReference is a build error.
   -->
 
@@ -28,7 +28,7 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
   </ItemGroup>
 
-  <ItemGroup Label="API — built-in OpenAPI (constitution §.NET baseline)">
+  <ItemGroup Label="API — built-in OpenAPI (.claude/rules/20-dotnet.md §20.1)">
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
 
     <!--

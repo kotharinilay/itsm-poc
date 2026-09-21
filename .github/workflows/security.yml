@@ -1,6 +1,6 @@
 name: security
 
-# Constitution §Secrets: no credential in source, in tests, or in committed local configuration.
+# .claude/rules/80-security-ops.md §80.3: no credential in source, in tests, or in committed local configuration.
 # Also runs the dependency audits that caught a vulnerable OpenTelemetry and an out-of-support
 # Electron during Stage 1 - both were found by a gate, not by review.
 on:

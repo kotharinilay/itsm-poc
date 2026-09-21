@@ -14,7 +14,7 @@ namespace Synthia.Api.Http;
 /// </para>
 /// <para>
 /// <c>HttpClient</c> MUST NOT be instantiated manually and one-off unmanaged clients MUST NOT be
-/// created (constitution §Resilience). Manual instantiation causes socket exhaustion and stale DNS;
+/// created (.claude/rules/20-dotnet.md BL-28). Manual instantiation causes socket exhaustion and stale DNS;
 /// <c>IHttpClientFactory</c> pools handlers and recycles them. <c>NoManualHttpClientTests</c>
 /// asserts nobody does it anyway.
 /// </para>

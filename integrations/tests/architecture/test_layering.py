@@ -1,6 +1,7 @@
 """Architecture guards. **The boundary is enforced here, or it is not enforced.**
 
-Constitution Principle V: module boundaries are enforced by architecture tests, not convention, and
+.claude/rules/10-principles.md P-24: module boundaries are enforced by architecture tests, not
+convention, and
 a boundary that exists only in a diagram erodes.
 
 Four rules, each with a distinct failure it prevents:
@@ -85,7 +86,7 @@ def test_no_module_imports_ragcore() -> None:
 def test_no_shared_library_between_the_two_python_services() -> None:
     """No `synthia_common`-style package is imported by either side.
 
-    Constitution Principle VI: duplication across a boundary is cheaper than a false shared
+    .claude/rules/10-principles.md P-6: duplication across a boundary is cheaper than a false shared
     contract. A shared package would be a build-level dependency between two deployables required
     to have none — and, unlike an application call, it would not appear as a cross-tree path where
     `build/scripts/check-boundaries.sh` could catch it.
@@ -127,7 +128,7 @@ def test_domain_imports_only_the_standard_library() -> None:
 def test_only_the_composition_root_builds_the_container() -> None:
     """`build_container` is called in exactly one place outside tests.
 
-    Constitution §Dependency injection prohibits Service Locator and requires registration to live
+    .claude/rules/10-principles.md P-26 prohibits Service Locator and requires registration to live
     in composition-root code. The failure this prevents is gradual: one module calls
     `build_container()` "just for settings", then another, and dependency injection has quietly
     become global lookup with no single place left to review what is wired to what.

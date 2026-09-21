@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# The read-only .NET monolith (constitution §Containers, research R-011).
+# The read-only .NET monolith (.claude/rules/80-security-ops.md §80.5, research R-011).
 #
 # WHY MULTI-STAGE IS MANDATORY, not merely tidy: SDK images are not produced for chiseled variants,
 # so the only way to reach a chiseled runtime is to build somewhere else and copy the output in.

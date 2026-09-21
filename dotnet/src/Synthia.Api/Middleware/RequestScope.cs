@@ -11,7 +11,7 @@ namespace Synthia.Api.Middleware;
 /// write halves. The split is the point: a read model receives <see cref="ITenantScope"/> and
 /// cannot widen it, while only the identity middleware is handed
 /// <see cref="ITenantScopeWriter"/>. Interface segregation here is a security control, not a
-/// style preference (constitution Principle VI).
+/// style preference (.claude/rules/10-principles.md P-8).
 /// </para>
 /// <para>
 /// <b>Each value can be bound once.</b> A second bind throws rather than overwriting: within one
@@ -85,7 +85,7 @@ internal sealed class RequestScope :
         {
             throw new InvalidOperationException(
                 $"The {what} for this request is already bound. Identity is derived exactly once " +
-                "(constitution Principle I); rebinding it mid-request would mean two answers to " +
+                "(A1 §4.5); rebinding it mid-request would mean two answers to " +
                 "the same question, and the second one winning.");
         }
     }

@@ -30,7 +30,8 @@ hard delete (spec FR-AUDIT-006), and audit survives both (spec FR-AUDIT-004). Au
 past ``retain_until`` is a separate, privileged job — it is not something the runtime may do.
 
 **Roles are created ``NOLOGIN`` and carry no password.** Authentication is Entra managed identity;
-a password in a migration would be a credential in source control, which the constitution prohibits
+a password in a migration would be a credential in source control, which .claude/rules/80-security-ops.md §80.3
+prohibits
 outright. Deployment grants the managed identity membership of the role it needs.
 """
 

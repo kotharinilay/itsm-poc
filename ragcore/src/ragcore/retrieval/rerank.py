@@ -68,7 +68,8 @@ might have rescued.
 class RerankerPort(Protocol):
     """A cross-encoder that scores a query against candidate passages.
 
-    Declared here because this module is the consumer (constitution Principle V). Tenant-scoped
+    Declared here because this module is the consumer (.claude/rules/10-principles.md P-5).
+    Tenant-scoped
     like every other model-touching port: the call is metered against the organisation, and a
     reranker that did not know which organisation it was serving would be an unmetered model call.
     """

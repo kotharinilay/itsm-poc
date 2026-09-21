@@ -72,7 +72,7 @@ class UndeserializableResultError(ValueError):
 class Conclusion(Enum):
     """What RagCore concludes from a recorded outcome. **Not what the far side reported.**
 
-    The distinction is the constitution's verification split (Principle III): the Integrations
+    The distinction is the verification split in A3 §6.3: the Integrations
     Service reports what it *observed*; RagCore decides what the platform may *say*.
     """
 

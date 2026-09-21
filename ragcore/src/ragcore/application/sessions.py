@@ -15,8 +15,8 @@ before anything was asked for.
 has said something with enough shape to be worked on: enough substance, and not merely a greeting
 or an acknowledgement. It does **not** ask the model, and the reason is not cost. A model-decided
 triage gate would mean the model decides when an authority record comes into existence, and the
-one rule this platform does not bend is that model output creates no authority (constitution
-Principle III). The heuristic is deliberately crude and deliberately visible: it can be wrong, and
+one rule this platform does not bend is that model output creates no authority (A3
+§6.3). The heuristic is deliberately crude and deliberately visible: it can be wrong, and
 being wrong means one more turn of conversation, which is a conversation problem rather than a
 governance one.
 

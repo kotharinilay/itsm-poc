@@ -1,6 +1,6 @@
 """The audit record's domain shape: the actor chain and what a recordable event is.
 
-**Telemetry MUST NEVER answer an audit question** (constitution Principle VIII, spec FR-OPS-004).
+**Telemetry MUST NEVER answer an audit question** (A2 §8.1, spec FR-OPS-004).
 That is why this lives in the domain with its own types and its own port
 (:class:`~ragcore.application.ports.AuditSinkPort`) rather than as a structured log field: a
 logger with an ``audit=True`` flag is one sampling configuration away from losing the record.

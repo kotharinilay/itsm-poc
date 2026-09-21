@@ -81,7 +81,7 @@ public sealed class RoleMatrixTests
     public void The_empty_intersection_denies_every_operation()
     {
         // An empty intersection denies, and an operation that accepts no roles denies everyone
-        // (constitution Principle II). Both halves matter: the first is the common case, the second
+        // (A1 §6). Both halves matter: the first is the common case, the second
         // is what stops a misconfigured operation defaulting open.
         foreach (object[] row in Operations().Select(r => r.ToArray()))
         {
@@ -96,7 +96,7 @@ public sealed class RoleMatrixTests
     public void No_operation_accepts_senior_technician()
     {
         // senior_technician exists as a defined role that no operation accepts until one is
-        // explicitly introduced (constitution Principle II). Asserted so introducing one is a
+        // explicitly introduced (A1 §6). Asserted so introducing one is a
         // deliberate change to this file rather than a side effect of a copied route.
         foreach (object[] row in Operations().Select(r => r.ToArray()))
         {
@@ -108,7 +108,7 @@ public sealed class RoleMatrixTests
     public void Holding_several_roles_grants_the_union_and_nothing_further()
     {
         // A principal holding several roles receives the union of those capabilities and nothing
-        // further (constitution Principle II). The "nothing further" half is the one that matters:
+        // further (A1 §6). The "nothing further" half is the one that matters:
         // {technician, administrator} must not unlock an operation neither accepts alone.
         RoleSet both = RoleSet.Of(StaffRole.Technician, StaffRole.Administrator);
 

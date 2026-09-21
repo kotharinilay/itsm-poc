@@ -174,7 +174,7 @@ class TestAPublishedDocumentDisclosesNothingItMustNot:
 
 
 class TestNoDocumentOffersAClientAWayToAssertAuthority:
-    """Tenant, roles and audience are derived and never accepted (constitution P-I).
+    """Tenant, roles and audience are derived and never accepted (A1 §4.5).
 
     **This is a position rule, not a name rule**, and the distinction is the whole point. What must
     not exist is a *channel* — somewhere a client can put a value the platform would read. A rule

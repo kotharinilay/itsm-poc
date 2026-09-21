@@ -19,7 +19,7 @@
 #
 # Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret: every
 # secret arrives as a secret-reference environment variable resolved from Key Vault through the
-# managed identity (constitution §Configuration).
+# managed identity (.claude/rules/80-security-ops.md §80.3).
 
 apiVersion: 2024-03-01
 type: Microsoft.App/containerApps

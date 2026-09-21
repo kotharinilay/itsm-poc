@@ -172,7 +172,8 @@ class ContentBlockedError(ModelEgressError):
 class ContentSafetyPort(Protocol):
     """The screening service.
 
-    Declared here because this module is the consumer (constitution Principle V), and in domain
+    Declared here because this module is the consumer (.claude/rules/10-principles.md P-5), and in
+    domain
     terms only: it takes text and an organisation and returns the platform's own verdict type. A
     port that returned a provider's category enum would put that provider's vocabulary in the
     audit trail.

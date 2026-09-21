@@ -6,7 +6,7 @@ namespace Synthia.ArchitectureTests;
 /// <remarks>
 /// <para>
 /// <b>Service Locator is prohibited</b>, and <c>IServiceProvider</c> MUST NOT be injected into a
-/// <i>business service</i> for dynamic resolution (constitution §Dependency injection). A type that
+/// <i>business service</i> for dynamic resolution (.claude/rules/20-dotnet.md BL-2). A type that
 /// holds a provider has hidden its dependencies from its constructor, which is where they are
 /// supposed to be visible.
 /// </para>

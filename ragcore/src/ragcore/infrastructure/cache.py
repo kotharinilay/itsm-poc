@@ -1,4 +1,4 @@
-"""Redis. **Transient only — never an authority, never a durable record** (constitution P-IV).
+"""Redis. **Transient only — never an authority, never a durable record** (A2 §8.1).
 
 PostgreSQL is the single authority for platform durable state. Redis holds copies of things that are
 cheap to recompute and worthless to keep: it is never a source of truth, no sample flow reads it,

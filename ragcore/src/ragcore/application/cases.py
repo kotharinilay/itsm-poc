@@ -26,7 +26,7 @@ construction rather than by rule.
 unreachable the write is held for replay, and :class:`CaseAnchor` reports that as its own state.
 A session whose case is queued has not failed and **must not** be reported as resolved: the
 platform does not yet know that the case exists, and saying otherwise would be claiming to know
-more than it does (constitution Principle VIII).
+more than it does (ADR-0004).
 
 **No ServiceNow vocabulary appears here.** No ``sys_id``, no ``incident``, no table name — the
 platform's own model is a case reference and facts about a session (spec FR-EXT-011).

@@ -125,7 +125,7 @@ public sealed record GovernanceCatalogueEntry(
 /// <remarks>
 /// <b>Never exposes credential references</b> — not values, not Key Vault references. Audit is
 /// distinct from telemetry, with separate stores and separate retention, and telemetry MUST NEVER
-/// answer an audit question (constitution Principle VIII).
+/// answer an audit question (A2 §8.1).
 /// </remarks>
 /// <param name="AuditId">Identifier.</param>
 /// <param name="TenantId">The organisation acted against.</param>
@@ -178,7 +178,7 @@ public sealed record TenantView(
 /// </summary>
 /// <remarks>
 /// <b>Aggregated and derived figures MUST NOT reveal any single organisation's contribution</b>
-/// (constitution Principle IV). The rollup is derived and retained independently of the signals it
+/// (A2 §8.1). The rollup is derived and retained independently of the signals it
 /// was computed from, so expiring chat content does not erase reporting history.
 /// </remarks>
 /// <param name="WindowStart">Start of the aggregation window.</param>

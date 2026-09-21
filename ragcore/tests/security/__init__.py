@@ -1,1 +1,1 @@
-"""The security verification category (constitution §Required test categories)."""
+"""The security verification category (.claude/rules/40-testing.md §40.8)."""

@@ -1,6 +1,7 @@
 """Application ports. **Declared by the consumer, implemented by infrastructure.**
 
-Constitution Principle V: ports belong to the consuming module; provider implementations belong to
+.claude/rules/10-principles.md P-5: ports belong to the consuming module; provider implementations
+belong to
 infrastructure. These are the ports the application layer consumes. The credential port is
 deliberately **not** here — its consumer is an adapter, so it lives in
 :mod:`integrations.credentials`, and declaring it here would invite the application layer to hold a

@@ -36,7 +36,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "azure-monitor-opentelemetry>=1.8",
     "psycopg[binary]>=3.3",
-    # The transient cache (constitution Principle IV). Redis is never an authority and never a
+    # The transient cache (A2 §8.1). Redis is never an authority and never a
     # durable record here, and the client is declared rather than optional because a dependency
     # that is present in production and absent in CI is one whose failure mode is only ever seen
     # in production.
@@ -62,7 +62,7 @@ build-backend = "hatchling.build"
 packages = ["src/ragcore"]
 
 # ---------------------------------------------------------------------------
-# Ruff — constitution §Python baseline. The FORMATTER IS AUTHORITATIVE.
+# Ruff — .claude/rules/21-python.md §21.1. The FORMATTER IS AUTHORITATIVE.
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
@@ -70,7 +70,7 @@ target-version = "py312"
 src = ["src", "tests", "workers"]
 
 [tool.ruff.lint]
-# Exactly the selection the constitution names. `N` is included so naming is mechanically
+# Exactly the selection .claude/rules/21-python.md §21.1 names. `N` is included so naming is mechanically
 # enforced rather than reviewed.
 select = ["E", "F", "B", "I", "UP", "S", "PTH", "SIM", "ASYNC", "DTZ", "N"]
 
@@ -79,7 +79,8 @@ select = ["E", "F", "B", "I", "UP", "S", "PTH", "SIM", "ASYNC", "DTZ", "N"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-# S101 (assert) — the constitution permits `assert` in tests and prohibits it everywhere else.
+# S101 (assert) — .claude/rules/21-python.md PY-6 permits `assert` in tests and prohibits it
+# everywhere else.
 # This is the mechanism for that split, not a relaxation of it.
 "tests/**/*.py" = ["S101"]
 # Alembic generates revision identifiers that are not valid Python identifiers by our naming rules.
@@ -92,7 +93,7 @@ ban-relative-imports = "all"
 docstring-code-format = true
 
 # ---------------------------------------------------------------------------
-# mypy — authoritative type checker. The constitution permits mypy OR Pyright;
+# mypy — authoritative type checker. .claude/rules/21-python.md §21.1 permits mypy OR Pyright;
 # this project chooses mypy, and CI runs it as a failing step.
 # ---------------------------------------------------------------------------
 [tool.mypy]

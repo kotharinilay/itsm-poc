@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Cross-deployable boundary check (T013, ADR-0001, constitution Principle V).
+# Cross-deployable boundary check (T013, ADR-0001, .claude/rules/10-principles.md P-24).
 #
 # RagCore and the .NET monolith have NO application-level dependency in either direction — no API
 # call, no library reference, no deployment coupling. They meet at exactly two places: PostgreSQL,
@@ -129,7 +129,7 @@ check "RagCore declares an Integrations dependency" \
 check ".NET build files reference the Integrations Service" \
   'synthia[._-]integrations' dotnet '*.csproj' '*.sln' '*.props' '*.targets'
 
-# A SHARED LIBRARY IS THE SAME COUPLING WEARING A FRIENDLIER NAME. Constitution Principle VI:
+# A SHARED LIBRARY IS THE SAME COUPLING WEARING A FRIENDLIER NAME. .claude/rules/10-principles.md P-6:
 # duplication across a boundary is cheaper than a false shared contract. The two services duplicate
 # their correlation middleware, problem-details shape, settings base and telemetry setup on purpose,
 # and the tempting fix — extracting `synthia_common` — would be a build-level dependency between

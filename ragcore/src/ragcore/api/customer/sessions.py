@@ -10,7 +10,7 @@ asked for anything makes every downstream count a count of greetings.
 
 **The message endpoint responds ``text/event-stream``.** It renders what
 :class:`~ragcore.graph.host.RunHost` reports; it holds no orchestration policy of its own, which is
-what keeps the endpoint free of business policy (constitution §FastAPI).
+what keeps the endpoint free of business policy (.claude/rules/10-principles.md P-13).
 
 **The stream carries no authority.** An ``interrupt`` frame tells a client that a decision is
 needed. It does not ask for one and cannot receive one: the decision is made by calling the consent

@@ -1,7 +1,7 @@
 """The authenticated principal, and the closed Gateway-derived header contract.
 
 Identity is derived exactly once, at the Gateway. Services MUST NOT parse an access token and
-consume only this contract (constitution Principle I).
+consume only this contract (A1 §4.5).
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ class AuthenticatedPrincipal:
 
         **This is where the surface rule becomes structural rather than remembered.** Any
         person acting on a customer surface is an end user — including staff — and their staff
-        roles MUST NOT be consulted there (constitution Principle II). Rather than trusting
+        roles MUST NOT be consulted there (A1 §6). Rather than trusting
         every call site to remember that, the customer audience returns a set that simply does
         not contain them.
         """

@@ -16,7 +16,7 @@
        both. COLLAPSING THE SET TO ONE VALUE DESTROYS AUTHORITY (spec 11.5): arriving as
        "administrator" alone silently loses the capability that lets them approve. The expression
        below therefore emits every mapped role, never a "highest" one - there is no highest, the
-       roles are disjoint capability sets and not a hierarchy (constitution Principle II).
+       roles are disjoint capability sets and not a hierarchy (A1 §6).
 -->
 <policies>
   <inbound>
@@ -51,7 +51,7 @@
 
     <!--
       ROLE DERIVATION. Entra app roles map to platform roles by the initial-release assignment
-      fixed in the constitution: Synthia_Agents -> technician, Synthia_Admins -> administrator.
+      fixed in A1 §6.2: Synthia_Agents -> technician, Synthia_Admins -> administrator.
       senior_technician is a defined role that no Entra group maps to yet and no operation accepts
       yet; it is absent here rather than aliased onto another role, because aliasing it would grant
       capability that was never assigned.

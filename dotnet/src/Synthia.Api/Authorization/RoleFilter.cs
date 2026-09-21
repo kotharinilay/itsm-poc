@@ -11,7 +11,7 @@ namespace Synthia.Api.Authorization;
 /// <para>
 /// <b>Authorization is set intersection</b>: <c>principal roles ∩ operation accepted roles ≠ ∅</c>.
 /// An empty intersection denies, and an operation that accepts no roles denies everyone
-/// (constitution Principle II). Any implementation that sorts, ranks, compares or upgrades roles
+/// (A1 §6). Any implementation that sorts, ranks, compares or upgrades roles
 /// is a defect — so this one does none of those, and delegates the decision to
 /// <see cref="RoleIntersection"/> rather than re-deciding it here.
 /// </para>
@@ -45,7 +45,7 @@ internal sealed class RoleFilter : IEndpointFilter
         // filter is a singleton created when routes are mapped, and IPrincipalScope is scoped to a
         // request — so there is no constructor for it to arrive through.
         //
-        // This is NOT the Service Locator the constitution prohibits. That rule is about a business
+        // This is NOT the Service Locator .claude/rules/10-principles.md P-26 prohibits. That rule is about a business
         // service hiding its dependencies behind a provider; this is the framework's own per-request
         // accessor, used in the one layer whose signature the framework fixes.
         // ServiceResolutionTests asserts the exception stays confined here.

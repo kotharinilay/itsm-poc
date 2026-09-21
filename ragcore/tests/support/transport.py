@@ -16,8 +16,9 @@ the choice is between fakes at the transport and no adapter coverage at all. Fak
 leave everything above the socket exercised.
 
 **No credential appears in this module.** :class:`FakeCredential` returns a token-shaped string
-that authenticates nothing. The constitution's rule is that no credential appears in source, in
-tests, or in committed local configuration; a fake that carried a real-looking secret would be
+that authenticates nothing. .claude/rules/80-security-ops.md §80.3 requires that no credential
+appears in source, in tests, or in committed local configuration; a fake that carried a
+real-looking secret would be
 indistinguishable from a leak to every scanner that looks.
 """
 

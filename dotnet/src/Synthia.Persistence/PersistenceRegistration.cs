@@ -49,7 +49,7 @@ public static class PersistenceRegistration
                 options.ConnectionString,
                 npgsql => npgsql.CommandTimeout(options.CommandTimeoutSeconds));
 
-            // AsNoTracking is the default rather than a per-query decision (constitution §.NET data
+            // AsNoTracking is the default rather than a per-query decision (.claude/rules/20-dotnet.md §20.4
             // access). Nothing here is ever written back, so a change tracker would be pure cost —
             // and a tracked read model is an invitation to try.
             builder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);

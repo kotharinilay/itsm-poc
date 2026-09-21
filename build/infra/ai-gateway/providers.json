@@ -21,7 +21,7 @@
   "policyVersion": "1.0.0",
 
   "egressRule": {
-    "statement": "RagCore -> AI Gateway -> model provider. No component reaches a model provider directly (FR-OPS-007, constitution §Model access).",
+    "statement": "RagCore -> AI Gateway -> model provider. No component reaches a model provider directly (FR-OPS-007, A2 §9).",
     "enforcedBy": [
       "build/infra/identity/managed-identities.json — id-synthia-ragcore holds no Foundry role",
       "ragcore/src/ragcore/model/egress.py — ModelEgressPort is the only shape a call takes",
@@ -115,7 +115,7 @@
 
   "cache": {
     "$comment": [
-      "REDIS IS TRANSIENT ONLY (constitution Principle IV, plan §Platform environment). It is the",
+      "REDIS IS TRANSIENT ONLY (A2 §8.1, plan §Platform environment). It is the",
       "semantic cache's store and is never an authority and never a durable record.",
       "",
       "Two consequences, both deliberate: every entry carries a TTL, and no sample flow reads the",

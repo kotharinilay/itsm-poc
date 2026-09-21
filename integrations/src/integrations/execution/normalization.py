@@ -192,7 +192,7 @@ def normalize_directory_profile(raw: Mapping[str, object]) -> NormalizedProfile:
     """Validate and reduce a directory response.
 
     **The narrowest contract in this module, and deliberately so.** The platform's identity is
-    derived once at the gateway (constitution Principle I), so what a directory adds is presentation
+    derived once at the gateway (A1 §4.5), so what a directory adds is presentation
     detail — not identity, not roles, not group membership. A profile carrying any of those would be
     a second source of authorization beside the closed header contract, which is why there is no
     field here to put one in.

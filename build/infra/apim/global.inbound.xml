@@ -1,7 +1,7 @@
 <!--
   APIM GLOBAL (all-APIs) POLICY. The trust boundary, in the order it must run.
 
-  This policy is the platform's single identity derivation point (constitution Principle I). Every
+  This policy is the platform's single identity derivation point (A1 §4.5). Every
   application request passes through it before any API-scoped policy runs, and the order below is
   not adjustable:
 

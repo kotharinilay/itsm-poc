@@ -1,1 +1,1 @@
-"""The integrations verification category (constitution §Required test categories)."""
+"""The integrations verification category (.claude/rules/40-testing.md §40.8)."""

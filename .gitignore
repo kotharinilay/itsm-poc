@@ -1,4 +1,4 @@
-# Build artifacts MUST NOT be committed (constitution §Commits and versioning).
+# Build artifacts MUST NOT be committed (.claude/rules/10-principles.md C-1).
 
 # .NET
 bin/
@@ -37,7 +37,7 @@ apps/desktop/release/
 *.tsbuildinfo
 .eslintcache
 
-# Secrets — never committed, in any environment (constitution §Secrets)
+# Secrets — never committed, in any environment (.claude/rules/80-security-ops.md §80.3)
 .env
 .env.*
 !.env.example

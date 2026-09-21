@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# The RagCore execution leg (constitution §Containers, research R-012).
+# The RagCore execution leg (.claude/rules/80-security-ops.md §80.5, research R-012).
 #
 # THE TWO IMAGES ARE HARDENED AGAINST DIFFERENT LISTS, and that is deliberate rather than an
 # inconsistency to be tidied away (plan Stage 10). `chiseled` is a .NET image family and has no
@@ -97,7 +97,7 @@ FROM ${RUNTIME_BASE} AS runtime
 # five-digit UID is gigabytes of image for a file nothing reads.
 RUN groupadd --system --gid 10001 synthia \
     && useradd --system --no-log-init --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin synthia \
-    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (constitution §Containers). The slim base ships
+    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (.claude/rules/80-security-ops.md §80.5). The slim base ships
     # pip, apt and dpkg; each is a way to install something at runtime, and none of them runs here.
     # Removed in the SAME layer that would otherwise keep them — deleting in a later layer removes
     # them from the filesystem and leaves them in the image.

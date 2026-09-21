@@ -189,7 +189,7 @@
         "",
         "Caching is deliberately absent. Every response on these paths is tenant-scoped, and a",
         "shared edge cache keyed on URL is a cross-tenant leak waiting for two callers to request",
-        "the same path (constitution Principle: tenant isolation at every layer)."
+        "the same path (A1 §4.5, A2 P03: tenant isolation at every layer)."
       ]
     },
     {

@@ -6,7 +6,7 @@ name: integrations
 # separate lockfiles and separate virtual environments; a shared job would make one fail because the
 # other changed, which is the coupling the separation exists to avoid.
 #
-# Constitution §Python baseline: CI runs strict type checking and pytest as FAILING steps.
+# .claude/rules/21-python.md §21.1: CI runs strict type checking and pytest as FAILING steps.
 on:
   push:
     branches: [main]
@@ -47,7 +47,7 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check --output-format=github .
 
-      # The Ruff formatter is authoritative (constitution §Python baseline).
+      # The Ruff formatter is authoritative (.claude/rules/21-python.md §21.1).
       - name: Ruff format
         run: uv run ruff format --check .
 

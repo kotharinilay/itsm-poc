@@ -7,8 +7,8 @@ namespace Synthia.ArchitectureTests;
 /// Module boundaries (T032).
 /// </summary>
 /// <remarks>
-/// <b>Boundaries are mandatory even when responsibilities deploy together</b> (constitution
-/// Principle V). Module boundaries inside the monolith are enforced by architecture tests, not
+/// <b>Boundaries are mandatory even when responsibilities deploy together</b>
+/// (.claude/rules/10-principles.md P-24). Module boundaries inside the monolith are enforced by architecture tests, not
 /// convention — this file is that enforcement.
 /// <para>
 /// The declaration-level checks read <c>.csproj</c> files via <see cref="ProjectGraph"/> rather

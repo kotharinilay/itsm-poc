@@ -123,7 +123,7 @@ class TestEveryFixtureIsInert:
 
     def test_no_fixture_claims_a_verification_tool(self) -> None:
         """There is nothing to verify against, and claiming otherwise claims a confirmation the
-        platform could not perform (constitution Principle VIII).
+        platform could not perform (ADR-0004).
         """
         for record in REFERENCE_FIXTURES:
             assert record.verification_tool is None

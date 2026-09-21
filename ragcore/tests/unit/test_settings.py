@@ -94,7 +94,7 @@ class TestBoundsAreEnforcedByTheType:
 
     def test_the_execution_window_cannot_be_widened_past_fifteen_minutes(self) -> None:
         """Configurable so a deployment can be **stricter**, and for no other reason. Raising it
-        would weaken a control the specification fixes (constitution Principle III)."""
+        would weaken a control the specification fixes (A3 §6.3)."""
         with pytest.raises(ValidationError):
             _settings(execution_window_minutes=60)
 

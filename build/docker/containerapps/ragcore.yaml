@@ -7,7 +7,7 @@
 #
 # Placeholders in ${...} are substituted by the deployment pipeline. Nothing here is a secret: every
 # secret arrives as a secret-reference environment variable resolved from Key Vault through the
-# managed identity (constitution §Configuration).
+# managed identity (.claude/rules/80-security-ops.md §80.3).
 
 apiVersion: 2024-03-01
 type: Microsoft.App/containerApps
@@ -29,7 +29,7 @@ properties:
     ingress:
       # Internal only. Front Door with WAF is the sole public edge and APIM is the API trust
       # boundary; no application API is reachable by a path that bypasses the gateway
-      # (constitution Principle I). External ingress here would be exactly that path.
+      # (A1 §4.5). External ingress here would be exactly that path.
       #
       # This is the NETWORK half of the apim-to-backend hop in build/policy/edge-trust.json.
       # **It is not sufficient alone** — it admits anything already inside the VNet — and the
@@ -129,7 +129,7 @@ properties:
           - name: SYNTHIA_OTEL_TRACE_SAMPLE_RATIO
             value: ${TRACE_SAMPLE_RATIO}
 
-          # REDIS - TRANSIENT ONLY (constitution Principle IV). Never an authority, never a durable
+          # REDIS - TRANSIENT ONLY (A2 §8.1). Never an authority, never a durable
           # record, and no sample flow reads it. There is no password or access-key setting here and
           # there will not be one: Entra authentication presents a token in the password position,
           # minted per connection by the managed identity, so the value that goes there is never
@@ -152,7 +152,7 @@ properties:
           # under /api/... would have to be both publicly routed by Front Door and answerable
           # unauthenticated from the inside - a contradiction, not a configuration.
 
-          # Liveness is process-only and performs no dependency check (constitution §Health). A
+          # Liveness is process-only and performs no dependency check (.claude/rules/80-security-ops.md §80.5). A
           # liveness probe that checked the database would restart every replica when the database
           # had a bad minute, turning a dependency blip into an outage.
           - type: Liveness

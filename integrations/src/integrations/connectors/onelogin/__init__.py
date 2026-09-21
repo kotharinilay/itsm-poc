@@ -3,7 +3,7 @@
 Relocated from RagCore by T290; behaviour unchanged from T132.
 
 Not an identity provider. Enterprise identity is Entra, derived once at the gateway, and a second
-source of human identity would reopen the identity model (constitution Principle I). OneLogin is a
+source of human identity would reopen the identity model (A1 §4.5). OneLogin is a
 system an incident may require reading details from or performing an operation against, and it is
 the first of an open set rather than a special case.
 

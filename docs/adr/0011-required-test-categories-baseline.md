@@ -5,7 +5,7 @@
 - **Deciders:** Repository owner
 - **Supersedes:** nothing
 - **Amends:** `.claude/rules/40-testing.md`, which today states the testing baseline without the
-  sixteen named test categories, without the per-change-type obligation matrix, and without the
+  fifteen named test categories, without the per-change-type obligation matrix, and without the
   coverage policy that governs whether a percentage threshold may gate a merge
 - **Related:** [0010](./0010-frontend-engineering-baseline.md) (the same class of act — migrating
   requirement text that the retired Spec Kit constitution held alone, under an ADR rather than by
@@ -17,7 +17,7 @@ Phase 11 recorded finding **D-11-2**: the retired Spec Kit constitution
 (`.specify/memory/constitution.md`) carries three blocks of testing requirement that
 `.claude/rules/40-testing.md` does not:
 
-1. **§Required test categories** — sixteen named categories (Unit, Integration, Contract,
+1. **§Required test categories** — fifteen named categories (Unit, Integration, Contract,
    Authorization, Tenant isolation, Retrieval isolation, Governance, Approval, Idempotency,
    Concurrency, Adapter, Architecture dependency, Configuration validation, Security, End-to-end
    golden path), stated as *"All are required; none substitutes for another"*, together with the
@@ -56,7 +56,7 @@ exactly the sense ADR-0010 used it, and its non-authoritative status is unchange
 - Deleting `.specify/**` with this content unmigrated destroys a requirement that no current
   authority states. Phase 13 will not certify retirement readiness while that is true.
 - `.claude/rules/70-adr.md` §70.2 B(6) makes a change to a *mandatory engineering convention* —
-  explicitly including test placement — a baseline change requiring an ADR. Adding sixteen required
+  explicitly including test placement — a baseline change requiring an ADR. Adding fifteen required
   categories and a twelve-row obligation matrix is a baseline change by any reading.
 - ADR-0010 set the precedent one phase earlier: constitution requirement text is migrated **under an
   accepted ADR**, never transcribed into a rule file as an editorial act.
@@ -81,7 +81,7 @@ exactly the sense ADR-0010 used it, and its non-authoritative status is unchange
 
 **Option 1.** Migrate all three blocks into `.claude/rules/40-testing.md` as a new section, with:
 
-- the sixteen categories and what each proves, stated as required and non-substitutable;
+- the fifteen categories and what each proves, stated as required and non-substitutable;
 - the per-change-type matrix, unchanged in meaning, with unit tests owed by every change;
 - the failing-then-passing obligation for a security or isolation fix;
 - the coverage policy, including the prohibition on a coverage threshold becoming a merge gate

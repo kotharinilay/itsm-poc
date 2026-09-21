@@ -11,7 +11,7 @@ namespace Synthia.Api.Middleware;
 /// <remarks>
 /// <para>
 /// <b>Identity is derived exactly once, at the Gateway.</b> This service MUST NOT parse an access
-/// token and consumes only the five closed headers (constitution Principle I). There is
+/// token and consumes only the five closed headers (A1 §4.5). There is
 /// deliberately no code path here that looks at <c>Authorization</c>, and
 /// <c>NoTokenParsingTests</c> asserts the string does not appear in the tree.
 /// </para>
@@ -141,7 +141,7 @@ internal sealed class IdentityContextMiddleware
         if (admitted is null)
         {
             // Authenticated against Entra, unknown to this platform. Authentication is not
-            // authorization (constitution Principle I), and an unregistered tenant is not admitted.
+            // authorization (A1 §4.5), and an unregistered tenant is not admitted.
             IdentityLog.RefusedUnregisteredTenant(_logger);
 
             await WriteAsync(
@@ -171,7 +171,7 @@ internal sealed class IdentityContextMiddleware
 
 /// <summary>Maps a request path onto the audience the Gateway routed it to.</summary>
 /// <remarks>
-/// <b>The surface decides which authorization model applies</b> (constitution Principle II), and
+/// <b>The surface decides which authorization model applies</b> (A1 §6), and
 /// the surface is the route — not a header, not a claim, not a body field. A person cannot promote
 /// themselves by anything they supply because there is nothing they can supply that reaches here.
 /// </remarks>

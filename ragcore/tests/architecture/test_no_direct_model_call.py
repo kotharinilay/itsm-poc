@@ -1,7 +1,7 @@
 """``RagCore → AI Gateway → model provider``. **No module holds a provider endpoint.**
 
 Every model call passes through a single brokering point and no component reaches a model provider
-directly (spec FR-OPS-007, constitution §Model access). That rule is established in four independent
+directly (spec FR-OPS-007, A2 §9). That rule is established in four independent
 places, and this file is the third:
 
 1. **Identity.** ``id-synthia-ragcore`` holds no Foundry role at all

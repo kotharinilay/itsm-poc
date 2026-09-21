@@ -41,7 +41,8 @@ public enum ApprovalVerdict
 /// <remarks>
 /// Two members, mirroring the consent verdict in the data model and the two consent trigger kinds.
 /// A boolean would collapse this to <c>true</c>/<c>false</c> at every call site, which the
-/// constitution prohibits as "a boolean parameter flag that hides behaviour" (Principle VI).
+/// baseline prohibits as "a boolean parameter flag that hides behaviour"
+/// (.claude/rules/10-principles.md P-20).
 /// </remarks>
 public enum ConsentVerdict
 {

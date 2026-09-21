@@ -7,7 +7,7 @@ a node is a rule that can only be tested through a graph.
 
 **The triage verdict is deterministic and is not a model call.** A model-decided triage gate would
 mean model output decides when an authority record comes into existence, and model output creates
-no authority (constitution Principle III). See :func:`~ragcore.application.sessions.assess_triage`
+no authority (A3 §6.3). See :func:`~ragcore.application.sessions.assess_triage`
 for why the heuristic is deliberately crude.
 
 **Intake writes no authority.** It appends a conversation turn and, at most, reports the work item

@@ -8,7 +8,7 @@ namespace Synthia.ArchitectureTests;
 /// </summary>
 /// <remarks>
 /// <b>Services MUST NOT parse an access token</b> and consume only the closed Gateway-derived
-/// header contract (constitution Principle I). A single derivation point is the only structure in
+/// header contract (A1 §4.5). A single derivation point is the only structure in
 /// which authority can be audited and cannot be forged by a compromised surface.
 /// </remarks>
 public sealed class IdentityDisciplineTests
@@ -69,7 +69,7 @@ public sealed class IdentityDisciplineTests
     public void No_http_client_is_constructed_by_hand()
     {
         // HttpClient MUST NOT be instantiated manually and one-off unmanaged clients MUST NOT be
-        // created (constitution §Resilience). Manual instantiation causes socket exhaustion and
+        // created (.claude/rules/20-dotnet.md BL-28). Manual instantiation causes socket exhaustion and
         // stale DNS, and it bypasses the resilience handler and timeout every outbound call must
         // carry (research R-020).
         IReadOnlyList<string> offending = SourceTree.ProductionFilesContaining("new HttpClient");
@@ -84,7 +84,7 @@ public sealed class IdentityDisciplineTests
     public void No_production_code_uses_a_local_clock()
     {
         // DateTimeOffset throughout, from DateTimeOffset.UtcNow or an injected TimeProvider
-        // (constitution §Time). DateTime.Now silently reads the machine's local zone, which in a
+        // (.claude/rules/20-dotnet.md DN-1). DateTime.Now silently reads the machine's local zone, which in a
         // container is UTC in production and something else on the developer's laptop.
         string[] tells = ["DateTime.Now", "DateTimeOffset.Now", "DateTime.Today"];
 
@@ -104,7 +104,7 @@ public sealed class IdentityDisciplineTests
     [Fact]
     public void No_production_code_blocks_on_a_task()
     {
-        // Never block (constitution §Async). Blocking a request thread on an async call is how a
+        // Never block (.claude/rules/20-dotnet.md BL-23). Blocking a request thread on an async call is how a
         // pool starves under the load it was sized for, and the symptom is latency with no
         // corresponding CPU.
         string[] tells = [".GetAwaiter().GetResult()", ".Wait()", "Task.Run("];
@@ -146,7 +146,7 @@ public sealed class IdentityDisciplineTests
     [Fact]
     public void Every_async_boundary_takes_a_cancellation_token()
     {
-        // CancellationToken propagates through EVERY async boundary (constitution §Async).
+        // CancellationToken propagates through EVERY async boundary (.claude/rules/20-dotnet.md BL-23).
         // Cancellation is honoured before and during blocking I/O so shutdown permits clean
         // Container Apps scale-in, and a read that outlives its caller holds a pooled connection
         // and a request thread for nothing.

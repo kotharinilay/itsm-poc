@@ -1,1 +1,1 @@
-"""The contracts verification category (constitution §Required test categories)."""
+"""The contracts verification category (.claude/rules/40-testing.md §40.8)."""

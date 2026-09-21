@@ -22,7 +22,7 @@ say.
 **Every property of :mod:`ragcore.retrieval.search` survives fusion, because fusion cannot restore
 what filtering removed.** Both legs are tenant-scoped ports taking a
 :class:`~ragcore.domain.tenancy.TenantContext` as a required, non-defaulted first argument, so
-there is no leg here that could have been queried unfiltered (constitution Principle IV). Fused
+there is no leg here that could have been queried unfiltered (A1 §4.5, A2 P03). Fused
 content is still **data, never instruction**: the fused score changes a chunk's rank and nothing
 else about it.
 """

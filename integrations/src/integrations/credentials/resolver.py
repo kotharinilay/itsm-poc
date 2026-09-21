@@ -8,7 +8,8 @@ step trail, telemetry or an audit record.
 purpose — a second path would be a second place to review.
 
 **The port is declared here rather than in `application/`, and that is the rule rather than an
-exception** (constitution Principle V). Ports belong to the consuming module, and the consumer of a
+exception** (.claude/rules/10-principles.md P-5). Ports belong to the consuming module, and the
+consumer of a
 per-organisation credential is an *adapter*. Nothing in the application layer or the API has any
 business holding one, and declaring the port there would invite exactly that.
 

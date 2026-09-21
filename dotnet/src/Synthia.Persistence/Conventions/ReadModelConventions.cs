@@ -16,7 +16,7 @@ public interface ITenantScopedRow
 }
 
 /// <summary>
-/// The standard audit columns (constitution §.NET data access, data-model.md §Conventions).
+/// The standard audit columns (.claude/rules/20-dotnet.md §20.4, data-model.md §Conventions).
 /// </summary>
 /// <remarks>
 /// <c>created_by</c> and <c>updated_by</c> apply where a principal is meaningful and are therefore

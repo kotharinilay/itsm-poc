@@ -3,7 +3,7 @@
 Mirrors ``Synthia.SharedKernel.Authorization`` in the .NET stack. The two are proven independently
 by their own tests rather than sharing code, because the deployables have no application-level
 dependency in either direction (ADR-0001) — duplication across that boundary is cheaper than a
-false shared contract (constitution Principle VI).
+false shared contract (.claude/rules/10-principles.md P-6).
 
 Imports nothing outside the standard library.
 """
@@ -20,8 +20,8 @@ class StaffRole(Enum):
 
     This is a plain :class:`~enum.Enum`, deliberately **not** ``StrEnum`` or ``IntEnum``. Both of
     those inherit an ordering from their mixin, so ``ADMINISTRATOR > TECHNICIAN``
-    would evaluate rather than raise — exactly the ranking the constitution prohibits
-    (Principle II). A plain ``Enum`` raises ``TypeError`` on ``<``, so the prohibited comparison
+    would evaluate rather than raise — exactly the ranking the identity plane prohibits
+    (A1 §6). A plain ``Enum`` raises ``TypeError`` on ``<``, so the prohibited comparison
     fails loudly at the first attempt instead of quietly returning a plausible answer.
 
     ``administrator`` does NOT imply ``technician``.

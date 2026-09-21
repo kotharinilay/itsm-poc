@@ -7,8 +7,9 @@ written, the migrations applied, and the column-scoped `GRANT UPDATE` was descri
 documents as the control behind `FR-INTEG-020` — but nothing had ever *attempted* a forbidden write
 and observed it refused. The claim rested on reading DDL.
 
-That is the distinction this module exists to close, and the constitution names it: a protection
-named as a hard failure must have a test that fails when the protection is removed. Reading a
+That is the distinction this module exists to close, and .claude/rules/40-testing.md §40.10
+names it: a protection named as a hard failure must have a test that fails when the protection
+is removed. Reading a
 `GRANT` statement proves somebody typed it. Only a refused statement proves the database agrees.
 
 **Every refusal is asserted on PostgreSQL's SQLSTATE `42501`, never on application code.** No

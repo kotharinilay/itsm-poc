@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# The Synthia Integrations Service (constitution §Containers, ADR-0007, specification §21.6).
+# The Synthia Integrations Service (.claude/rules/80-security-ops.md §80.5, ADR-0007, specification §21.6).
 #
 # THIS IMAGE IS HELD TO THE SAME LIST AS RAGCORE'S, and for the same reasons — digest-pinned in
 # production, non-root under a fixed documented UID, installed from uv.lock only, no build toolchain
@@ -85,7 +85,7 @@ FROM ${RUNTIME_BASE} AS runtime
 # separate numbers.
 RUN groupadd --system --gid 10002 synthia \
     && useradd --system --no-log-init --uid 10002 --gid 10002 --home-dir /app --shell /usr/sbin/nologin synthia \
-    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (T269, constitution §Containers). The slim base
+    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (T269, .claude/rules/80-security-ops.md §80.5). The slim base
     # ships pip, apt and dpkg; in the one container holding connector credentials, each is a way to
     # install tooling next to a vault client. Removed in the SAME layer that would otherwise keep
     # them — deleting in a later layer leaves them in the image.
@@ -128,6 +128,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).status==200 else 1)"]
 
 # Exec form, no shell. A shell-form entrypoint makes PID 1 a shell that does not forward SIGTERM,
-# so the 25-second drain the constitution requires would never reach the application and every
+# so the 25-second drain .claude/rules/80-security-ops.md §80.5 requires would never reach the application and every
 # scale-in would be a hard kill.
 ENTRYPOINT ["uvicorn", "integrations.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

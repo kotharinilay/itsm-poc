@@ -22,7 +22,7 @@ public sealed class DataAccessDisciplineTests
         // a token-derived tenant, and it is unique.
         //
         // A SECOND occurrence would not be a bootstrap. It would be a tenant-isolation defect
-        // (constitution Principle IV).
+        // (A1 §4.5, A2 P03).
         IReadOnlyList<string> files = SourceTree.ProductionFilesContaining("IgnoreQueryFilters");
 
         Assert.True(
@@ -87,7 +87,7 @@ public sealed class DataAccessDisciplineTests
     [Fact]
     public void No_distributed_lock_exists()
     {
-        // Distributed locking MUST NOT be an architectural primitive (constitution §Concurrency).
+        // Distributed locking MUST NOT be an architectural primitive (.claude/rules/20-dotnet.md BL-30).
         // It adds lock loss, lease expiry and split brain to solve a problem the database solves
         // for free, and it would put the fifteen-minute window at the mercy of a lock service.
         string[] tells = ["DistributedLock", "AcquireLock", "LeaseId", "RedLock"];
@@ -141,7 +141,7 @@ public sealed class DataAccessDisciplineTests
     [Fact]
     public void No_raw_sql_is_executed()
     {
-        // Parameterized queries only (constitution §.NET data access). LINQ parameterizes by
+        // Parameterized queries only (.claude/rules/20-dotnet.md §20.4). LINQ parameterizes by
         // construction; the raw-SQL escape hatches are where injection becomes possible again, and
         // this deployable has no query that needs one.
         string[] tells = ["FromSqlRaw", "ExecuteSqlRaw", "FromSqlInterpolated", "ExecuteSqlInterpolated"];

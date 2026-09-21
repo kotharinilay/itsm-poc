@@ -2,7 +2,7 @@
 
 **MODEL MAY PROPOSE. MODEL MAY NOT AUTHORIZE.**
 
-That sentence is a rule in the constitution (Principle III) and a test in
+That sentence is a rule in A3 §6.3 and a test in
 ``tests/governance/test_authority_boundary.py``. Here it is a *type*: a :class:`ProposedOperation`
 names an operation and its parameters and stops. It has no ``treatment`` field, no ``approved``
 flag, no ``roles`` and no ``tenant``. A model — or retrieved content, or a vendor response, or a

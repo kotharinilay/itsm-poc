@@ -145,6 +145,6 @@ def require_authority_source(source: AuthoritySource | UntrustedContent) -> Auth
         raise AuthorityAssertionError(
             f"{source} cannot grant authority. Retrieved content, fetched or vendor content, "
             "model output and chat text are data — a decision read from any of them is not a "
-            "decision (constitution Principle III, spec FR-IDENT-003, FR-IDENT-004)."
+            "decision (A3 §6.3, spec FR-IDENT-003, FR-IDENT-004)."
         )
     raise TypeError(f"{source!r} is neither an AuthoritySource nor an UntrustedContent.")

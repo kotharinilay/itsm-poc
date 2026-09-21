@@ -10,7 +10,7 @@ namespace Synthia.SharedKernel.Authorization;
 /// <para>
 /// <b>This is deliberately not an enum.</b> A C# enum is backed by an integer and therefore carries
 /// <c>&lt;</c>, <c>&gt;</c> and <see cref="IComparable"/> for free — which is exactly the ordering
-/// the constitution prohibits (Principle II). Making the type a record struct with equality and
+/// A1 §6 prohibits. Making the type a record struct with equality and
 /// nothing else means "is this role greater than that one" does not compile, rather than compiling
 /// and being caught in review, or not being caught at all.
 /// </para>

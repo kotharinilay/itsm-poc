@@ -1,6 +1,6 @@
 """Repositories. **Every query applies ``tenant_id``, and no method omits it.**
 
-This is the module the tenant-isolation rule lives or dies in (constitution Principle IV,
+This is the module the tenant-isolation rule lives or dies in (A1 §4.5, A2 P03,
 spec FR-IDENT-008). Three things make it structural rather than disciplined:
 
 1. **Every method that reads or writes tenant-owned rows takes a

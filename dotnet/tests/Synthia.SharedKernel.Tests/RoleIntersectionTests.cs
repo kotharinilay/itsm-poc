@@ -44,7 +44,7 @@ public sealed class RoleIntersectionTests
     public void Staff_role_is_not_an_enum()
     {
         // An enum is integer-backed and therefore ordered for free — exactly the ranking the
-        // constitution prohibits. If someone "simplifies" this type to an enum, this fails.
+        // identity plane prohibits (A1 §6). If someone "simplifies" this type to an enum, this fails.
         Assert.False(typeof(StaffRole).IsEnum);
     }
 

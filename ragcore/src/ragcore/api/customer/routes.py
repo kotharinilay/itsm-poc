@@ -5,7 +5,8 @@ Staff roles are not consulted on this audience and confer nothing, and that is e
 :attr:`~ragcore.domain.principal.AuthenticatedPrincipal.authorizable_roles` returning only
 ``end_user`` for a customer audience — not by any check written in this file.
 
-**Endpoints contain no business policy** (constitution §FastAPI). Each one below establishes
+**Endpoints contain no business policy** (.claude/rules/10-principles.md P-13). Each one below
+establishes
 context through ``Depends``, hands off, and shapes a response. The decisions live in
 :mod:`ragcore.governance.gate` and the application layer.
 
@@ -68,7 +69,8 @@ class ConsentRequest(ApiModel):
     """A consent decision — **the only way consent is ever recorded**.
 
     One field, an enum of two. Deliberately not a boolean: ``consent(True)`` says nothing at a
-    call site, and the constitution prohibits a boolean flag that hides behaviour.
+    call site, and .claude/rules/10-principles.md P-20 prohibits a boolean flag that
+    hides behaviour.
     """
 
     verdict: ConsentVerdict

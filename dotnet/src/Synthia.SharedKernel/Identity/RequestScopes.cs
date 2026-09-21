@@ -39,7 +39,7 @@ public enum TenantScopeKind
 /// <b>This interface is what makes "there is no unfiltered query path" structural.</b> Persistence
 /// builds a global query filter from it, so a query cannot be written that forgets the
 /// organisation — forgetting it is not a thing the API offers. Tenant isolation must not rest on a
-/// single chokepoint (constitution Principle IV), so this is one layer of several, not the only
+/// single chokepoint (A1 §4.5, A2 P03), so this is one layer of several, not the only
 /// one.
 /// </para>
 /// <para>
@@ -92,8 +92,8 @@ public interface ITenantScopeWriter : ITenantScope
 /// <summary>The correlation identifier for the unit of work currently executing.</summary>
 /// <remarks>
 /// A correlation identifier originates at the public edge and propagates through every tier,
-/// appearing on every log record, trace, notification, trigger and audit record (constitution
-/// Principle VIII). This is how a component reads it without being handed an <c>HttpContext</c>.
+/// appearing on every log record, trace, notification, trigger and audit record
+/// (.claude/rules/20-dotnet.md BL-27). This is how a component reads it without being handed an <c>HttpContext</c>.
 /// </remarks>
 public interface ICorrelationScope
 {

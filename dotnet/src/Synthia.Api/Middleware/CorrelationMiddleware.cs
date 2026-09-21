@@ -10,7 +10,7 @@ namespace Synthia.Api.Middleware;
 /// <remarks>
 /// <para>
 /// <b>Accepted only when well formed; generated when missing or invalid; echoed in the response</b>
-/// (constitution §Correlation). An arriving value is client input: it is validated, never trusted
+/// (.claude/rules/20-dotnet.md BL-27). An arriving value is client input: it is validated, never trusted
 /// for authority, and never used as a key for anything.
 /// </para>
 /// <para>
@@ -68,7 +68,7 @@ internal sealed class CorrelationMiddleware
 
         // Onto the trace as a tag and as baggage. The tag makes this request findable; the baggage
         // carries it to whatever this request talks to. Baggage crosses boundaries in cleartext, so
-        // only the explicitly allowed values go in it (constitution Principle VIII).
+        // only the explicitly allowed values go in it (.claude/rules/20-dotnet.md BL-24).
         Activity? activity = Activity.Current;
         activity?.SetTag(SynthiaTelemetry.CorrelationTag, correlationId.Value);
         activity?.SetBaggage(SynthiaTelemetry.CorrelationTag, correlationId.Value);
@@ -83,7 +83,7 @@ internal sealed class CorrelationMiddleware
 /// <summary>Log messages for correlation handling.</summary>
 /// <remarks>
 /// Source-generated. Correlation runs on every request, which makes it a high-volume path and
-/// exactly what <c>LoggerMessage</c> generation exists for (constitution §Logging).
+/// exactly what <c>LoggerMessage</c> generation exists for (.claude/rules/20-dotnet.md BL-20).
 /// </remarks>
 internal static partial class CorrelationLog
 {

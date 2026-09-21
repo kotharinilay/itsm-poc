@@ -64,7 +64,7 @@ ARG PORTAL=customer-portal
 # authorizes by numeric identity.
 RUN groupadd --system --gid 10004 synthia \
     && useradd --system --no-log-init --uid 10004 --gid 10004 --home-dir /app --shell /usr/sbin/nologin synthia \
-    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (constitution §Containers). The node image ships
+    # NO PACKAGE MANAGER IN THE PRODUCTION IMAGE (.claude/rules/80-security-ops.md §80.5). The node image ships
     # npm and corepack; this image installs nothing at runtime and has no use for either. Removed
     # in the same layer that would otherwise keep them. /var/lib/dpkg/status is KEPT, because it is
     # what an image scanner reads to inventory the OS packages.

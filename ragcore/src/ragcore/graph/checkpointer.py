@@ -1,6 +1,6 @@
 """The durable checkpoint boundary: PostgreSQL, one store, and nowhere else.
 
-**No second durable checkpoint store may exist** (constitution Principle IV, §LangGraph). This
+**No second durable checkpoint store may exist** (A2 §8.1, §LangGraph). This
 module is the entire surface through which a production graph acquires a checkpointer, so that
 rule has one place to be true and one place to be tested
 (``tests/checkpoint/test_durable_checkpointer.py``).

@@ -45,7 +45,7 @@ FIXED_NOW = datetime(2026, 9, 16, 12, 0, 0, tzinfo=UTC)
 """A fixed instant. Every clock-dependent assertion is written against this, not against 'now'."""
 
 EXECUTION_WINDOW = timedelta(minutes=15)
-"""Once granted, execution validity is fifteen minutes (constitution Principle III)."""
+"""Once granted, execution validity is fifteen minutes (A3 §8.5)."""
 
 
 class FakeClock:

@@ -89,7 +89,7 @@ caller inspects.
 
 ## Redis
 
-The semantic cache's store, and **transient only** (constitution Principle IV). It is never an
+The semantic cache's store, and **transient only** (A2 §8.1). It is never an
 authority and never a durable record: every entry carries a TTL, no sample flow reads it, and a lost
 cache costs model calls and nothing else. It is partitioned by organisation through the policy's
 `vary-by` — without that, a completion produced for one organisation could be served to another,

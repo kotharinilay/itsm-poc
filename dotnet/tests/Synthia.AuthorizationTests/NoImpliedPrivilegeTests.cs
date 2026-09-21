@@ -47,7 +47,7 @@ public sealed class NoImpliedPrivilegeTests
     public void No_role_is_comparable_to_another()
     {
         // Any implementation that sorts, ranks, compares or upgrades roles is a defect
-        // (constitution Principle II). A role type implementing IComparable is how ranking gets in:
+        // (A1 §6). A role type implementing IComparable is how ranking gets in:
         // the operators exist, someone writes >=, and seniority is suddenly real.
         Assert.False(
             typeof(StaffRole).GetInterfaces().Any(contract =>
@@ -79,7 +79,7 @@ public sealed class NoImpliedPrivilegeTests
     public void A_staff_principal_on_the_customer_audience_holds_only_the_end_user_role()
     {
         // Any person acting on a customer surface is an end user — including staff — and their
-        // staff roles MUST NOT be consulted there (constitution Principle II, spec FR-SURF-008).
+        // staff roles MUST NOT be consulted there (A1 §6, spec FR-SURF-008).
         // Enforced by the type rather than by every call site remembering it.
         Assert.True(PrincipalFactory.TryCreate(
             Guid.NewGuid().ToString("D"),

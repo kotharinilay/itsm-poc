@@ -124,10 +124,22 @@ updating it never substitutes for a gate.
 not architecture authority, not engineering baseline, not evidence of implemented behavior.
 
 The ten `speckit-*` skills were removed in Phase 12, and **no live Claude rule, skill, hook or
-setting depends on Spec Kit** (`docs/migration/phase-12-spec-kit-decoupling.md`). Source comments
-and lint messages under `apps/**` and `.github/workflows/**` still cite `constitution Principle
-VII`; those are stale pointers to rules that now live in `22-web-typescript.md`, `23-angular.md`
-and `24-electron.md`. Cite the rule files, never the constitution.
+setting depends on Spec Kit** (`docs/migration/phase-12-spec-kit-decoupling.md`).
+
+The stale `constitution` attributions in source comments, lint messages, build manifests and
+workflow headers were repointed to current authority in Phase 15
+(`docs/migration/phase-15-final-spec-kit-reconciliation.md`). They were **never** confined to
+`apps/**` and `.github/workflows/**` — that scope statement was wrong, was recorded as **B13-2**,
+and is corrected here. **Cite the rule files or the architecture documents, never the
+constitution.**
+
+Two citation groups deliberately remain, and neither is a live dependency:
+
+- the `Source: constitution#…` provenance lines in the three frontend rule files and `.claude/rules/40-testing.md`,
+  which record **migration input** under `docs/adr/0010` and `docs/adr/0011` and say in the same
+  breath that the constitution is not authority;
+- fifteen `Principle IX` citations and eight occurrences with no current home, held open as **B13-3**
+  and the Phase 15 ambiguous set pending a human decision.
 
 ## Non-negotiables
 

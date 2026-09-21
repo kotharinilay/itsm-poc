@@ -1,6 +1,6 @@
 """The result publisher and its dispatcher. **Entra authentication, and an outbox in front.**
 
-Constitution §Idempotency and messaging: each publishing deployable runs its own transactional
+.claude/rules/10-principles.md P-21: each publishing deployable runs its own transactional
 outbox, and a row becomes durable before asynchronous publication. Without that, a crash between
 "the external effect happened" and "we told RagCore" loses the only evidence it did.
 

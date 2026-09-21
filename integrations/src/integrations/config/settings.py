@@ -1,7 +1,8 @@
 """Typed configuration, validated at startup. **A name is not a value.**
 
 Every field that could carry secret material is a `*_secret_name` holding a **Key Vault secret
-name**, never the secret itself (constitution §Secrets, plan §Authentication rule 5). A settings
+name**, never the secret itself (.claude/rules/80-security-ops.md §80.3, plan §Authentication rule
+5). A settings
 type that *could* hold a credential is itself the defect: the shape is what makes the rule
 enforceable, because `build/policy/azure-identity.json` scans for the value-shaped variants and
 finds nothing to flag.
@@ -49,8 +50,9 @@ class PersistenceSettings(_Base):
     """PostgreSQL. **Managed identity, never an embedded password.**
 
     Attributes:
-        dsn: The connection string. It MUST NOT carry a password — the constitution's
-            no-credential-bearing-connection-string rule, which is the form the violation usually
+        dsn: The connection string. It MUST NOT carry a password — the
+            no-credential-bearing-connection-string rule of
+            .claude/rules/80-security-ops.md §80.3, which is the form the violation usually
             takes.
         schema_name: The schema this service owns and writes. It holds **no** write grant on
             `platform` and may update only the result columns of an integration job.
@@ -147,6 +149,6 @@ def settings() -> IntegrationsSettings:
     Raises:
         pydantic.ValidationError: When configuration is invalid. **Uncaught on purpose** — it
             propagates out of application startup and stops the process, which is what
-            "fail fast at start" means (constitution §Configuration validation).
+            "fail fast at start" means (.claude/rules/40-testing.md §40.8).
     """
     return IntegrationsSettings()

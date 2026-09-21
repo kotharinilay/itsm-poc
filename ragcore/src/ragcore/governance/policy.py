@@ -2,7 +2,7 @@
 
 Execution treatment is exactly one of ``AUTO``, ``END_USER_APPROVAL``, ``STAFF_APPROVAL`` or
 ``NOT_ALLOWED``, assigned by deterministic policy from the canonical operation catalogue
-(constitution Principle III). **The model MUST NEVER choose, influence or override it.**
+(A3 §6.3). **The model MUST NEVER choose, influence or override it.**
 
 **This is a pure function and deliberately not a port.** An injectable treatment policy is an
 interface whose implementation could consult a cache, a feature flag or — the real risk — a value

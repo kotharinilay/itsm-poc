@@ -1,7 +1,7 @@
 """The governance catalogue: the one shape a catalogue entry takes once governance can see it.
 
 **Treatment is assigned from the catalogue, never from model output** (spec FR-AGENT-004,
-constitution Principle III). :mod:`ragcore.governance.policy` makes that assignment; this module is
+A3 §6.3). :mod:`ragcore.governance.policy` makes that assignment; this module is
 what guarantees the thing it is handed really is a catalogue entry.
 
 **Why a type rather than a row.** ``OperationCatalogue.lookup`` selects columns from
@@ -137,7 +137,7 @@ class CatalogueRecord:
         """Whether a server-side read exists to verify the outcome.
 
         ``False`` means an execution of this operation can at best be ``client_attested``, and
-        **MUST NOT** be presented as confirmed resolution (constitution Principle VIII).
+        **MUST NOT** be presented as confirmed resolution (ADR-0004).
         """
         return self.verification_tool is not None
 

@@ -113,7 +113,7 @@ class TenantMapping(Audited, Attributed, Versioned, Base):
     """Binds a validated Entra tenant identifier to its platform representation.
 
     **This table is the trusted platform state a tenant binding derives from.** ``entra_tid`` is
-    the only value that may be matched against a token-derived tenant (constitution Principle I),
+    the only value that may be matched against a token-derived tenant (A1 §4.5),
     and a staff caller's own ``tid`` is the Operator tenant — **never** the customer target. A
     staff action resolves its target organisation by reading the durable platform object it
     operates on and taking that row's ``tenant_id``; it never reads one from the request. See
@@ -347,7 +347,7 @@ class WorkItem(TenantScoped, Audited, Attributed, Versioned, Base):
     **Six fields are immutable**: ``tenant_id``, ``session_id``, ``requested_by_oid``,
     ``case_reference``, ``governed_action`` and ``target`` — the last three once set. Immutability
     is enforced **at the database permission boundary**, by a trigger, not by application
-    convention (constitution Principle III, spec FR-EXEC-008). An application-side check protects
+    convention (A1 §12.2, spec FR-EXEC-008). An application-side check protects
     only the paths that remember to call it.
 
     **The claim is idempotency boundary 1** — a conditional update on ``claimed_at IS NULL``, which

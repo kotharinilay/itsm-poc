@@ -1,6 +1,6 @@
 """The composition root. **The only place a concrete adapter is constructed.**
 
-Constitution §Dependency injection: registration belongs in composition-root code, Service Locator
+.claude/rules/10-principles.md P-26: registration belongs in composition-root code, Service Locator
 is prohibited, and domain and application policy MUST NOT depend on an infrastructure
 implementation. `integrations/tests/architecture/test_layering.py` asserts that no module outside
 this one instantiates a concrete adapter — which is what makes the rule checkable rather than

@@ -11,7 +11,7 @@ The order below is the design, and each step exists because skipping it has a sp
 6. record the attempt and queue the result, atomically
 ```
 
-**This module executes; it MUST NEVER decide** (constitution Principle III). It re-verifies *facts*
+**This module executes; it MUST NEVER decide** (A3 §6.3). It re-verifies *facts*
 and originates no authorization: it assigns no treatment and performs no role intersection, and
 there is no code path here that could.
 

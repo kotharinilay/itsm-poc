@@ -1,7 +1,7 @@
 """Dependency injection at the HTTP boundary, and nowhere else.
 
 **Explicit dependency injection, with FastAPI ``Depends`` at HTTP boundaries**
-(constitution §Dependency injection). Everything below resolves from the container built in
+(.claude/rules/10-principles.md P-26). Everything below resolves from the container built in
 :mod:`ragcore.config.composition`; nothing here constructs an adapter, and no module deeper than
 this one calls ``Depends`` at all. Application services take their collaborators as constructor
 or function arguments and stay testable without a web framework.

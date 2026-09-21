@@ -17,7 +17,7 @@ namespace Synthia.Observability;
 /// </summary>
 /// <remarks>
 /// Called once, from the composition root. Nothing here holds business policy — cross-cutting
-/// concerns must not become the place a rule hides (constitution Principle VI).
+/// concerns must not become the place a rule hides (.claude/rules/10-principles.md P-8).
 /// </remarks>
 public static class ObservabilityRegistration
 {
@@ -62,7 +62,7 @@ public static class ObservabilityRegistration
             .ValidateOnStart();
 
         // W3C Trace Context, explicitly. A custom propagation header MUST NOT replace it
-        // (constitution Principle VIII), and setting this here rather than relying on the runtime
+        // (.claude/rules/40-testing.md §40.8), and setting this here rather than relying on the runtime
         // default means a later dependency cannot quietly switch the process to hierarchical ids.
         Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         Activity.ForceDefaultIdFormat = true;

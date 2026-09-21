@@ -1,7 +1,8 @@
 """The message envelope contract. **Three fields, and nothing authority-bearing.**
 
 Specification §27.2. These are the tests that would fail if the payload rule were relaxed, which is
-the bar the constitution sets for a protection named as a hard failure.
+the bar .claude/rules/40-testing.md §40.10 sets for a protection named as a hard
+failure.
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ namespace Synthia.SharedKernel.Identity;
 /// </summary>
 /// <remarks>
 /// Human identity is <c>(tid, oid)</c> and no other value is an identity key
-/// (constitution Principle I). This type exists so a <c>tid</c> cannot be passed where an
+/// (A1 §4.5). This type exists so a <c>tid</c> cannot be passed where an
 /// <c>oid</c> is expected — a mistake a pair of bare <see cref="Guid"/> parameters invites.
 /// </remarks>
 /// <param name="Value">The validated Entra tenant identifier.</param>

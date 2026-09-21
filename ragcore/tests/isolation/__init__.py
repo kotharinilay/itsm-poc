@@ -1,1 +1,1 @@
-"""The isolation verification category (constitution §Required test categories)."""
+"""The isolation verification category (.claude/rules/40-testing.md §40.8)."""

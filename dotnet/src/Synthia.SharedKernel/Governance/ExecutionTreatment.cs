@@ -6,7 +6,7 @@ namespace Synthia.SharedKernel.Governance;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The model MUST NEVER choose, influence or override this</b> (constitution Principle III).
+/// <b>The model MUST NEVER choose, influence or override this</b> (A3 §6.3).
 /// There is no <c>Unknown</c> or <c>Default</c> member: a missing treatment is not a state this
 /// type can represent, so "we could not determine the treatment, carry on" cannot be expressed.
 /// A catalogue lookup that finds nothing is a refusal, not a default.
@@ -57,7 +57,7 @@ public enum CapabilityKind
 /// </summary>
 /// <remarks>
 /// A client-reported result is a claim, not proof. The platform MUST NOT claim to know more than
-/// it does (constitution Principle VIII, ADR-0004).
+/// it does (ADR-0004).
 /// </remarks>
 public enum VerificationOutcome
 {

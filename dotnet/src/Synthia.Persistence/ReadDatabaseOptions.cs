@@ -43,7 +43,7 @@ public sealed class ReadDatabaseOptions
     /// <remarks>
     /// <b>Off everywhere but a developer machine.</b> Parameter values on a tenant-scoped query are
     /// customer data, and logs and telemetry MUST NOT leak sensitive customer payloads or any
-    /// cross-tenant information (constitution Principle VIII).
+    /// cross-tenant information (.claude/rules/20-dotnet.md BL-24).
     /// </remarks>
     public bool EnableSensitiveDataLogging { get; set; }
 }

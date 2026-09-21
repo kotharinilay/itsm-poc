@@ -1,8 +1,8 @@
 """Correlation. **One identifier, the whole journey, across three deployables.**
 
 A correlation identifier originates at the public edge and propagates through every tier,
-appearing on every log record, trace, message, execution record and audit record (constitution
-Principle VIII).
+appearing on every log record, trace, message, execution record and audit record
+(A2 P10).
 For this service the journey is longer than a request: it spans the APIM hop, the command queue, the
 external call, the result queue and back into RagCore. `FR-DEMO-027` makes recovering it end to end
 an acceptance criterion.

@@ -2,7 +2,7 @@
 
 ``api → application → domain``. Adapters implement ports declared by their consumer. Dependency
 direction points inward, toward business and application policy; infrastructure is an outer
-implementation detail (constitution Principle V).
+implementation detail (.claude/rules/10-principles.md P-5).
 
 These are static AST checks rather than import-time checks, deliberately: importing a module to
 inspect it executes it, and a violation that only appears under a conditional import would be

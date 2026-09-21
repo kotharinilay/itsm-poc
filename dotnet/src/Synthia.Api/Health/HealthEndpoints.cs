@@ -28,7 +28,7 @@ internal static class HealthEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        // Process-only, with no dependency checks (constitution §Health). If this responds, the
+        // Process-only, with no dependency checks (.claude/rules/20-dotnet.md BL-25). If this responds, the
         // process is running and the pipeline is intact; that is the whole claim.
         app.MapHealthChecks("/health/live", new()
         {

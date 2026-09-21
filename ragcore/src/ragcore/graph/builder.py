@@ -18,7 +18,7 @@ Node         Kind                             Who may answer
 **The shape of the graph is the control.** There is exactly one edge into ``execute``, and it
 comes from :func:`~ragcore.graph.nodes.governance.route_after_govern`. Nothing routes from
 ``retrieve`` or ``propose`` to ``execute``, so a side-effecting capability is not reachable from
-an unconstrained agent loop (constitution Principle III) — not because a check forbids it, but
+an unconstrained agent loop (A3 §6.3) — not because a check forbids it, but
 because no edge goes there.
 
 The two suspension nodes route back through ``govern`` rather than forward to ``execute``. That

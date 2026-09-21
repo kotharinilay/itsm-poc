@@ -37,8 +37,8 @@ public static class SynthiaTelemetry
     /// The only values permitted in W3C baggage.
     /// </summary>
     /// <remarks>
-    /// <b>Baggage crosses process and organisation boundaries in cleartext.</b> The constitution
-    /// allows only explicitly permitted values there — correlation id, and tenant where permitted
+    /// <b>Baggage crosses process and organisation boundaries in cleartext.</b> .claude/rules/20-dotnet.md
+    /// BL-24 allows only explicitly permitted values there — correlation id, and tenant where permitted
     /// (Principle VIII). Anything else is a leak waiting for a downstream system to log it, so the
     /// allowed set is written down rather than left to judgement at each call site.
     /// </remarks>

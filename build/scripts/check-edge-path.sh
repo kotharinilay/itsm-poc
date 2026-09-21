@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Edge path check (constitution Principle I, spec 10.3/13.4, build/policy/edge-trust.json).
+# Edge path check (A1 §4.5, spec 10.3/13.4, build/policy/edge-trust.json).
 #
 # All public API traffic traverses Front Door + WAF, then APIM, then the backend. APIM is the
 # identity/trust boundary and the only place a token is validated. This script guards the parts of
@@ -221,7 +221,7 @@ fi
 if [ "$violations" -gt 0 ]; then
   printf '\nEdge path check FAILED with %d violation(s).\n' "$violations"
   echo "All public API traffic traverses Front Door + WAF, then APIM, then the backend, and APIM is"
-  echo "the only place identity is derived (constitution Principle I). A backend reachable around"
+  echo "the only place identity is derived (A1 §4.5). A backend reachable around"
   echo "that path is a backend whose identity headers anybody can write."
   echo ""
   echo "The rules are declared once, in $POLICY. If one of them is genuinely wrong, amend that file"

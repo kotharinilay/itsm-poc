@@ -33,7 +33,7 @@ public sealed class TenantScopeTests
     {
         // The API gives a caller holding a client-supplied tenant identifier nowhere to go, which
         // is the intended outcome. Three legitimate provenances, three factory methods, each named
-        // after the provenance it claims (constitution Principle I).
+        // after the provenance it claims (A1 §4.5).
         string[] factories = typeof(TenantAdmission)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(method => method.DeclaringType == typeof(TenantAdmission))

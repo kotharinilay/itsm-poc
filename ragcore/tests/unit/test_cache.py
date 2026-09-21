@@ -1,4 +1,4 @@
-"""Redis is **transient only**: never an authority, never a durable record (constitution P-IV).
+"""Redis is **transient only**: never an authority, never a durable record (A2 §8.1).
 
 The rule is enforced by the type rather than by the convention, and these assert the type. Each one
 corresponds to a way a cache turns into a store when nobody is watching:

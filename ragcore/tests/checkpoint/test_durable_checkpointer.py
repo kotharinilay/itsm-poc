@@ -1,6 +1,6 @@
 """One durable checkpoint store, in PostgreSQL, and no second one anywhere.
 
-**No second durable checkpoint store may exist** (constitution Principle IV, §LangGraph). That is
+**No second durable checkpoint store may exist** (A2 §8.1, §LangGraph). That is
 a rule about the shape of the codebase, so these are structural tests: they read the source
 rather than open a connection, and they run in CI without a database.
 

@@ -1,7 +1,8 @@
 """Every named boundary exists, and each one is where the plan says it is.
 
 Boundaries are mandatory even when responsibilities deploy together, and MUST NOT be collapsed
-for implementation convenience (constitution Principle V). A boundary that exists only in a
+for implementation convenience (.claude/rules/10-principles.md P-24). A boundary that exists only in
+a
 diagram erodes; this file is what makes each one a fact about the tree.
 
 The manifest below is the union of the plan's ``ragcore/`` structure and the twelve bounded

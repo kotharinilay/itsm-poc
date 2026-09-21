@@ -17,7 +17,7 @@ namespace Synthia.ArchitectureTests;
 /// That claim is stronger than an interface nobody implements, and honest in a way a port would not
 /// be — the behaviour lives in RagCore, which is written in Python and can never implement a .NET
 /// abstraction. Declaring a port for it would be a speculative abstraction with no first provider,
-/// let alone a second (constitution Principle VI).
+/// let alone a second (.claude/rules/10-principles.md P-8).
 /// </para>
 /// </remarks>
 public sealed class BoundaryOwnershipTests
@@ -75,7 +75,7 @@ public sealed class BoundaryOwnershipTests
     public void No_type_suggests_a_direct_model_call()
     {
         // No module holds a provider endpoint outside the model adapter, and that adapter is in
-        // RagCore (constitution §Model access). Model access routes exclusively through the AI
+        // RagCore (A2 §9). Model access routes exclusively through the AI
         // Gateway, from the other deployable.
         AssertNoTypeNamed("Completion");
         AssertNoTypeNamed("Embedding");
@@ -85,7 +85,7 @@ public sealed class BoundaryOwnershipTests
     [Fact]
     public void The_key_vault_boundary_is_consumed_as_infrastructure_and_nothing_more()
     {
-        // Key Vault is the sole source of secret material (constitution Principle IV), reached
+        // Key Vault is the sole source of secret material (A2 P09), reached
         // through managed identity as a configuration source. That is infrastructure, not an
         // application dependency — so it appears in the composition root and nowhere else.
         PlatformBoundary vault = PlatformBoundaries.All.Single(b => b.Name == PlatformBoundaries.KeyVault);

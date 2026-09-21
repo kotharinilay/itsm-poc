@@ -2,7 +2,7 @@
 
 Three properties, each enforced structurally rather than remembered.
 
-**1. The tenant filter is not optional and no unfiltered path exists** (constitution Principle IV,
+**1. The tenant filter is not optional and no unfiltered path exists** (A1 §4.5, A2 P03,
 spec FR-IDENT-008, FR-IDENT-009). :meth:`AzureAiSearchRetrieval.search` takes a
 :class:`~ragcore.domain.tenancy.TenantContext` as a required, non-defaulted parameter, and the
 filter expression is built by :func:`tenant_filter` from that context alone — it is not a parameter,

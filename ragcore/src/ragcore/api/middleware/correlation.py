@@ -29,8 +29,8 @@ correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
 
 A :class:`~contextvars.ContextVar` rather than a module global: context variables are per-task
 and are copied into tasks a request spawns, so concurrent requests cannot read each other's
-value. A module global here would be exactly the "no global mutable state" the constitution
-prohibits, and would mis-attribute log lines under load.
+value. A module global here would be exactly the "no global mutable state"
+.claude/rules/10-principles.md P-28 prohibits, and would mis-attribute log lines under load.
 """
 
 

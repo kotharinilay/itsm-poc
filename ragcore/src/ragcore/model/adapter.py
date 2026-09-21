@@ -13,7 +13,7 @@ the callers that remembered. What it does apply is the one rule the gateway cann
 organisation on the wire is the one from trusted context, so a model call is always metered against
 the organisation whose work it serves.
 
-**The output is a proposal, never an authorization** (constitution Principle III). Nothing returned
+**The output is a proposal, never an authorization** (A3 §6.3). Nothing returned
 here is read as a treatment, a role or a destination, and the paths that would allow it do not
 exist — governance reads the catalogue, and an outbound destination is never derived from model
 output (spec FR-EXT-018).

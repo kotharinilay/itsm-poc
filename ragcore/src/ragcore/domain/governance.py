@@ -8,7 +8,7 @@ from enum import Enum
 class ExecutionTreatment(Enum):
     """How an operation may proceed. Exactly one of four.
 
-    **The model MUST NEVER choose, influence or override this** (constitution Principle III).
+    **The model MUST NEVER choose, influence or override this** (A3 §6.3).
     There is deliberately no ``UNKNOWN`` member: a missing treatment is not a state this type
     can represent, so "we could not determine the treatment, carry on" cannot be expressed. A
     catalogue lookup that finds nothing is a refusal, not a default.
@@ -142,7 +142,7 @@ class VerificationOutcome(Enum):
     """What the platform actually knows about an execution's outcome.
 
     A client-reported result is a claim, not proof. The platform MUST NOT claim to know more
-    than it does (constitution Principle VIII, ADR-0004).
+    than it does (ADR-0004).
     """
 
     SERVER_CONFIRMED = "server_confirmed"

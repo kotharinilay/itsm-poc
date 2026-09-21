@@ -78,7 +78,7 @@
         "type": "object"
       },
       "VerificationOutcome": {
-        "description": "What the platform actually knows about an execution's outcome.\n\nA client-reported result is a claim, not proof. The platform MUST NOT claim to know more\nthan it does (constitution Principle VIII, ADR-0004).",
+        "description": "What the platform actually knows about an execution's outcome.\n\nA client-reported result is a claim, not proof. The platform MUST NOT claim to know more\nthan it does (ADR-0004).",
         "enum": [
           "server_confirmed",
           "client_attested",

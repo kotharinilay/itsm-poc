@@ -77,7 +77,7 @@
   "authorityPositions": {
     "$comment": [
       "WHERE derivedAuthority NAMES ARE FORBIDDEN, AND WHY IT IS A POSITION RULE RATHER THAN A NAME",
-      "RULE. The platform derives tenant, roles and audience and never accepts them (constitution P-I,",
+      "RULE. The platform derives tenant, roles and audience and never accepts them (A1 §4.5,",
       "contracts §README rule 1). What must not exist is a way for a client to ASSERT one — a request",
       "parameter or a request-body field. Publishing one advertises exactly what the platform refuses,",
       "and a client that sent it would get a silent no-op rather than an error, which is the worst of",

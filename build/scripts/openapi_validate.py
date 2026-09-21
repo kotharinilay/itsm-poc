@@ -19,7 +19,7 @@ Four checks, each answering a question a reviewer would otherwise be asked to an
 
 ``authority``
     Tenant, roles and audience never appear where a **client can supply them** — as a parameter or
-    in a request body (constitution P-I, contracts §README rule 1). They are permitted in a
+    in a request body (A1 §4.5, contracts §README rule 1). They are permitted in a
     response, which is the organisation a row belongs to being reported back to a caller already
     entitled to it. The one narrowing exception is named in the policy file and scoped to the staff
     documents.

@@ -1,6 +1,7 @@
 """Cancellation-safety helpers.
 
-**``asyncio.CancelledError`` MUST NOT be swallowed** (constitution §Python). It is not an error
+**``asyncio.CancelledError`` MUST NOT be swallowed** (.claude/rules/21-python.md §21.1). It is not
+an error
 condition; it is the runtime telling a coroutine that its result is no longer wanted. A
 coroutine that catches it and carries on has turned a cancelled HTTP request into work the
 platform keeps doing, holding a database connection, a Service Bus lease or an outbound call

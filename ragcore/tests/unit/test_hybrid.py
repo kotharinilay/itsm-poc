@@ -170,7 +170,7 @@ class TestTheTenantScopeSurvives:
     async def test_no_search_signature_omits_the_organisation(self) -> None:
         """Required and non-defaulted, on the fused port as on each leg.
 
-        A code path able to issue an unfiltered query MUST NOT exist (constitution Principle IV),
+        A code path able to issue an unfiltered query MUST NOT exist (A1 §4.5, A2 P03),
         and a parameter with a default would be one.
         """
         import inspect

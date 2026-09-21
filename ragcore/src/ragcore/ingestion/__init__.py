@@ -2,7 +2,7 @@
 
 Acquisition, normalisation, chunking, embedding, indexing.
 
-**The index it builds is derived, never authoritative** (constitution Principle IV). Azure AI
+**The index it builds is derived, never authoritative** (A2 §8.1). Azure AI
 Search holds a representation of knowledge that exists elsewhere; a lost index is rebuilt by
 re-running ingestion rather than restored from backup, and nothing reads business truth from it.
 

@@ -9,8 +9,8 @@ namespace Synthia.Api.Querying;
 /// Binds <c>?limit=</c>, <c>?cursor=</c> and <c>?sort=</c> into a validated page request.
 /// </summary>
 /// <remarks>
-/// <b>Parse external input into precise internal types at the boundary</b> (constitution
-/// Principle VI). Past this point a read model receives a <see cref="KeysetRequest"/> whose sort
+/// <b>Parse external input into precise internal types at the boundary</b>
+/// (.claude/rules/10-principles.md P-20). Past this point a read model receives a <see cref="KeysetRequest"/> whose sort
 /// field is known to be whitelisted and whose cursor is known to be readable — it has no
 /// validation left to do and no way to skip any.
 /// </remarks>

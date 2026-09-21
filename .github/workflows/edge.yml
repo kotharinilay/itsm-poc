@@ -1,7 +1,7 @@
 name: edge
 
 # The edge trust boundary: Front Door + WAF -> APIM -> backend, with APIM as the identity/trust
-# boundary (constitution Principle I, spec 10.3/13.4).
+# boundary (A1 §4.5, spec 10.3/13.4).
 #
 # WHY THIS IS A SEPARATE, REQUIRED WORKFLOW. Most of this boundary lives in files no compiler reads
 # - an APIM policy, a Front Door definition, two ingress manifests - and a change touching only

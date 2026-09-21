@@ -9,7 +9,7 @@ namespace Synthia.Api.Errors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Internal exception detail MUST NEVER reach a client</b> (constitution §Validation and
+/// <b>Internal exception detail MUST NEVER reach a client</b> (.claude/rules/20-dotnet.md BL-18
 /// errors). The exception is logged in full, with the correlation identifier; the client receives a
 /// problem type, a title, and that identifier. That pairing is the whole design — the client can
 /// report a problem precisely without being told anything about the inside of the process.
@@ -17,7 +17,7 @@ namespace Synthia.Api.Errors;
 /// <para>
 /// Note what is absent: no <c>switch</c> on exception type mapping internal failures onto helpful
 /// status codes. Expected outcomes are Result-shaped and handled at the endpoint; anything
-/// reaching here is genuinely exceptional and a 500 is the honest answer (constitution §Validation
+/// reaching here is genuinely exceptional and a 500 is the honest answer (.claude/rules/20-dotnet.md BL-18
 /// and errors).
 /// </para>
 /// </remarks>

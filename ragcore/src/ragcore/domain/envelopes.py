@@ -123,7 +123,8 @@ class IntegrationCommandEnvelope:
 
     **The mirror of this type lives in the Integrations Service**
     (``integrations.messaging.envelope.MessageEnvelope``) and the duplication is deliberate
-    (constitution Principle VI). Two deployables that shared this class would share a package, and
+    (.claude/rules/10-principles.md P-6). Two deployables that shared this class would share a
+    package, and
     the wire contract — three named fields — is cheap enough to state twice and expensive enough to
     couple over. Each side refuses what it does not recognise, which is what makes the contract hold
     without a shared library to enforce it.

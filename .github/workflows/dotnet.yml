@@ -1,6 +1,6 @@
 name: dotnet
 
-# Constitution §Quality gate: build, tests, format, analysis all pass or the change does not merge.
+# .claude/rules/40-testing.md §40.6: build, tests, format, analysis all pass or the change does not merge.
 on:
   push:
     branches: [main]

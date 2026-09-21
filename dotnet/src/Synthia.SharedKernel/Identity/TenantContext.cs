@@ -40,8 +40,8 @@ public enum TenantSource
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Tenant context MUST NEVER be accepted from an untrusted client field</b> (constitution
-/// Principle I). There are exactly three legitimate provenances, and they are the three members of
+/// <b>Tenant context MUST NEVER be accepted from an untrusted client field</b> (A1
+/// §4.5). There are exactly three legitimate provenances, and they are the three members of
 /// <see cref="TenantSource"/>:
 /// </para>
 /// <list type="bullet">

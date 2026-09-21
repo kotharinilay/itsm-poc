@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Constitution §.NET baseline. These settings are non-negotiable and apply to EVERY project,
+    .claude/rules/20-dotnet.md §20.1. These settings are non-negotiable and apply to EVERY project,
     including test projects — "identical strictness for test projects" is explicit.
   -->
 
@@ -31,7 +31,7 @@
     -->
     <InvariantGlobalization>true</InvariantGlobalization>
 
-    <!-- CA2016: forward CancellationToken. Constitution requires propagation at EVERY async
+    <!-- CA2016: forward CancellationToken. .claude/rules/20-dotnet.md BL-23 requires propagation at EVERY async
          boundary; promoting it to an error is what makes that mechanical rather than reviewed. -->
     <WarningsNotAsErrors />
     <NoWarn>$(NoWarn);CS1591</NoWarn>

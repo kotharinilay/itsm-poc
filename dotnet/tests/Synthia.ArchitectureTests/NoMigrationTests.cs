@@ -14,7 +14,8 @@ namespace Synthia.ArchitectureTests;
 /// migration; this side holds <c>SELECT</c> on published views and nothing else.
 /// </para>
 /// <para>
-/// The constitution records the general rule — EF migrations run in CI and deployment, never at
+/// .claude/rules/50-database.md §50.7 records the general rule — migrations run in CI and
+/// deployment, never at
 /// startup — and records that <b>it has no current application in this platform</b>. If .NET is
 /// ever intended to own schema, ADR-0001 and ADR-0003 must be amended before these tests are
 /// changed, not afterwards.
@@ -151,7 +152,7 @@ public sealed class NoMigrationTests
     [Fact]
     public void The_read_context_tracks_nothing_by_default()
     {
-        // AsNoTracking is the default rather than a per-query decision (constitution §.NET data
+        // AsNoTracking is the default rather than a per-query decision (.claude/rules/20-dotnet.md §20.4
         // access). Nothing is ever written back, so a change tracker would be pure cost — and a
         // tracked read model is an invitation to try.
         using SynthiaReadContext context = ReadContextFactory.Create();

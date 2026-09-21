@@ -21,7 +21,7 @@ retry landing twice.
 updated in place could not answer "what did we actually try", which is the question an execution
 record exists for.
 
-**Its own outbox** (constitution §Idempotency and messaging). A result row becomes durable in the
+**Its own outbox** (.claude/rules/10-principles.md P-21). A result row becomes durable in the
 same transaction as the execution record, and a dispatcher publishes it afterwards. Without that, a
 crash between "the external effect happened" and "we told RagCore" loses the only evidence it did.
 """

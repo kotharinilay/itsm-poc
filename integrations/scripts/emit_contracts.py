@@ -22,10 +22,11 @@ produced a file named after the flag while the real document went unwritten. The
 downstream then diffed a directory against itself and passed. `--out` is `required` here for the
 same reason it is there: a default output path is a path CI can take by accident.
 
-**This module does NOT re-check disclosure**, and the omission is deliberate (constitution
-Principle VI). `build/scripts/openapi_validate.py` is the one place the publishability policy is
-expressed, it runs over the emitted tree in CI, and a second implementation here would be a second
-answer to "may this be published" — with only one of the two ever exercised.
+**This module does NOT re-check disclosure**, and the omission is deliberate
+(.claude/rules/10-principles.md P-6). `build/scripts/openapi_validate.py` is the one place the
+publishability policy is expressed, it runs over the emitted tree in CI, and a second
+implementation here would be a second answer to "may this be published" — with only one of the two
+ever exercised.
 """
 
 from __future__ import annotations

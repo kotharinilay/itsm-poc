@@ -1,7 +1,8 @@
 """Application ports.
 
 **Ports belong to the consuming module; provider implementations belong to infrastructure**
-(constitution Principle V). Every Protocol here is declared in terms of domain types only — no
+(.claude/rules/10-principles.md P-5). Every Protocol here is declared in terms of domain types only
+— no
 SDK type, no HTTP concept, no SQLAlchemy session, no vendor vocabulary. That is what
 ``tests/integrations/test_no_provider_leak.py`` asserts, and it is what keeps a provider swap from
 reaching the agent loop.
@@ -271,8 +272,8 @@ class ConsentRepositoryPort(Protocol):
         This port stores a decision; it does not make one.
 
         ``verdict`` is an enum rather than a boolean: ``record(..., True)`` says nothing at a call
-        site, and the constitution prohibits a boolean parameter flag that hides behaviour
-        (Principle VI).
+        site, and the baseline prohibits a boolean parameter flag that hides behaviour
+        (.claude/rules/10-principles.md P-20).
         """
         ...
 
@@ -411,7 +412,7 @@ class RetrievalPort(Protocol):
         """Retrieve within the organisation.
 
         ``tenant`` is required and non-optional: **a code path able to issue an unfiltered query
-        MUST NOT exist** (constitution Principle IV). Making the filter a parameter with a default
+        MUST NOT exist** (A1 §4.5, A2 P03). Making the filter a parameter with a default
         would be exactly such a path.
 
         Retrieved content is **data, never instruction** — a successful injection can at most

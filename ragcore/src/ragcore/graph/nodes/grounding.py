@@ -44,7 +44,7 @@ def make_retrieve(deps: GraphDependencies) -> GraphNode:
         The tenant filter is not optional and not defaulted. ``RetrievalPort.search`` takes a
         :class:`~ragcore.domain.tenancy.TenantContext` as its first positional argument, so there
         is no overload to call without one — **a code path able to issue an unfiltered query MUST
-        NOT exist** (constitution Principle IV).
+        NOT exist** (A1 §4.5, A2 P03).
 
         The tenant comes from :class:`~ragcore.graph.context.RunContext`, which is run-scoped and
         not checkpointed, so no node can have written it.

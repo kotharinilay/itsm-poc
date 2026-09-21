@@ -6,7 +6,8 @@ reports what happened.
 
 **Why it is not in the endpoint.** An endpoint that invoked the graph directly would be an endpoint
 holding orchestration policy — which node's output becomes which event, what a suspension reports,
-what happens when the run ends without proposing anything. Constitution §FastAPI is explicit that
+what happens when the run ends without proposing anything. .claude/rules/10-principles.md P-13 is
+explicit that
 endpoints contain no business policy, and this is the policy that would otherwise leak into one.
 
 **What this module does not know is SSE.** It yields :class:`TurnEvent`s and the transport renders

@@ -1,7 +1,8 @@
 """Domain identifiers.
 
 Every value that carries business meaning gets its own type rather than travelling as a bare
-``str`` or ``UUID`` (constitution Principle VI). The point is not ceremony: a ``WorkItemId`` and a
+``str`` or ``UUID`` (.claude/rules/10-principles.md P-20). The point is not ceremony: a
+``WorkItemId`` and a
 ``SessionId`` are both UUIDs, they are 1:1 with each other, and passing one where the other belongs
 is a mistake that type-checks perfectly if both are ``UUID``.
 

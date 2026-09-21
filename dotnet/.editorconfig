@@ -1,4 +1,4 @@
-# Constitution §.NET baseline — IDE0055 (formatting) and IDE1006 (naming) are errors, not
+# .claude/rules/20-dotnet.md §20.1 — IDE0055 (formatting) and IDE1006 (naming) are errors, not
 # suggestions. `dotnet format --verify-no-changes` is a merge gate, so a formatting drift fails CI.
 
 root = true
@@ -76,13 +76,14 @@ dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
 dotnet_style_qualification_for_field = false:warning
 dotnet_style_qualification_for_property = false:warning
 
-#### Banned patterns the constitution names explicitly ####
+#### Banned patterns .claude/rules/20-dotnet.md names explicitly ####
 # Enforced properly by architecture tests (T034); the analyzer severities below catch the
 # common cases at build time so the feedback is immediate rather than at test time.
 
 # CA2007 — ConfigureAwait. Not required in ASP.NET Core; off deliberately, not by oversight.
 dotnet_diagnostic.CA2007.severity = none
-# CA2016 — forward CancellationToken. Constitution requires propagation at EVERY async boundary.
+# CA2016 — forward CancellationToken. .claude/rules/20-dotnet.md BL-23 requires propagation at
+# EVERY async boundary.
 dotnet_diagnostic.CA2016.severity = error
 # CA1849 — call async methods in an async context (catches .Result and .Wait()).
 dotnet_diagnostic.CA1849.severity = error
@@ -94,7 +95,7 @@ dotnet_diagnostic.CA1062.severity = warning
 dotnet_diagnostic.CA1848.severity = suggestion
 
 [*.{cs}]
-# Test projects keep identical strictness (constitution §.NET baseline), so no relaxations here.
+# Test projects keep identical strictness (.claude/rules/20-dotnet.md §20.1), so no relaxations here.
 
 [tests/**/*.cs]
 # CA1707 — underscores in member names. Test method names read as sentences; this is the one

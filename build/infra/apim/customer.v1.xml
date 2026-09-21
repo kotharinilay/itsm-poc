@@ -7,7 +7,7 @@
 
   THE ROLE ON THIS AUDIENCE IS ALWAYS end_user, and that is the whole point of a separate policy
   per audience. Any person acting on a customer surface is an end user - including staff - and
-  their staff roles MUST NOT be consulted here (constitution Principle II). There is deliberately
+  their staff roles MUST NOT be consulted here (A1 §6). There is deliberately
   no code path below that reads a role claim, so a staff member cannot promote themselves by
   arriving here with a token that happens to carry one.
 -->
@@ -18,7 +18,7 @@
     <!--
       Multi-tenant: the customer application registration accepts any Entra tenant, and admission
       is decided later by the platform tenant registry. AUTHENTICATION IS NOT AUTHORIZATION
-      (constitution Principle I) - a valid token from an unregistered organisation is a valid
+      (A1 §4.5) - a valid token from an unregistered organisation is a valid
       token, and the backend refuses it on registry state, not here. The gateway holds no tenant
       state (spec 11.1); a tid allow-list here was considered and rejected for that reason.
     -->
@@ -48,7 +48,7 @@
     </validate-azure-ad-token>
 
     <!--
-      (tid, oid) and nothing else is an identity key (constitution Principle I). email, upn and
+      (tid, oid) and nothing else is an identity key (A1 §4.5). email, upn and
       preferred_username are deliberately not read: they are user-supplied, mutable, and reusable
       after an account is deleted.
     -->

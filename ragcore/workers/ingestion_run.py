@@ -1,9 +1,10 @@
 """Opens an ingestion run and records its watermark and terminal state.
 
 **No acquisition, no chunking, no embedding.** This worker manages the *run record* and nothing
-else (tasks T100, constitution Principle IX). The twelfth bounded context exists as a process
+else (`.claude/rules/10-principles.md` P-8, H-1). The twelfth bounded context exists as a process
 boundary and a durable record of what has been ingested; inventing the acquisition behaviour before
-a source has been specified would be product the specification has not asked for.
+a source has been specified would be speculative capability no requirement needs, reported as
+though it were real.
 
 **Runs are idempotent** (research R-021). Re-running from a watermark MUST NOT duplicate documents,
 which is why the run record holds a resume point rather than a cursor into a stream: a crashed run
@@ -119,8 +120,7 @@ def main() -> None:
     """
     raise NotImplementedError(
         "the run record is implemented; acquisition is deliberately not scaffolded, and the "
-        "worker's process wiring lands with the other workers — see "
-        "specs/001-platform-scaffold/tasks.md"
+        "worker's process wiring lands with the other workers."
     )
 
 

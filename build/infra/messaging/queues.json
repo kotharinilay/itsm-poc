@@ -2,8 +2,8 @@
   "$comment": [
     "SERVICE BUS QUEUE AND ROLE REGISTRY. What the trigger contract could not say.",
     "",
-    "specs/001-platform-scaffold/contracts/triggers.md defines the MESSAGES — their kinds, their",
-    "closed field sets, what they do and do not carry, and the consumer's obligations. It cannot say",
+    "build/contracts/** defines the MESSAGES — their kinds, their closed field sets, what they do",
+    "and do not carry, and the consumer's obligations. It cannot say",
     "which queues exist, what their transport settings are, or which identity may send on which one.",
     "Until this file existed those lived only in role scopes inside managed-identities.json, which",
     "named queues nothing declared.",

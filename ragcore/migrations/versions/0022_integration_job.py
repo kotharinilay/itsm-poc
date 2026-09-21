@@ -17,7 +17,8 @@ The durable job record provides the instruction, the authority and the tenant co
 in `platform` rather than in `integration`. The Integrations Service may write the four `result_*`
 columns and nothing else. It MUST NOT be able to alter `catalogue_id`, `catalogue_version`,
 `parameters` or `tenant_id` — a service that could rewrite its own instruction could execute an
-operation other than the one governance authorized, which is a Principle VIII hard failure.
+operation other than the one governance authorized, which is a hard failure
+(`.claude/rules/80-security-ops.md` §80.3).
 
 **Why a grant rather than a trigger or application code.** Application code is one refactor from not
 running. A trigger would work but states the rule as a procedure somebody can disable; a grant states

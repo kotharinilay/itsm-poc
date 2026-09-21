@@ -12,10 +12,12 @@ Autonomous ITSM agent platform (Synoptek, multi-tenant, single deployment). Repo
 - `docs/adr/` — MADR ADRs. Architecture vs governance conflict → stop, write ADR.
 - Root `principles.yaml`, `dotnet*.yaml`, `python*.yaml` — the packs `.claude/rules/` was migrated from; the rule files are the operative statement.
 
-**NOT authority** (history, pending a later retirement phase): `Synthia-Platform-Specification.md`,
-`.specify/**` (the retired Spec Kit constitution), `specs/**`, `.serena/**` including this memory.
-The frontend rules the retired Spec Kit constitution once held alone are now `.claude/rules/{22-web-typescript,23-angular,24-electron}.md`
-(`docs/adr/0010-frontend-engineering-baseline.md`).
+**NOT authority** (history): `Synthia-Platform-Specification.md`, `.serena/**` including this memory.
+`.specify/**` and `specs/**` were **deleted in Phase 16** and exist only in git history — do not cite them.
+The requirement text the retired constitution once held alone was migrated before deletion:
+frontend → `.claude/rules/{22-web-typescript,23-angular,24-electron}.md` (`docs/adr/0010`);
+testing → `.claude/rules/40-testing.md` §40.8-§40.10 (`docs/adr/0011`);
+implementation honesty and reference fixtures → `.claude/rules/10-principles.md` §10.7 H-1/H-2 (`docs/adr/0012`).
 
 ## Deployables (no app-level dependency between any two, either direction)
 - `ragcore/` — Python. Orchestration, LangGraph, governance, ALL writes, ALL Alembic migrations. See `mem:ragcore/core`.
@@ -35,6 +37,6 @@ The frontend rules the retired Spec Kit constitution once held alone are now `.c
 - `build/` — Dockerfiles (`build/docker`), APIM/infra policy, `build/scripts` (dev + guard scripts), contracts.
 - `.github/workflows/` — one workflow per tree plus boundaries/contracts/migrations/security/edge.
 - `build/contracts/` — the generated OpenAPI contracts, gated by `.github/workflows/contracts.yml`. Contracts are code-first (`.claude/rules/20-dotnet.md` BL-6).
-- `.specify/`, `specs/` — retired Spec Kit trees. History only; the `speckit-*` skills were removed in Phase 12.
+- `.specify/`, `specs/` — **deleted in Phase 16**. The `speckit-*` skills were removed in Phase 12.
 
 Related: `mem:tech_stack`, `mem:conventions`, `mem:suggested_commands`, `mem:task_completion`.

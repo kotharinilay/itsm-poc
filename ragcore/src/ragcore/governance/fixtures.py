@@ -1,8 +1,9 @@
 """The four inert reference operations. **Scaffold fixtures, never product capability.**
 
-`FR-SCOPE-004` asks for one reference operation per execution treatment, so the catalogue is
+`H-2` permits inert reference operations so governance paths are exercisable before a real
+capability is defined. One per execution treatment, so the catalogue is
 populated and deterministic treatment classification is *exercisable* before any use case exists.
-`FR-SCOPE-006` and `FR-SCOPE-007` say what they may never become.
+`H-2` also says what they may never become.
 
 **What "inert" means here, precisely.** Not "not wired up yet" — that would be a fixture waiting to
 become real. These four have no external system, no command that reaches one, and no verification
@@ -23,10 +24,11 @@ rows are *installed*, never what a row *means*. No treatment, role or entitlemen
 environment, because a control that behaves differently in production is a control nobody has
 exercised (see ``config/settings.py``).
 
-**And they are never one of UC-01..UC-12.** Every identifier below carries
+**And they are never a real defined capability.** Every identifier below carries
 :data:`REFERENCE_PREFIX`, every record carries ``is_reference_fixture=True``, and
 ``tests/governance/test_fixtures_excluded.py`` asserts both — because a fixture quietly promoted to
-a use case is the specific way a scaffold stops being honest (constitution Principle IX).
+a real capability is the specific way this stops being honest
+(`.claude/rules/10-principles.md` H-2).
 """
 
 from __future__ import annotations
@@ -53,7 +55,7 @@ PRODUCTION_ENVIRONMENT: Final = "production"
 class ReferenceFixtureInProductionError(RuntimeError):
     """Something asked for the scaffold fixtures in a production environment.
 
-    `FR-SCOPE-006` excludes them from production configuration. Raised rather than returning an
+    `H-2` excludes them from production configuration. Raised rather than returning an
     empty catalogue: a caller that silently received nothing would install nothing and report
     success, and the next person would have to work out whether the fixtures were excluded or the
     seeding step was broken.
@@ -113,8 +115,8 @@ def _fixture(
         content_hash=_content_hash(commands),
         # NOT AN OVERSIGHT. Verification is a server-side read against the real state an operation
         # changed, and these change none. Leaving a tool name here would claim a confirmation the
-        # platform could not perform, which is the failure Principle VIII names: the platform MUST
-        # NOT claim to know more than it does.
+        # platform could not perform: a client-reported result is a claim, not proof (ADR-0004),
+        # and the platform MUST NOT claim to know more than it does.
         verification_tool=None,
     )
 
@@ -188,15 +190,15 @@ def reference_fixtures(environment: str) -> Catalogue:
         The four fixtures.
 
     Raises:
-        ReferenceFixtureInProductionError: In a production environment. `FR-SCOPE-006` excludes
-            them from production configuration, and this is where the exclusion happens rather than
-            in a runbook step somebody follows.
+        ReferenceFixtureInProductionError: In a production environment. `H-2` excludes them from
+            production configuration, and this is where the exclusion happens rather than in a
+            runbook step somebody follows.
     """
     if environment == PRODUCTION_ENVIRONMENT:
         raise ReferenceFixtureInProductionError(
-            "the reference fixtures are scaffold fixtures and are excluded from production "
-            "configuration (spec FR-SCOPE-006). They are not product capability and must never be "
-            "presented to a user as any."
+            "the reference fixtures are reference fixtures and are excluded from production "
+            "configuration (10-principles.md H-2). They are not product capability and must never "
+            "be presented to a user as any."
         )
 
     return REFERENCE_FIXTURES

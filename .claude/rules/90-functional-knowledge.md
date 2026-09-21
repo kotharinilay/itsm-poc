@@ -50,7 +50,8 @@ The following are **never** evidence that a capability is implemented:
 
 - A1, A2 or A3, or any other architecture document
 - `docs/adr/**`, `docs/migration/**`, `README.md`, `Synthia-Platform-Specification.md`
-- `.specify/**`, `specs/**`, `.serena/**`, `docs/current-implementation/**`
+- `.serena/**`, `docs/current-implementation/**` (and the `.specify/**` / `specs/**` trees deleted
+  in Phase 16, which may not be cited from git history either)
 - `docs/architecture/integrations-service-delta.md`, `docs/architecture/ragcore-langgraph-flow.md`
 - `.claude/rules/**`, `.claude/skills/**`, `.claude/hooks/**` — governance machinery describes what
   Claude must do, never what the product does

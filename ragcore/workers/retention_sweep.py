@@ -244,5 +244,5 @@ def main() -> None:
     """
     raise NotImplementedError(
         "the sweep is implemented and tested — see sweep_tenant; the worker's process wiring "
-        "lands with the other workers at Stage 12, see specs/001-platform-scaffold/tasks.md"
+        "lands with the other workers."
     )

@@ -16,7 +16,7 @@ Architecture authority for this file:
 
 No other repository document is architecture authority. `docs/architecture/integrations-service-delta.md`
 and `docs/architecture/ragcore-langgraph-flow.md` sit in the architecture directory and carry **no**
-authority. Neither does `.specify/**`, `specs/**`, `README.md`, `Synthia-Platform-Specification.md`,
+authority. Neither does `README.md`, `Synthia-Platform-Specification.md`,
 `.serena/**`, `docs/current-implementation/**`, or the retired Spec Kit constitution. Existing
 implementation is evidence of what **is**, never authority for what **should be**.
 

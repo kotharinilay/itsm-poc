@@ -387,7 +387,8 @@ class CatalogueEntry(Protocol):
         """Whether this is an inert scaffold fixture.
 
         A fixture produces no real external effect, is excluded from production configuration, and
-        MUST NEVER be counted as or allowed to become one of UC-01..UC-12.
+        MUST NEVER be counted as or allowed to become a real defined capability
+        (`.claude/rules/10-principles.md` H-2).
         """
         ...
 

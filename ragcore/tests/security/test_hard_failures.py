@@ -10,8 +10,9 @@
 6. approval bypass
 7. tenant context derived from an untrusted client field
 
-The Development Workflow section then makes the obligation concrete: *everything named as a hard
-failure in Principle VIII must have a test that fails when the protection is removed*. That sentence
+`.claude/rules/40-testing.md` §40.10 then makes the obligation concrete: *every protection the
+baseline and the architecture name as a hard failure must have a test that fails when the
+protection is removed*. That sentence
 is the specification for this file, and it is a stronger requirement than "is tested". A test that
 passes because the scenario never arises satisfies coverage and proves nothing.
 
@@ -507,7 +508,7 @@ class TestEveryHardFailureHasATest:
         "ApprovalBypass",
         "TenantContextDerivedFromAnUntrustedClientField",
     )
-    """The seven, in the order Principle VIII lists them."""
+    """The seven, in the order `.claude/rules/80-security-ops.md` §80.3 lists them."""
 
     def test_this_module_carries_a_class_for_each(self) -> None:
         import sys

@@ -50,7 +50,8 @@ baseline**. The record is `docs/adr/0010-frontend-engineering-baseline.md`; the 
 
 ### Where these requirements came from, and what that does not mean
 
-The migration input was the **retired Spec Kit constitution**, `.specify/memory/constitution.md` —
+The migration input was the **retired Spec Kit constitution**, `.specify/memory/constitution.md`,
+**deleted from the tree in Phase 16** and surviving only in git history —
 specifically Principle VII with its Angular and Electron blocks, the Angular line of §Dependency
 injection, §Angular, §Quality gate, §Review, and the frontend row of §"Which change requires which
 category".

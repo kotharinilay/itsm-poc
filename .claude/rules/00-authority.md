@@ -36,7 +36,7 @@ Exactly three documents are architecture authority:
 
 **No other repository document is architecture authority.** Specifically not:
 `docs/architecture/integrations-service-delta.md`, `docs/architecture/ragcore-langgraph-flow.md`,
-`.specify/**`, `specs/**`, `README.md`, `Synthia-Platform-Specification.md`, `.serena/**`,
+`README.md`, `Synthia-Platform-Specification.md`, `.serena/**`,
 `docs/current-implementation/**`, the retired Spec Kit constitution, or `docs/adr/0001`…`0009`
 (historical records — see `.claude/rules/70-adr.md` §70.1).
 
@@ -79,8 +79,11 @@ a requirement.
 - **Generated or untracked residue is not evidence of anything.** Establish repository content with
   `git ls-files`, not by walking the working tree: `bin/`, `obj/`, `.venv/`, `__pycache__/`,
   `node_modules/` and packaging output are excluded.
-- **The retired Spec Kit artifacts are not authoritative.** `.specify/**` and `specs/**` remain in
-  the tree pending a later retirement phase. They are history. The ten `speckit-*` skills that
+- **The retired Spec Kit artifacts are not authoritative.** `.specify/**` and `specs/**` were
+  **deleted from the tree in Phase 16**
+  (`docs/migration/phase-16-principle-ix-migration-and-spec-kit-retirement.md`); they survive only
+  in git history, and nothing may cite them. They were never authority while they existed, and
+  deletion does not change that — it removes the temptation. The ten `speckit-*` skills that
   installed the Spec Kit mechanism inside the Claude surface were **removed in Phase 12**
   (`docs/migration/phase-12-spec-kit-decoupling.md`), and no live Claude rule, skill, hook or
   setting depends on Spec Kit. The frontend requirement text that `.specify/memory/constitution.md`

@@ -99,7 +99,7 @@ public sealed record UnexecutedApproval(
 /// <remarks>
 /// Carries <see cref="IsReferenceFixture"/> so fixtures are <b>visibly labelled</b>. A reference
 /// fixture is never product and MUST NEVER be counted as one of the twelve use cases
-/// (constitution Principle IX).
+/// (.claude/rules/10-principles.md H-1).
 /// </remarks>
 /// <param name="CatalogueId">Catalogue identifier.</param>
 /// <param name="Version">Catalogue version. Composite key with the identifier.</param>

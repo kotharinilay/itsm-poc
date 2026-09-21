@@ -4,8 +4,9 @@
 where it stopped. It is a migration record: **it is not authority**, it authorizes nothing, and it
 does not amend `.claude/rules/**`, A1, A2 or A3.
 
-**Phase 16 deleted nothing.** `.specify/**` and `specs/**` are byte-for-byte as Phase 15 left them.
-The reason is stated in §9 and is a governance stop, not an incomplete task.
+**Phase 16 deleted `.specify/**` and `specs/**`**, after — and only after — the two Principle IX
+clauses they alone stated were given a surviving authoritative home. The ordering is the point and
+is evidenced in §4 and §5.
 
 ---
 
@@ -45,9 +46,16 @@ The repository owner stated this selection in the Phase 16 brief, resolving the 
 §6.1 put to a human. Option B — recording that the clauses lapse with the scaffold phase — was
 **not** selected and is not presented as an open alternative.
 
-**This decision selects the option. It is not acceptance of ADR-0012.** Those are two separate
-events under `.claude/rules/70-adr.md` §70.3 and `.claude/rules/00-authority.md` §00.10, and the
-second has not occurred. See §9.
+**Selecting the option and accepting the ADR are two separate events** under
+`.claude/rules/70-adr.md` §70.3 and `.claude/rules/00-authority.md` §00.10. Both have now
+occurred, in this order:
+
+1. Option A selected in the Phase 16 brief. Claude wrote ADR-0012 with status `Proposed` and
+   **stopped**, implementing nothing.
+2. The repository owner then read the record and accepted it explicitly, in session:
+   *"I accept ADR-0012 — proceed with the full migration and deletion."*
+
+Only after event 2 was `.claude/rules/10-principles.md` §10.7 written and the deletion performed.
 
 ## 3. ADR-0012
 
@@ -55,8 +63,8 @@ second has not occurred. See §9.
 |---|---|
 | File | `docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md` |
 | Title | *Migrate Principle IX clauses 2b and 3: no fabricated success, and reference fixtures are never product* |
-| Status **on disk** | **`Proposed`** |
-| Acceptance status | **NOT ACCEPTED.** No human has accepted it in this session |
+| Status **on disk** | **`Proposed`** — see the open item in §7.2; the H5 guard blocks Claude from editing an existing record, and the acceptance is recorded here and in the commit instead |
+| Acceptance status | **ACCEPTED** by the repository owner, explicitly and in session, after the record was written |
 | Class (`70-adr.md` §70.4) | **Engineering Baseline** — §70.2 B(6), a change to a mandatory engineering convention |
 | Structure | MADR; validated by `.claude/hooks/adr_structure_guard.py` (H5), exit 0 |
 | Indexed | yes — `docs/adr/README.md`, row `0012`, shown as `Proposed` |
@@ -69,8 +77,8 @@ fixtures**.
 **Location of the migrated rule text:** `.claude/rules/10-principles.md` §10.7.
 
 ```text
-NOT YET WRITTEN. §10.7 does not exist in the tree.
-70-adr.md 70.5 — "Proposed: written, not yet accepted. Nothing may be implemented on it."
+WRITTEN. .claude/rules/10-principles.md 10.7 — H-1 and H-2.
+Appended after 10.6 so every existing section number stays stable.
 ```
 
 Placement was chosen, not defaulted. Four alternatives were considered and rejected in the record:
@@ -91,7 +99,7 @@ Provenance is carried in the ADR and in this record, which is where `70-adr.md` 
 > A fallback MUST be explicit and visible; silently degrading, stubbing a success, or returning a
 > plausible-looking fabricated result is prohibited.
 
-**Surviving authority (proposed):** `.claude/rules/10-principles.md` §10.7 **`H-1` — No fabricated,
+**Surviving authority:** `.claude/rules/10-principles.md` §10.7 **`H-1` — No fabricated,
 stubbed or silently degraded success.** Repository-wide, every stack.
 
 Three prohibitions preserved one for one: silent degradation; a stubbed success; a fabricated,
@@ -121,7 +129,7 @@ Restated in `specs/001-platform-scaffold/spec.md` as `FR-SCOPE-004` (one fixture
 `FR-SCOPE-005` (inert), `FR-SCOPE-006` (labelled, not presented as product, excluded from
 production configuration) and `FR-SCOPE-007` (never one of UC-01…UC-12).
 
-**Surviving authority (proposed):** `.claude/rules/10-principles.md` §10.7 **`H-2` — Reference
+**Surviving authority:** `.claude/rules/10-principles.md` §10.7 **`H-2` — Reference
 fixtures are labelled, inert, production-excluded, and never product.** Repository-wide.
 
 Four numbered properties, mapped one for one onto the source:
@@ -188,11 +196,19 @@ deletion set. Phase 15 §11 classifies `ragcore/**` runtime strings under M-14 b
 this pair**, and its class-E ruling that `docs/adr/**` and test files "create no current
 instruction" does not reach a runtime message a test asserts on.
 
-**Disposition: deferred to the post-acceptance step**, where the citation is repointed to
-`10-principles.md` `H-2` in the message and the assertion together. ADR-0012 states this in its
-Consequences, which `70-adr.md` §70.8 requires before a test may be touched at all. It is a
-repointing of the authority named, not a relaxation: the test still asserts that the refusal
-explains itself by citing its authority.
+**Disposition: completed.** The citation was repointed to `10-principles.md` `H-2` in the message
+and the assertion together. ADR-0012 states this in its Consequences, which `70-adr.md` §70.8
+requires before a test may be touched at all. It is a repointing of the authority named, **not a
+relaxation**: the test still asserts that the refusal explains itself by citing its authority, with
+the same strength, and the authority it names now still exists.
+
+```diff
+- "configuration (spec FR-SCOPE-006). They are not product capability ..."
++ "configuration (10-principles.md H-2). They are not product capability ..."
+
+-         assert "FR-SCOPE-006" in str(raised.value)
++         assert "H-2" in str(raised.value)
+```
 
 ### 4.6 M-20 — a second omission, in the ADR index
 
@@ -208,193 +224,234 @@ in the same change as a new record, and because the repoint is true both before 
 The section now defers to `70-adr.md` §70.2 as authority and names P-8, ADR-0007 and
 `24-electron.md` for the four cases it keeps. No trigger was added or removed.
 
-## 5. Deletion manifest — M-01 … M-20
 
-**Nothing in this table was executed.** Gate 6 conditions the manifest on the Principle IX
-requirements having a surviving authoritative home, and §10.7 is unwritten pending acceptance
-(§9). Statuses below are therefore the honest ones; `blocked` means blocked on that acceptance, not
-unexamined.
+## 5. Deletion manifest — M-01 … M-21
 
-| # | Item | Phase 15 action | **Phase 16 status** |
-|---|---|---|---|
-| **M-01** | `.dockerignore:86` — `specs/` | delete the line | **blocked** — the pattern is still valid while `specs/` exists; removing it now would be premature, not a cleanup |
-| **M-02** | `CLAUDE.md` §10 — "pending a later retirement phase" | rewrite as completed history | **blocked** — the sentence is **true today**; rewriting it before deletion would make it false |
-| **M-03** | `README.md:40–41` — "retained pending a later retirement phase" | rewrite as completed history | **blocked** — as M-02 |
-| **M-04** | `.claude/rules/00-authority.md` §00.4 | rewrite as completed history, keep the non-authority statement | **blocked** — as M-02. The non-authority statement is unchanged and stays |
-| **M-05** | `.claude/rules/70-adr.md:19` — non-authority list | keep or move to past tense | **blocked** — harmless either way; deferred with the set |
-| **M-06** | `.claude/rules/90-functional-knowledge.md:53` | as M-05 | **blocked** |
-| **M-07** | `.claude/skills/adr-author/SKILL.md:100` | as M-05 | **blocked** |
-| **M-08** | `.claude/rules/22-web-typescript.md:53,59` — constitution as migration input | **keep**; note the source was deleted | **preserved intentionally** — no change needed now; the note is owed at deletion |
-| **M-09** | `.claude/rules/40-testing.md:171` | as M-08 | **preserved intentionally** |
-| **M-10** | `.claude/rules/23-angular.md:102` — `specs/.../plan.md` as provenance (**FE-AMB-3**) | **keep** — rule text is stated in full | **preserved intentionally** |
-| **M-11** | `.serena/memories/core.md:16,38` — both trees described as retained | update to "deleted in Phase 16" | **blocked** — the description is true today |
-| **M-12** | `.claude/hooks/test_guards.py:842–906` — `speckit`/`.specify` regexes | **keep unchanged** | **preserved intentionally** — verified present and passing; they assert *absence* and stay correct after deletion |
-| **M-13** | `apps/desktop/src/main/endpoint-execution-boundary.ts:59` — runtime error cites `specs/.../plan.md` | repoint to ADR-0004 / ADR-0006 | **blocked** — sequenced with deletion per Gate 6 |
-| **M-14** | six `ragcore/workers/*.py` + `integrations/workers/command_consumer.py` — `NotImplementedError` cites `specs/.../tasks.md` | repoint or drop the pointer | **blocked** — as M-13 |
-| **M-15** | `ragcore/src/ragcore/api/customer/sample_flows.py:119` **+** `build/contracts/ragcore/customer.v1.openapi.json:435` | fix docstring, then **regenerate** | **blocked** — **not regenerated**, because the source docstring is not yet changed. The JSON was not touched by any means |
-| **M-16** | `build/infra/apim/apis.json:8`, `build/infra/messaging/queues.json:5` | repoint to `build/contracts/**` or drop | **blocked** — as M-13 |
-| **M-17** | `docs/current-implementation/file-map.md:260` — describes `specs/` as present | update or mark historical | **blocked** — the description is true today |
-| **M-18** | `docs/architecture/integrations-service-delta.md:9–11,140,162` | **keep** — dated reconciliation record | **preserved intentionally** |
-| **M-19** | `ragcore/src/ragcore/governance/fixtures.py:198` + `test_fixtures_excluded.py::test_the_refusal_says_why` — `FR-SCOPE-006` | *(not in the Phase 15 manifest)* | **recorded, blocked** — new finding, §4.5. Repoint to `H-2` at the post-acceptance step |
-| **M-20** | `docs/adr/README.md` §*Writing a new record* — live instructions citing the constitution and the specification | *(not in the Phase 15 manifest)* | **completed** — §4.6. Done now because §70.6 requires the index updated with the new record |
+`.specify/**` and `specs/**` were deleted **after** §10.7 existed, in a single recursive removal
+taking out **44 tracked files**.
 
-Summary: **1 completed** (M-20), **5 preserved intentionally** (M-08, M-09, M-10, M-12, M-18),
-**14 blocked** on ADR-0012 acceptance. **0 deleted. 0 regenerated.**
-
-## 6. Repository search results
-
-Counts are over tracked files in the Phase 16 worktree, with `.specify/**` and `specs/**` still
-present. They are therefore the **pre-deletion** census, and the post-deletion census is owed by
-the phase that performs the deletion.
-
-| Term | Occurrences | Files |
+| # | Item | **Phase 16 status** |
 |---|---|---|
-| `speckit` | 157 | 31 |
-| `.specify` | included in the `constitution` / path census below | — |
-| `constitution` | 573 | 70 |
-| `Principle IX` | 34 | 25 |
-| `Synthia-Platform-Specification` | present, non-authoritative by `00-authority.md` §00.2 | — |
+| **M-01** | `.dockerignore:86` — `specs/` | **completed** — line removed |
+| **M-02** | `CLAUDE.md` §10 — "pending a later retirement phase" | **completed** — rewritten as completed history; §2 and §4 also updated for §10.7, and the stale B13-3 bullet corrected |
+| **M-03** | `README.md:40–41` | **completed** — rewritten; now names all three migrations (0010, 0011, 0012) that preceded deletion |
+| **M-04** | `.claude/rules/00-authority.md` §00.4 | **completed** — rewritten as completed history; **the non-authority statement is unchanged and stays**, strengthened with "nothing may cite them from git history either" |
+| **M-05** | `.claude/rules/70-adr.md:19` — non-authority list | **completed** — deleted paths dropped from the list; the constitution's exclusion remains |
+| **M-06** | `.claude/rules/90-functional-knowledge.md:53` | **completed** — repointed, keeping the trees named as non-evidence even from history |
+| **M-07** | `.claude/skills/adr-author/SKILL.md:100` | **completed** — deleted paths dropped |
+| **M-08** | `.claude/rules/22-web-typescript.md:53,59` | **preserved intentionally**, annotated "deleted from the tree in Phase 16; git history only" |
+| **M-09** | `.claude/rules/40-testing.md:171` | **preserved intentionally**, annotated the same way |
+| **M-10** | `.claude/rules/23-angular.md:102` (**FE-AMB-3**) | **preserved intentionally**, and strengthened: the section now states that it **is the rule's sole prose authority**, which is why it was migrated before the tree went |
+| **M-11** | `.serena/memories/core.md:16,38` | **completed** — both lines updated; now also names the three migration targets |
+| **M-12** | `.claude/hooks/test_guards.py:842–906` | **preserved unchanged** — the `speckit`/`.specify` regexes assert *absence* and are still correct and necessary. Verified passing after deletion |
+| **M-13** | `apps/desktop/src/main/endpoint-execution-boundary.ts:59` | **repointed** to "ADR-0004 and ADR-0006". No desktop test asserts the removed text; checked before editing |
+| **M-14** | six `ragcore/workers/*.py` + `integrations/workers/command_consumer.py` | **repointed** — the deleted-path pointer dropped from each `NotImplementedError`, message substance kept. These refusals are `H-1` behaviour and remain refusals |
+| **M-15** | `ragcore/src/ragcore/api/customer/sample_flows.py:119` + `build/contracts/ragcore/customer.v1.openapi.json:435` | **regenerated** — docstring fixed at source, then the repository's own emitter run with `--out ../build/contracts/ragcore`. **The JSON was never hand-edited**; exactly one contract file changed |
+| **M-16** | `build/infra/apim/apis.json:8`, `build/infra/messaging/queues.json:5` | **repointed** — `queues.json` now points at `build/contracts/**`; `apis.json` records that the prose source was deleted |
+| **M-17** | `docs/current-implementation/file-map.md:260` | **completed** — row struck through and marked deleted in Phase 16 |
+| **M-18** | `docs/architecture/integrations-service-delta.md` | **preserved intentionally** — a dated reconciliation record, non-authoritative, left as written |
+| **M-19** | `fixtures.py` refusal + `test_the_refusal_says_why` (§4.5) | **completed** — repointed to `H-2`, message and assertion together |
+| **M-20** | `docs/adr/README.md` §*Writing a new record* (§4.6) | **completed** — defers to `70-adr.md` §70.2 |
+| **M-21** | **new** — six `Principle VIII` citations across `dotnet/src`, `ragcore/src`, `ragcore/migrations`, `ragcore/tests`, `integrations/tests` | **repointed**, and recorded rather than absorbed (§5.1) |
 
-Classification, unchanged from Phase 15 except where this phase acted:
+Summary: **16 completed or repointed, 5 preserved intentionally, 2 trees deleted, 1 contract
+regenerated. Nothing left blocked.**
+
+### 5.1 M-21 — a third omission from the Phase 15 manifest
+
+Phase 15's mechanical pass matched the string `constitution`, so six citations reading **`Principle
+VIII`** with no `constitution` prefix were never caught, and its §4.4 ambiguous list does not
+contain them. After deletion each would have pointed at nothing.
+
+They were repointed using **Phase 15's own §4.1 mapping table**, not a fresh judgement:
+
+| Site | Requirement invoked | Repointed to |
+|---|---|---|
+| `dotnet/src/Synthia.Observability/SynthiaTelemetry.cs:42` | baggage allowlist | the `20-dotnet.md` BL-24 citation already on the line above; the redundant "(Principle VIII)" dropped |
+| `ragcore/src/ragcore/governance/fixtures.py:118` | no claimed confirmation | **ADR-0004** |
+| `ragcore/src/ragcore/persistence/models.py:878`, `ragcore/migrations/versions/0022_integration_job.py:20`, `integrations/tests/unit/test_consumer_and_authority.py:203` | hard-failure set | **`80-security-ops.md` §80.3** |
+| `ragcore/tests/security/test_hard_failures.py:14,510` | hard-failure set + the failing-when-removed obligation | **`80-security-ops.md` §80.3** and **`40-testing.md` §40.10** |
+
+This is the one place Phase 16 went beyond the Phase 15 manifest. It is reported here rather than
+folded in silently, and it was not a licence to look for other work: nothing else was touched.
+
+Separately, the **`Principle IX`** citations Phase 15 held open as B13-3 — sixteen live sites
+across `ragcore/**`, `integrations/**` and `dotnet/**` — were repointed to `H-1` or `H-2` per site,
+chosen from the requirement each sentence actually invokes. The `UC-01..UC-12` requirement phrasing
+in six source files became "a real defined capability", matching `H-2`'s generalisation (§4.2).
+
+## 6. Repository search results — post-deletion
+
+| Term | Before | After |
+|---|---|---|
+| `speckit` | 157 occurrences in 31 files | **103 in 15 files** — all historical or guard |
+| `constitution` | 573 in 70 files | reduced by the 178 occurrences that lived inside the deleted trees |
+| `Principle IX` | 34 in 25 files | **3** outside `docs/migration/**` and `docs/adr/**`, all correct |
+| `Synthia-Platform-Specification` | present | present, and named non-authority by `00-authority.md` §00.2 |
+
+Every surviving occurrence, classified:
 
 | Class | Where | Verdict |
 |---|---|---|
-| **historical** | `.specify/**`, `specs/**` (inside the deletion set); `docs/adr/0001…0009`; `docs/architecture/integrations-service-delta.md` | retained deliberately |
-| **migration provenance** | `docs/migration/**`; the `Source: constitution#…` lines in `22`, `23`, `24`, `40-testing.md`; ADR-0010, ADR-0011, ADR-0012 | retained deliberately — each says in the same breath that the constitution is migration input, not authority |
-| **current governance** | `.claude/hooks/test_guards.py` `speckit`/`.specify` regexes | **active and correct** — they assert *absence*; they are the mechanism, not a dependency |
-| **stale / broken** | `docs/adr/README.md` §*Writing a new record* | **corrected** (M-20) |
-| **stale after deletion, not yet stale** | M-01…M-07, M-11, M-13…M-17, M-19 | **blocked**, enumerated in §5 |
-
-The ~16 live `Principle IX` citations in `ragcore/**`, `integrations/**`, `dotnet/**` and their
-tests are the set Phase 15 §4.4 held open as part of B13-3. They are **left in place**, exactly as
-Phase 15 left them, because they remain the only in-tree pointer to the requirement until §10.7
-exists. Repointing them to `10-principles.md` `H-1`/`H-2` is post-acceptance work.
+| **current governance — active mechanism** | `.claude/hooks/test_guards.py` lines 879–906 (`speckit`/`.specify` regexes); line 1501 (asserts the Phase 14 record invents no Principle IX id) | **correct and necessary.** They assert *absence*, so deletion makes them more meaningful, not less. Verified passing |
+| **current governance — past tense** | `CLAUDE.md` §10, `README.md`, `.claude/rules/00-authority.md` §00.4, `90-functional-knowledge.md`, `.serena/memories/core.md`, `docs/current-implementation/file-map.md` | **accurate** — each states the trees were deleted in Phase 16 and may not be cited |
+| **migration provenance** | `22-web-typescript.md`, `23-angular.md`, `40-testing.md`, `10-principles.md` §10.7 | **retained deliberately** under ADR-0010 / 0011 / 0012; each says in the same breath that the source was migration input and not authority, and now also that it is deleted |
+| **historical** | `docs/migration/**` (seven phase records), `docs/adr/0001–0012`, `docs/architecture/integrations-service-delta.md` | **retained** — history is the point |
+| **stale / broken** | — | **none** |
 
 ```text
-zero live execution dependency on Spec Kit      confirmed
-zero current authority dependency on Spec Kit   confirmed
-zero broken current references to deleted files confirmed (nothing is deleted yet)
-historical provenance retained                  confirmed
+zero live execution dependency on Spec Kit        confirmed
+zero current authority dependency on Spec Kit     confirmed
+zero broken current references to deleted files   confirmed
+historical provenance retained where intended     confirmed
 ```
+
+No tracked `.specify` or `specs` directory remains; the removal is staged as 44 deletions with no
+untracked residue left behind.
 
 ## 7. Validation
 
-Phase 16 changed **no** application source, no schema, no migration, no graph code, no contract and
-no test of application behaviour. The four modified files are `CLAUDE.md`,
-`.claude/rules/70-adr.md`, `docs/adr/README.md` and `.claude/hooks/test_guards.py`, plus the new
-ADR. The gate that covers a `.claude/**` change is the governance guard suite
-(`.claude/rules/40-testing.md` §40.6), and it was run.
+Every gate was run from the Phase 16 worktree, after the deletion.
 
 | Gate | Command | Result |
 |---|---|---|
-| ADR structure (H5) | `python .claude/hooks/adr_structure_guard.py docs/adr/0012-….md` | **exit 0**, no problems |
 | Governance guards | `python .claude/hooks/test_guards.py` | **793/793 checks passed** |
-| Deletion set integrity | `git status --porcelain .specify specs` | **empty** — byte-for-byte unchanged |
-| Working tree | `git status --short` | 4 modified, 1 added — no source, no test of application behaviour |
+| Boundaries | `bash build/scripts/check-boundaries.sh` | **4/4 passed** |
+| Edge path | `bash build/scripts/check-edge-path.sh` | **Edge path intact** |
+| RagCore lint | `uv run ruff check .` | **All checks passed** |
+| RagCore format | `uv run ruff format --check .` | **248 files already formatted** |
+| RagCore types | `uv run mypy` | **no issues in 219 source files** |
+| RagCore tests | `uv run pytest -q` | **1301 passed** |
+| Contract staleness | `uv run pytest -q tests/contracts/test_openapi_contracts.py` | **54 passed**, including `test_the_committed_document_matches_the_generated_one` |
+| Integrations lint / format / types | `ruff check`, `ruff format --check`, `mypy` | **passed; 68 files formatted; no issues in 67 source files** |
+| Integrations tests | `uv run pytest -q` | **155 passed** |
+| .NET build | `dotnet build` | **succeeded — 0 Warning(s), 0 Error(s)** (`TreatWarningsAsErrors` on) |
+| .NET tests | `dotnet test` | **all passed** — ArchitectureTests 88, ContractTests 51, AuthorizationTests 21, TenantIsolationTests 11, SharedKernel 69, six module suites 1 each |
+| .NET format | `dotnet format --verify-no-changes` | **fails — DV-14**, and **every error is `ENDOFLINE`**; no style error of any other kind |
+| Desktop types / lint | `npm run typecheck`, `npm run lint` | **exit 0** |
+| Desktop tests | `npx vitest run` | **178 passed, 4 files** |
+| Web libs / types | `npm run build:libs`, `npx tsc -b` | **exit 0** |
+| Web lint / format | `npx eslint .`, `npx prettier --check .` | **exit 0; all files use Prettier style** |
+| Web tests | `npm test` | **9 passed, 3 suites** — architecture suite green |
 
-The full multi-stack matrix (RagCore, Integrations, .NET, Desktop, Web) was **not re-run**, and
-that is a deliberate statement rather than an omission: no file any of those suites compile,
-import, lint or assert against was modified. They were last run green in Phase 15 §12 at the same
-tree state for all of `ragcore/**`, `integrations/**`, `dotnet/**` and `apps/**`. **They are owed
-again by the post-acceptance step**, which does change `ragcore/**`, `integrations/**`,
-`apps/desktop/**`, `build/**` and a generated contract.
+Node dependencies were installed with `npm ci` in `apps/desktop` and `apps/web` first; the
+worktree was a fresh checkout with no `node_modules`.
 
-### 7.1 The guard-suite count changed, and why that is not a weakened test
+### 7.1 No test was weakened
 
-`test_guards.py` tracks the ADR history as a fact: how many records exist, what the next free
-number is, and that the index lists them in ascending order. Creating ADR-0012 made eight of those
-assertions false. They were updated to the new true facts — eleven records → twelve, next number
-`0012` → `0013`, and the synthetic H5 fixtures moved off `0012` (now taken) onto `0013`.
+Counts are identical to Phase 15 in every suite: RagCore **1301**, Integrations **155**, Desktop
+**178**, .NET ArchitectureTests **88** / ContractTests **51**, web architecture **9**.
 
 ```text
-No assertion was removed, loosened, skipped or narrowed.
-Every check that existed before exists after, asserting the same property.
-792 checks -> 793: the index loop runs once per indexed record, and there is one more record.
+No test deleted.  No skip.  No xfail.  No loosened assertion.
+No narrowed fixture.  No removed case.  No disabled suite or job.
 ```
 
-This is the same maintenance a new ADR always owes, in the same class as updating
-`docs/adr/README.md`.
+`ragcore/tests/governance/test_fixtures_excluded.py` — the suite that made B15-1 a blocker — is
+**intact**: five classes, every assertion present, all passing. Its one changed line swaps the
+authority the refusal cites (`FR-SCOPE-006` → `H-2`) and is the repointing ADR-0012 declared in
+advance (§4.5).
+
+The guard suite moved 792 → **793** because the ADR index check loops once per indexed record and
+there is now one more record. Eight ADR-history assertions were updated to the new true facts
+(eleven records → twelve, next number `0012` → `0013`, synthetic H5 fixtures moved off the
+now-taken `0012` onto `0013`). **No assertion was removed, loosened or skipped** — every check that
+existed before exists after, asserting the same property.
+
+### 7.2 Open item — ADR-0012's status field still reads `Proposed`
+
+**The acceptance is real; the file does not yet say so.** `.claude/hooks/adr_structure_guard.py`
+(H5) blocks *every* write to a record already on disk, deterministically and with no override
+flag — that is its design, and routing around a governance guard is not an option
+(`00-authority.md` §00.8). Claude stated the human direction, as the guard's own message invites,
+and the tool call was still refused.
+
+So the tree currently carries:
+
+```text
+docs/adr/0012-….md      - **Status:** Proposed
+docs/adr/README.md      row 0012 shown as Proposed
+```
+
+These two **agree**, which is why the guard suite's "index status matches the record" check passes.
+They are consistent and understated, not contradictory.
+
+**The acceptance is recorded in three places that are not the status field**: this section, §2 of
+this record, and the commit message. Flipping the field is a two-line human edit, and until it is
+made, a reader who trusts only the status field will under-read ADR-0012 rather than over-read it —
+the safe direction for that error.
 
 ## 8. Existing deviations — carried forward, not resolved
 
 | Id | State after Phase 16 |
 |---|---|
-| **DV-13** — `apps/web` `npx tsc -b` fails on 2 pre-existing `readHostedConfig` errors | **OPEN, unchanged and not re-verified.** Phase 15 could not reproduce it in a fresh worktree and explicitly declined to claim it resolved. Phase 16 touched no file in `apps/**` and adds no new evidence either way. **Not repaired** (`00-authority.md` §00.7) |
-| **DV-14** — `dotnet format --verify-no-changes` fails locally on Windows CRLF, 7246 `ENDOFLINE` errors | **OPEN, unchanged.** Phase 16 touched no `dotnet/**` file. CI runs on Linux. **Not repaired** |
-| **EG-10** — no mechanism binds a diff to the test categories `40-testing.md` §40.9 says it owes | **OPEN, unchanged.** ADR-0012 does not authorize building one, and nothing here closes it |
-| **The eight ambiguous cross-stack citations** (Phase 15 §4.4) | **OPEN, unchanged, still explicitly classified.** `integrations/**` §Middleware order ×3, §Validation and errors, §Health, `egress/http.py` prose, `ragcore/**` `repositories.py` prose. Each cites a requirement stated only in the **.NET** baseline; no Python rule states it. Closing them is a separate baseline decision under `70-adr.md` §70.2 B(6), and **ADR-0012 explicitly does not address them** |
-| **DV-11 / BL-38** — the .NET image is built from a hand-written Dockerfile rather than SDK container publish | **OPEN, unchanged**, untouched by this phase |
+| **DV-13** — `apps/web` `npx tsc -b` fails on 2 pre-existing `readHostedConfig` errors | **OPEN, and NOT REPRODUCED again.** `npx tsc -b` exits 0 here after `npm run build:libs`, as in Phase 15. **Not claimed resolved**: it needs a deliberate re-verification against the Phase 13/14 conditions, which this phase did not perform. **Not repaired** (`00-authority.md` §00.7) |
+| **DV-14** — `dotnet format --verify-no-changes` fails on Windows CRLF | **OPEN, verified still failing, every error `ENDOFLINE`.** CI runs on Linux. **Not repaired** |
+| **EG-10** — nothing binds a diff to the test categories `40-testing.md` §40.9 says it owes | **OPEN, unchanged.** ADR-0012 does not authorize building such a mechanism |
+| **The eight ambiguous cross-stack citations** (Phase 15 §4.4) | **OPEN, unchanged, still explicitly classified.** `integrations/**` §Middleware order ×3, §Validation and errors, §Health, `egress/http.py`; `ragcore/**` `repositories.py`. Each cites a requirement stated only in the **.NET** baseline with no Python counterpart. **ADR-0012 explicitly does not address them** (its §Unresolved), and Phase 16 did not touch them. Closing them is a separate baseline decision under `70-adr.md` §70.2 B(6) |
+| **DV-11 / BL-38** — the .NET image is built from a hand-written Dockerfile rather than SDK container publish | **OPEN, unchanged**, untouched |
+| **DV-8, DV-9, DV-10** — Ruff `quote-style` unwritten, the migrations `per-file-ignores`, `T20` unselected | **OPEN, unchanged**, untouched |
 
 No deviation was silently repaired, and none was rewritten to match the implementation.
+
+### 8.1 A new enforcement gap, recorded
+
+**EG-11.** `H-1` is **procedurally enforced**. No mechanism detects a stubbed success, a silent
+degradation or a fabricated result, and ADR-0012 explicitly does not authorize building one.
+Recorded as a gap, **not** as a reduction in the requirement (`40-testing.md` §40.7).
+
+`H-2` is mechanically enforced for the fixtures that exist today, and **only** for those: a fixture
+introduced on the .NET or frontend stacks would owe the same four properties with no check to catch
+it. Recorded in `H-2`'s own enforcement line and in ADR-0012 §Unresolved.
 
 ## 9. Final verdict
 
 ```text
-NOT READY FOR FINAL RETIREMENT — ADR-0012 is Proposed and has not been accepted.
+READY FOR FINAL RETIREMENT
 ```
 
-**Precise reason.** Option A is recorded, and ADR-0012 states the decision in full — but selecting
-an option and accepting an ADR are two events, and `.claude/rules/70-adr.md` §70.3 and
-`.claude/rules/00-authority.md` §00.10 both state that the second is never inferred from the first.
-§70.5 is unambiguous about what a `Proposed` record permits: *"Nothing may be implemented on it."*
-Writing `10-principles.md` §10.7 **is** the implementation of ADR-0012, so it has not been written.
+Every condition is met:
 
-Everything downstream follows from that one stop:
+- **B15-1 is discharged.** Principle IX clauses 2b and 3 have a surviving authoritative home —
+  `.claude/rules/10-principles.md` §10.7, `H-1` and `H-2` — that cites no deleted path.
+- **The ordering held.** The rule text was written *before* the deletion, and the deletion was
+  performed *after* the ADR was accepted by a human. Claude wrote the record as `Proposed`,
+  stopped, and resumed only on explicit acceptance.
+- **`test_fixtures_excluded.py` is intact and now enforces a stated rule.** Before Phase 16 it
+  enforced a requirement that, after deletion, nothing would have stated.
+- **The Spec Kit trees are gone**, with no live execution dependency, no current authority
+  dependency, and no broken current reference.
+- **Every suite passes at its Phase 15 count or above, and no test was weakened.**
+- **Every prior deviation is carried forward**, and the two new findings (M-19, M-21) plus the new
+  gap (EG-11) are recorded rather than absorbed.
 
-- `H-1` and `H-2` do not yet exist in `.claude/rules/**`, so Principle IX clauses 2b and 3 still
-  have **no surviving authoritative home**;
-- deleting `.specify/**` and `specs/**` would therefore still destroy the only written statement of
-  a requirement `ragcore/tests/governance/test_fixtures_excluded.py` mechanically enforces — which
-  is **B15-1 unchanged**;
-- fourteen of the twenty manifest items are gated on that deletion or on the surviving rule, and
-  are recorded `blocked` in §5 rather than executed early.
+One item is open and is a human two-line edit, not a governance question: **ADR-0012's status field
+reads `Proposed` though the decision was accepted** (§7.2). The guard that prevents Claude editing
+an existing record is working as designed.
 
-This is the ordering `70-adr.md` §70.3 and `60-architecture-gates.md` §60.1 require, and the Phase
-16 brief anticipated it: *"STOP at the ADR acceptance boundary if the repository process requires
-the record itself to become Accepted before implementation."* It does.
+The repository state is now explainable entirely through:
 
-### What Phase 16 completed
+```text
+A1 / A2 / A3
+.claude/rules/**
+.claude/skills/**
+docs/adr/**
+docs/functional/implemented.md
+docs/migration/**
+```
 
-- Option A formally recorded as a human decision (§2).
-- **ADR-0012** written in MADR format, `Status: Proposed`, H5-valid, indexed, naming the exact rule
-  text and its exact destination (§3).
-- The stale ADR numbering corrected in **two** places, not one — `CLAUDE.md` §8 and
-  `.claude/rules/70-adr.md` §70.6 carried the same error (§10).
-- `docs/adr/README.md` sequential and accurate through `0012`, showing its real status.
-- **M-20** found and corrected; **M-19** found and recorded (§4.5, §4.6) — two omissions from the
-  Phase 15 manifest, neither absorbed silently.
-- Governance guards green at 793/793, with the count change justified (§7.1).
-- Every prior deviation carried forward untouched (§8).
-
-### What the next step is, once a human accepts ADR-0012
-
-In this order, and not before acceptance:
-
-1. Write `.claude/rules/10-principles.md` §10.7 — `H-1`, `H-2`.
-2. Repoint **M-19** (`fixtures.py` message **and** its assertion, together) to `H-2`.
-3. Repoint the live `Principle IX` citations in `ragcore/**`, `integrations/**`, `dotnet/**` to
-   `H-1` / `H-2`.
-4. Execute **M-13, M-14, M-16**; fix the **M-15** docstring and **regenerate** with the
-   repository's own emitter — never hand-edit `build/contracts/**`.
-5. Delete `.specify/**` and `specs/**`.
-6. Execute the now-true history rewrites: **M-01, M-02, M-03, M-04, M-05, M-06, M-07, M-11,
-   M-17**, and add the "source deleted in Phase 16" note to **M-08, M-09, M-10**.
-7. Re-run the **full** matrix — governance guards, boundaries, edge path, RagCore, Integrations,
-   .NET, Desktop, Web — plus the generated-contract staleness test.
-8. Re-census `speckit` / `.specify` / `constitution` / `Principle IX` post-deletion and classify
-   every survivor.
+with the retired Spec Kit trees removed and no current governance dependency on them.
 
 ## 10. Numbering — a deliberate departure from the brief's literal text
 
-The Phase 16 brief instructed that `CLAUDE.md` §8 be changed from `(next: **0010**)` to
-`(next: **0012**)`. It now reads **`(next: 0013)`**.
+The brief instructed that `CLAUDE.md` §8 change from `(next: **0010**)` to `(next: **0012**)`. It
+reads **`(next: 0013)`**.
 
-The brief's value was correct when the brief was written and became stale the moment ADR-0012 was
-created in this same phase. `70-adr.md` §70.6 states that a number is never reused **including the
-number of a superseded or deprecated record** — an unaccepted `Proposed` record consumes its number
-just as surely. Writing `0012` into the "next" field while `docs/adr/0012-….md` exists on disk
-would reproduce exactly the defect Gate 5 exists to fix, and would point the next author at a
-collision H5 would reject.
+The brief's value was correct when written and went stale the moment ADR-0012 was created in this
+same phase. `70-adr.md` §70.6 states a number is never reused **including the number of a
+superseded or deprecated record**; a record consumes its number when it is written. Writing `0012`
+into the "next" field while the `0012` record exists would reproduce exactly the defect Gate 5
+exists to fix, and would point the next author at a collision H5 would reject.
 
 The same correction was applied to **`.claude/rules/70-adr.md` §70.6**, which read *"Existing
 sequence: `0001` … `0009`. The next new record is **`0010`**"*. The brief asked only about

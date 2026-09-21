@@ -37,12 +37,17 @@ Each is authoritative on its own axis. **No document may be reinterpreted to ove
 Where architecture and engineering governance genuinely conflict, **implementation stops** and the
 conflict is resolved as an ADR — never settled by whichever document was read first.
 
-> **Not authority.** `Synthia-Platform-Specification.md`, `.specify/**` (including the retired Spec
-> Kit constitution) and `specs/**` are **history**, retained pending a later retirement phase. They
-> are not architecture authority, not the engineering baseline, and not evidence of implemented
-> behaviour — see [`.claude/rules/00-authority.md`](./.claude/rules/00-authority.md) §00.4. The
-> frontend engineering rules the constitution once held alone were migrated in Phase 12 under
-> [`docs/adr/0010-frontend-engineering-baseline.md`](./docs/adr/0010-frontend-engineering-baseline.md).
+> **Not authority.** `Synthia-Platform-Specification.md` is **history** — not architecture
+> authority, not the engineering baseline, and not evidence of implemented behaviour; see
+> [`.claude/rules/00-authority.md`](./.claude/rules/00-authority.md) §00.4. The retired Spec Kit
+> trees `.specify/**` and `specs/**` were **deleted in Phase 16** and survive only in git history.
+> The requirement text the constitution once held alone was migrated first: the frontend rules in
+> Phase 12 under
+> [`docs/adr/0010-frontend-engineering-baseline.md`](./docs/adr/0010-frontend-engineering-baseline.md),
+> the testing baseline in Phase 14 under
+> [`docs/adr/0011-required-test-categories-baseline.md`](./docs/adr/0011-required-test-categories-baseline.md),
+> and implementation honesty and reference fixtures in Phase 16 under
+> [`docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md`](./docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md).
 
 ## Three deployables, and the rule between them
 

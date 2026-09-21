@@ -16,7 +16,8 @@ namespace Synthia.Modules.Work;
 /// <para>
 /// A read model here with no caller would be a capability built before a requirement needed it
 /// (.claude/rules/10-principles.md P-8) and a scaffold pretending to be further along than it is
-/// (Principle IX). The module boundary exists and is enforced; its read surface arrives with the
+/// (.claude/rules/10-principles.md H-1). The module boundary exists and is enforced; its read
+/// surface arrives with the
 /// golden paths in Stages 12–13, where a route finally needs one.
 /// </para>
 /// </remarks>

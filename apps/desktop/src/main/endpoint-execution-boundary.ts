@@ -56,7 +56,7 @@ export class EndpointExecutionNotImplementedError extends Error {
     super(
       'Endpoint script execution is not implemented. It is blocked on ADR-0004 (script signing ' +
         'and the destructive-operation taxonomy) and on both golden paths validating. See ' +
-        'specs/001-platform-scaffold/plan.md Stage 4 non-goals.',
+        'ADR-0004 and ADR-0006.',
     );
   }
 }

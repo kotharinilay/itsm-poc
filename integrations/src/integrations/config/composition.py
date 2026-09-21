@@ -16,7 +16,8 @@ has already lost, and lost invisibly.
 
 **Optional bindings are `None`, never a stub.** Where a dependency is unconfigured — no DSN in a
 unit test, no vault in local development — the container holds `None` and the API answers 503.
-Constitution Principle IX: a fallback is explicit and visible, and stubbing a success is prohibited.
+`.claude/rules/10-principles.md` H-1: a fallback is explicit and visible, and stubbing a success
+is prohibited.
 """
 
 from __future__ import annotations

@@ -21,7 +21,8 @@ answers model calls without a model, and a deployment that silently used it woul
 producing placeholder text and metering nothing. The constructor check is what turns that from a
 quiet degradation into a container that does not start.
 
-**What it returns is honest** (constitution Principle IX). The text says plainly that no model was
+**What it returns is honest** (`.claude/rules/10-principles.md` H-1). The text says plainly that
+no model was
 called and the embedding is a deterministic hash-derived vector, not a semantic one. A plausible
 sentence and a random vector would let a developer build against behaviour that does not exist, and
 retrieval quality measured against noise is worse than no measurement.

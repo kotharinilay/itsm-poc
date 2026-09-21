@@ -245,7 +245,7 @@ def build_workload_router(container: Container) -> APIRouter:
             )
 
         if container.servicenow is None:
-            # Honest rather than a stubbed success (constitution Principle IX). A service deployed
+            # Honest rather than a stubbed success (10-principles.md H-1). A service deployed
             # without the connector bound reports that it cannot act; it does not pretend to.
             return problem(
                 status=503,

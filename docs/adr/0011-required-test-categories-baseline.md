@@ -1,6 +1,6 @@
 # 0011. Migrate the required-test-category baseline and the per-change test matrix
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-21
 - **Deciders:** Repository owner
 - **Supersedes:** nothing

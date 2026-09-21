@@ -456,3 +456,98 @@ requirement rather than restating it. It is not duplicated here.
   and 90, pointed to from `.claude/rules/00-authority.md` §00.9.
 - It does not authorize weakening a test to satisfy a principle. See
   `.claude/rules/40-testing.md` §40.6.
+
+---
+
+## 10.7 Implementation honesty and reference fixtures — H-1, H-2
+
+*Authorized by `docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md`
+(Accepted). Migrated from the retired Spec Kit constitution §IX clauses 2b and 3, and the
+`FR-SCOPE-004`…`FR-SCOPE-007` restatement of clause 3. **That material was migration input. It is
+not authority**, and its non-authoritative status under `.claude/rules/00-authority.md` §00.4 is
+unchanged by having been read. This file is the authority for `H-1` and `H-2`; the retired
+documents are not, and do not become so.*
+
+§10.7 was **appended** rather than inserted, so that every existing section number in this file
+stays stable and no cross-reference from another rule breaks. Its rule-id space is **`H-*`**,
+deliberately distinct from `P-*` (from `principles.yaml`) and `C-*` (the identically-stated .NET and
+Python convention blocks), because its source is an ADR and not a migrated pack.
+
+**Scope: repository-wide.** Both rules apply to every stack — `dotnet/**`, `ragcore/**`,
+`integrations/**`, `apps/web/**`, `apps/desktop/**`, and any future stack.
+
+### H-1 — No fabricated, stubbed or silently degraded success
+
+**An operation that did not do the thing asked of it never reports that it did.**
+
+Where a capability is unsupported, unavailable, deferred or not implemented, the outcome is
+**explicit and visible at the boundary that returns it** — an escalation, a declared unsupported
+outcome, a raised error, or a surface documented as inert that says so in what it returns.
+
+Prohibited specifically:
+
+- **Silent degradation** — quietly doing less than was asked while returning the shape of a full
+  success.
+- **A stubbed success** — a placeholder, `TODO`, or unimplemented path that returns a success
+  value, a success status, or a success-shaped record.
+- **A fabricated result** — a synthesized, simulated, sampled or plausible-looking value presented
+  as the product of real execution. This **includes a value produced by a model** and returned as
+  though it were retrieved, computed, or confirmed by an external system.
+
+**This is not a prohibition on fallback.** A declared fallback, a cached value served as a cached
+value, a partial result labelled partial, a documented default, and a retry are all legitimate.
+What they have in common is that **the caller can tell what they got**. The rule governs the
+honesty of the report, not the ambition of the behaviour.
+
+**How this differs from the principles it sits beside**, so it is not read as a duplicate:
+
+| Rule | Governs | Why it does not cover `H-1` |
+|---|---|---|
+| **P-8** | building speculative capability | forbids *building* what no requirement needs; says nothing about *fabricating a result* from what was never built |
+| **P-11** | invalid input at a boundary | a stubbed success is not invalid input; it is valid input answered dishonestly |
+| **P-14** | surprising behaviour | asks for unsurprising behaviour without prohibiting a synthesized success |
+| **P-30** | a **caught error** | in the failure `H-1` describes, no error is raised at all — that is what makes it silent |
+| **`90-functional-knowledge.md`** | what the **record** may claim | §90.11 states it authorizes nothing about implementation behaviour |
+
+The escalation half of the original clause — that an unsupported capability falls back to manual
+resolution or escalation — is **not** restated here. It is owned by **A3 §6.2** (the outcome
+vocabulary `{answered_sop, resolved_action, escalated, denied}` and `escalation_reason`), and
+`.claude/rules/00-authority.md` §00.5 forbids restating an owned requirement.
+
+*Source: ADR-0012 · Enforcement: **procedural** — no mechanism in this repository detects a stubbed
+success or a fabricated result. ADR-0012 does not authorize building one; that is a separate,
+human-directed decision (`.claude/rules/40-testing.md` §40.7). A rule whose enforcement is
+procedural is not optional — it is reviewed rather than gated.*
+
+### H-2 — Reference fixtures are labelled, inert, production-excluded, and never product
+
+**Reference fixtures are permitted, and are never product.**
+
+Inert reference operations may exist so that governance, consent and approval paths are exercisable
+before a real capability is defined. Each one:
+
+1. **Is labelled a reference fixture** — recognisably, and without a catalogue lookup, so it is
+   identifiable from a log line, a queue entry or an audit record.
+2. **Is inert.** It produces no real effect in any external system, modifies no account, device or
+   record, and claims no confirmation the platform could not actually perform. *Inert* means **has
+   no external effect**, not *is not wired up yet*.
+3. **Is excluded from production configuration**, and the exclusion is **enforced rather than
+   documented**. A runbook step saying somebody should not install them does not satisfy this.
+4. **Is never presented to any user as a product capability**, and is never counted as, substituted
+   for, or allowed to become a real defined capability.
+
+**A fixture is not a capability waiting to be finished.** Promoting one is a deliberate act that
+replaces it with a real capability under whatever gate that capability needs — never a relabelling.
+
+**The boundary this respects.** An enforced production exclusion decides whether fixture rows are
+*installed*; it never decides what a row *means*. No treatment, role or entitlement may vary by
+environment — a control that behaves differently in production is a control nobody has exercised.
+"Exclude the fixtures in production" is one careless step away from "relax the gate in
+development", and they are not the same rule.
+
+*Source: ADR-0012 · Enforcement: **mechanical for the fixtures that exist today** —
+`ragcore/tests/governance/test_fixtures_excluded.py` asserts all four properties against
+`ragcore/src/ragcore/governance/fixtures.py`, and separately asserts that the exclusion has not
+become an environment branch. `H-2` is written repository-wide deliberately; only `ragcore` has
+fixtures today, so only `ragcore` has a check. A fixture introduced on any other stack owes the same
+four properties and would need its own.*

@@ -83,7 +83,6 @@ apps/desktop/out/
 # internal design material. The specification describes controls in detail, which is useful to a
 # reviewer and equally useful to somebody probing the running system.
 docs/
-specs/
 *.md
 !README.md
 

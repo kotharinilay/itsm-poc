@@ -59,7 +59,7 @@ class TestConfigurationFailsFast:
 
 
 class TestTheScaffoldBindsNoAdapter:
-    """Constitution Principle IX: scaffold honestly; do not invent product."""
+    """.claude/rules/10-principles.md H-1: no fabricated, stubbed or silently degraded success."""
 
     def test_the_persistence_ports_are_bound(self) -> None:
         """Stage 7 brings PostgreSQL, so these stop being ``None``.

@@ -16,7 +16,7 @@ Architecture authority for this file:
 
 No other repository document is architecture authority. `docs/architecture/integrations-service-delta.md`
 and `docs/architecture/ragcore-langgraph-flow.md` sit in the architecture directory and carry **no**
-authority. Neither does `.specify/**`, `specs/**`, `README.md`, `Synthia-Platform-Specification.md`,
+authority. Neither does `README.md`, `Synthia-Platform-Specification.md`,
 `.serena/**`, `docs/current-implementation/**`, or the retired Spec Kit constitution. Existing
 implementation is evidence of what **is**, never authority for what **should be**.
 
@@ -251,7 +251,9 @@ has explicitly given in this session.
 
 ## 70.6 Numbering and the existing history
 
-- Existing sequence: `0001` … `0009`. The next new record is **`0010`**, then `0011`, `0012`, …
+- Existing sequence: `0001` … `0012`. The next new record is **`0013`**, then `0014`, `0015`, …
+  `0010` and `0011` were written in Phases 12 and 14 and are `Accepted`; `0012` was written in
+  Phase 16 and is `Proposed` — an unaccepted record still consumes its number.
 - Filename: `docs/adr/NNNN-<short-kebab-case-title>.md` — four digits, a hyphen, then lower-case
   words separated by single hyphens.
 - A number is **never reused**, including the number of a superseded or deprecated record.

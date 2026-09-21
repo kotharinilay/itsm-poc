@@ -143,6 +143,5 @@ def main() -> None:
     """
     raise NotImplementedError(
         "the consumer's parsing, refusal and execution paths are implemented and tested; the "
-        "worker's process wiring lands with the other workers at Stage 12 — see "
-        "specs/001-platform-scaffold/tasks.md"
+        "worker's process wiring lands with the other workers."
     )

@@ -207,6 +207,6 @@ class CaseAnchoring:
             "summary": summary,
             # Stated on the record rather than inferred by a reader. The scaffold's catalogue holds
             # only inert reference fixtures, and a case that did not say so would look like a case
-            # about a real operation (constitution Principle IX).
+            # about a real operation (10-principles.md H-1).
             "origin": "synthia",
         }

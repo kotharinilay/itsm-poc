@@ -23,6 +23,7 @@ Each record distinguishes three things and never blurs them: **what the source r
 | [0009](./0009-portal-delivery-one-origin-per-browser-surface.md) | Portal delivery: one public origin per browser surface | **Accepted** | The customer and staff portals each get their own Front Door endpoint, origin group and container app, over Private Link under one shared WAF. A static host cannot deliver the Stage 3 CSP, which needs a per-response nonce. Narrows the edge guard's "exactly one origin" rule to an allow-list, and adds the rule that **only the gateway origin may serve `/api`** |
 | [0010](./0010-frontend-engineering-baseline.md) | A migrated TypeScript / Angular / Electron engineering baseline | **Accepted** | Migrates a frontend engineering baseline into `.claude/rules/{22-web-typescript,23-angular,24-electron}.md`, using the retired Spec Kit constitution as **migration input only**. Closes UD-1 / B-4 / OQ-2 and Phase 11 blocker B11-2. Accepted by the repository owner; the record on disk carries `Status: Accepted` and is the status authority — this index only reflects it |
 | [0011](./0011-required-test-categories-baseline.md) | Migrate the required-test-category baseline and the per-change test matrix | **Accepted** | Migrates the retired constitution's fifteen required test categories, its twelve-row per-change obligation matrix and its coverage policy into `.claude/rules/40-testing.md`, which states neither today. Closes Phase 11 finding D-11-2. Accepted by the repository owner; migrated into `.claude/rules/40-testing.md` §40.8-§40.10 in Phase 14. |
+| [0012](./0012-principle-ix-reference-fixtures-and-no-fabricated-success.md) | Migrate Principle IX clauses 2b and 3: no fabricated success, and reference fixtures are never product | **Proposed** | Migrates the retired constitution's two remaining unique normative clauses — no silently degraded, stubbed or fabricated success, and reference fixtures are labelled, inert, production-excluded and never product — into `.claude/rules/10-principles.md` §10.7 as `H-1` and `H-2`. Discharges Phase 15 blocker **B15-1**, which blocks deletion of `.specify/**` and `specs/**`. **Not yet accepted: nothing may be implemented on it** (`.claude/rules/70-adr.md` §70.5). The record on disk carries `Status: Proposed` and is the status authority — this index only reflects it |
 
 ## Open items these records do not close
 
@@ -48,12 +49,22 @@ Recorded so they are met as decisions rather than discovered mid-implementation.
 Copy the structure of an existing record. Number it sequentially — a number is never reused, including
 for a superseded record. Status is one of `Proposed`, `Accepted`, `Superseded by NNNN`, `Deprecated`.
 
-A record is required whenever a decision:
+**When a record is required is stated by `.claude/rules/70-adr.md` §70.2**, in four groups —
+architecture (A), engineering baseline (B), LangGraph architecture (C, the seventeen triggers in
+`.claude/rules/30-langgraph.md` §30.4) and database authorization boundary (D). That list is
+authority and is not restated here.
 
-- diverges from `Synthia-Platform-Specification.md` — name the conflict, the reason, the consequence;
-- promotes a bounded context to a separately deployed service (constitution Principle V);
-- introduces a provider-neutral abstraction before a second provider exists (Principle VI);
-- relaxes a security control the constitution states unconditionally — for example disabling the
-  Electron sandbox, which plan Stage 4 makes unconditional.
+Four cases worth naming because the early records turned on them:
+
+- **promoting a bounded context to a separately deployed service** — §70.2 A(1)(5); ADR-0007 is the
+  worked example;
+- **introducing a provider-neutral abstraction before a second provider exists** — the
+  no-speculative-capability rule, `.claude/rules/10-principles.md` P-8;
+- **relaxing a security control the baseline or the architecture states unconditionally** — for
+  example disabling the Electron sandbox, which `.claude/rules/24-electron.md` forbids; §70.2 B;
+- **diverging from an authoritative architecture document** — A1, A2 or A3; name the conflict, the
+  reason and the consequence. `Synthia-Platform-Specification.md` is **not** authority
+  (`.claude/rules/00-authority.md` §00.2), and a divergence from it is not on its own an ADR
+  trigger.
 
 Update this index in the same change. A record that is not indexed is a record nobody finds.

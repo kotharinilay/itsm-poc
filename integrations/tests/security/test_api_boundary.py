@@ -148,7 +148,7 @@ def test_unentitled_capabilities_are_listed_rather_than_omitted() -> None:
 
 
 def test_reference_fixtures_are_visibly_labelled() -> None:
-    """Constitution Principle IX: a fixture is never presentable as product capability."""
+    """.claude/rules/10-principles.md H-2: a fixture is never presentable as product capability."""
     items = (
         _client()
         .get(

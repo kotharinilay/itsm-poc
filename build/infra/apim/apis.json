@@ -5,7 +5,7 @@
     "The XML beside this file decides IDENTITY: it proves edge provenance, deletes every inbound",
     "copy of the identity contract, validates the token once and states the closed X-Idp-* contract.",
     "It cannot say which URL reaches which deployable, and until this file existed that routing lived",
-    "only in prose — specs/001-platform-scaffold/contracts/README.md and a sentence in tasks.md.",
+    "only in prose, in the retired Spec Kit contract notes deleted in Phase 16.",
     "",
     "ROUTING IN PROSE IS ROUTING THAT IS SILENTLY WRONG. A misrouted /views path does not fail: it",
     "reaches RagCore, which serves the audience but not that route, and returns a 404 that looks",

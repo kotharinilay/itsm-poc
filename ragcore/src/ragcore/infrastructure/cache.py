@@ -129,7 +129,7 @@ class NullCache:
     Satisfies :class:`TransientCachePort`. What a process gets when no cache is configured, which is
     the developer-machine case and a legitimate deployed one.
 
-    **Honest rather than convenient** (constitution Principle IX): it does not pretend to cache, and
+    **Honest rather than convenient** (10-principles.md H-1): it does not pretend to cache, and
     every caller takes the path it would take after an eviction. If anything ever stops working with
     this bound, that is the discovery that something had come to depend on the cache — which is the
     exact defect the transient-only rule exists to prevent, surfaced at development time.

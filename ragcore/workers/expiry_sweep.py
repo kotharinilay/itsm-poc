@@ -102,5 +102,5 @@ def main() -> None:
     """
     raise NotImplementedError(
         "sweep_expired is implemented and tested; the worker's process wiring lands with the "
-        "other workers at Stage 12 — see specs/001-platform-scaffold/tasks.md"
+        "other workers."
     )

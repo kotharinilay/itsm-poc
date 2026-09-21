@@ -168,7 +168,8 @@ change satisfies both or it is incomplete. Do not merge the two lists.
 number in this file stays stable and no cross-reference from another rule breaks.
 
 *Authorized by `docs/adr/0011-required-test-categories-baseline.md` (Accepted). Migrated from
-`.specify/memory/constitution.md` §Required test categories, §Which change requires which category
+`.specify/memory/constitution.md` (**deleted in Phase 16**; git history only)
+§Required test categories, §Which change requires which category
 and §Coverage. **It is migration input. It is not authority.** Its non-authoritative
 status under `.claude/rules/00-authority.md` §00.4 is unchanged by having been read. This file is
 the testing-baseline authority; the constitution is not, and does not become so.*

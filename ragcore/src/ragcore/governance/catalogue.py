@@ -75,8 +75,8 @@ class CatalogueRecord:
         risk_tier: How much damage the operation could do. Describes the *operation*; treatment
             describes *how a human is involved*, and collapsing them would let a risk
             reclassification silently change who approves.
-        is_reference_fixture: Whether this is an inert scaffold fixture. Never counted as, and
-            never allowed to become, one of UC-01..UC-12 (spec FR-SCOPE-007).
+        is_reference_fixture: Whether this is an inert reference fixture. Never counted as, and
+            never allowed to become, a real defined capability (10-principles.md H-2).
         requires_elevation: Always ``False``. Constructing one with ``True`` raises.
         commands: The command set, disclosed **in full** to an approver. An approver who cannot see
             the commands is not approving the commands.

@@ -257,4 +257,4 @@ Paths are relative to the repo root. Endpoint and DB behaviour is described in [
 | `docs/adr/0001`–`0008*.md` | Architecture decisions (ownership split, approval placement, migrations, script integrity, third-party systems, desktop CSP, integration boundary, deferred gateway provenance). |
 | `docs/architecture/integrations-service-delta.md` | Changes introduced by the Integrations Service split. |
 | `docs/current-implementation/*.md` | This documentation set. |
-| `specs/001-platform-scaffold/{spec,plan,tasks,data-model}.md`, `contracts/` | Reference specification, plan, task list and intended contracts (not the source of truth for what is built). |
+| ~~`specs/001-platform-scaffold/**`~~ | **Deleted in Phase 16** with `.specify/**`. Was a reference specification, plan, task list and intended contracts; never the source of truth for what is built. Survives only in git history. |

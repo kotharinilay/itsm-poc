@@ -9,7 +9,7 @@ same statement that writes the consent.
 
 **Nothing in this file exercises a business use case.** It exercises the store. There is no triage,
 no proposal, no execution — those are use cases the specification has not defined yet, and inventing
-one to test the persistence layer would be inventing product (constitution Principle IX).
+one to test the persistence layer would be inventing product (10-principles.md P-8, H-1).
 """
 
 from __future__ import annotations

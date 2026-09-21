@@ -13,7 +13,7 @@ graph is wired in their terms, and the tests substitute fakes. What this module 
 supply a default: a retrieval port that quietly returned an empty list, or a catalogue that
 answered ``AUTO``, would let the platform appear to work while no boundary was real.
 
-Scaffold honestly; do not invent product (constitution Principle IX).
+No fabricated, stubbed or silently degraded success (`.claude/rules/10-principles.md` H-1).
 """
 
 from __future__ import annotations

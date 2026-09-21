@@ -15,8 +15,9 @@ Three endpoints, each proving one seam and nothing more:
     Demonstrates Customer API → Workload API **through the gateway**, app-only, and reports what the
     callee saw about the caller. There is no private peer route (spec §13.4).
 
-**Nothing here implements, stands in for, or may be counted as any of UC-01 through UC-12**
-(spec FR-DEMO-014, FR-DEMO-015). No approval, no consent, no external effect, no model, no index.
+**Nothing here implements, stands in for, or may be counted as a real defined capability**
+(`.claude/rules/10-principles.md` H-2). No approval, no consent, no external effect, no model, no
+index.
 
 **No endpoint accepts a tenant, role or audience parameter.** The organisation is derived from the
 trusted identity the gateway established, and there is nothing a caller could send to influence it.
@@ -115,9 +116,9 @@ async def begin_round_trip(
     :func:`~ragcore.messaging.outbox.enqueue_trigger`, the dispatcher, the consumer — is implemented
     and tested at Stage 8; the durable record this trigger points at is opened by the session and
     work-item write that belongs with the customer surface. Wiring this to create work items now
-    would be inventing product behaviour the scaffold is specifically not allowed to have. Wired
-    by T241 in ``specs/001-platform-scaffold/tasks.md``, which also declares the eventual response
-    as :class:`SampleFlowAccepted`.
+    would be inventing product behaviour no requirement asks for (P-8) and reporting it as real
+    (H-1). The refusal is explicit for that reason. The eventual response is
+    :class:`SampleFlowAccepted`.
     """
     del container, tenant, principal, correlation_id
     return not_implemented(request)

@@ -22,7 +22,8 @@ ingestion, not restored from backup, which is why ``ingestion_run`` records a wa
 document body.
 
 *Memory.* The scaffold defines no agent-memory entity. ``data-model.md`` names none, and a table
-invented here would be product the specification has not asked for (constitution Principle IX).
+invented here would be speculative capability no requirement needs (P-8), reported as though it
+were real (H-1).
 Durable working state is the checkpoint, and it already has an owner.
 
 *Scripts.* Script metadata and version are not a separate table: they are ``governance_record``'s
@@ -482,9 +483,9 @@ class GovernanceRecord(Audited, Attributed, Base):
     which is the correct default for an entry whose roles nobody has declared yet."""
 
     is_reference_fixture: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    """True for the four scaffold fixtures. They are inert, are excluded from production
-    configuration, and **MUST NEVER** be counted as or allowed to become one of UC-01..UC-12
-    (spec FR-SCOPE-007)."""
+    """True for the four reference fixtures. They are inert, are excluded from production
+    configuration, and **MUST NEVER** be counted as or allowed to become a real defined capability
+    (`.claude/rules/10-principles.md` H-2)."""
 
     requires_elevation: Mapped[bool] = mapped_column(Boolean, nullable=False)
     """**Constrained to false by the database.** Alpha permits no elevation (ADR-0004), and a
@@ -875,7 +876,8 @@ class IntegrationJob(TenantScoped, Audited, Attributed, Versioned, Base):
     ``UPDATE`` on the four ``result_*`` columns and nothing else (revision ``0022``). It cannot
     alter ``catalogue_id``, ``catalogue_version``, ``parameters`` or ``tenant_id`` — a service able
     to rewrite its own instruction could execute an operation other than the one governance
-    authorized, which is a Principle VIII hard failure. The refusal comes from PostgreSQL, not from
+    authorized, which is a hard failure (`.claude/rules/80-security-ops.md` §80.3). The refusal
+    comes from PostgreSQL, not from
     application restraint.
 
     **The four result columns are how RagCore learns the outcome without reading the other

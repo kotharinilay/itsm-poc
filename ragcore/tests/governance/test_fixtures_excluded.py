@@ -1,7 +1,8 @@
-"""Reference fixtures are excluded from production, and are never one of UC-01..UC-12.
+"""Reference fixtures are excluded from production, and are never a real defined capability.
 
-`FR-SCOPE-006` and `FR-SCOPE-007`, and constitution Principle IX — *scaffold honestly; do not invent
-product*. The failure this file guards against is not a bug, it is a drift: a fixture that was
+`.claude/rules/10-principles.md` **H-2** — reference fixtures are labelled, inert,
+production-excluded, and never product. The failure this file guards against is not a bug, it is a
+drift: a fixture that was
 inert in September quietly becomes the thing a demo runs on in November, and by then nobody
 remembers it was a fixture. The three properties that stop that are each asserted here.
 
@@ -16,8 +17,10 @@ entitlement varies by environment, and the last test in this file asserts that s
 "exclude the fixtures in production" is one careless step away from "relax the gate in
 development".
 
-**Never a use case.** UC-01..UC-12 are labelled placeholders (spec §FR-SCOPE-003). A fixture MUST
-NOT be counted as one, substituted for one, or allowed to become one.
+**Never a real capability.** A fixture MUST NOT be counted as a real defined capability,
+substituted for one, or allowed to become one (`H-2`.4). The identifier check below keeps the
+original scaffold's ``UC-``-prefixed placeholder names out of the fixture set, which is the
+concrete form that drift took here.
 
 Marked ``governance``: *proves treatment comes from the catalogue, never from model output*.
 """
@@ -174,7 +177,7 @@ class TestExcludedFromProductionConfiguration:
         with pytest.raises(ReferenceFixtureInProductionError) as raised:
             reference_fixtures("production")
 
-        assert "FR-SCOPE-006" in str(raised.value)
+        assert "H-2" in str(raised.value)
 
     def test_the_environment_name_matches_the_settings_literal(self) -> None:
         """A refusal keyed on ``"prod"`` would never fire.
@@ -196,14 +199,15 @@ class TestExcludedFromProductionConfiguration:
 
 
 class TestAFixtureIsNeverAUseCase:
-    """UC-01..UC-12 are labelled placeholders, and a fixture is not one of them."""
+    """A fixture is never a real defined capability, and never was one waiting to be finished."""
 
     def test_no_fixture_is_named_for_a_use_case(self) -> None:
         for record in REFERENCE_FIXTURES:
             catalogue_id = record.identity.catalogue_id.lower()
             assert "uc-" not in catalogue_id and "uc_" not in catalogue_id, (
                 f"{record.identity} is named for a use case. A fixture MUST NOT be counted as, "
-                f"substituted for, or allowed to become one of UC-01..UC-12 (FR-SCOPE-007)."
+                f"substituted for, or allowed to become a real defined capability "
+                f"(10-principles.md H-2)."
             )
 
     def test_an_arbitrary_operation_is_not_a_reference_operation(self) -> None:

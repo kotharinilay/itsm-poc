@@ -13,8 +13,8 @@ One journey, crossing every seam the scaffold exists to demonstrate:
 
 **Nothing here is a product capability, and nothing here may become one.** The execution is a
 reference fixture: it reaches no external system, modifies no account, device or record, and calls
-no model, index or cache. It MUST NOT implement, stand in for, or be counted as any of UC-01 through
-UC-12 (spec FR-DEMO-014, FR-DEMO-015, FR-SCOPE-007).
+no model, index or cache. It MUST NOT implement, stand in for, or be counted as a real defined
+capability (`.claude/rules/10-principles.md` H-2).
 
 **It is not an approval, and it grants nothing.** The ``sample.flow`` kind exists because the seam
 needs exercising before a governed operation crosses it. No human decided anything, so there is no

@@ -200,7 +200,8 @@ def test_a_refusal_cannot_claim_a_server_confirmed_outcome() -> None:
 
     `server_confirmed` is the single value that may be reported to a user as resolved (ADR-0004),
     and a refusal claiming it would be the platform claiming to know more than it does — a
-    Principle VIII hard failure. The database carries the same constraint; this catches it at the
+    hard failure (`.claude/rules/80-security-ops.md` §80.3). The database carries the same
+    constraint; this catches it at the
     call site, where the message can name the caller.
     """
     with pytest.raises(ValueError, match="nothing to confirm"):

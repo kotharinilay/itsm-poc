@@ -98,14 +98,14 @@ applications  →  customer-features | staff-features  →  platform-core  →  
 - **`staff-portal` must not import `customer-features`** — the staff portal provides no facility
   to start a chat session, and that import is how the rule gets broken by accident.
 
-*Source: **not the constitution.** The direction's only prose statement in this repository is
-`specs/001-platform-scaffold/plan.md` §Dependency direction, which is a retiring, non-authoritative
-artifact, and `apps/web/eslint.config.js`, which states it in full as executable configuration. It
-is migrated here so the rule survives that tree's retirement with a current authoritative
-statement, and because it is the Angular realization of `.claude/rules/10-principles.md` P-13 and
-P-24. Recorded as **FE-AMB-3** in `docs/migration/phase-12-spec-kit-decoupling.md`: the
-requirement is preserved, and the fact that its source was a retiring artifact rather than the
-baseline is recorded rather than hidden.*
+*Source: **not the constitution.** The direction's only prose statement was
+`specs/001-platform-scaffold/plan.md` §Dependency direction — a non-authoritative artifact
+**deleted in Phase 16**, surviving only in git history — together with `apps/web/eslint.config.js`,
+which states it in full as executable configuration. **This section is now the rule's sole prose
+authority**, which is exactly why it was migrated here before that tree was retired; it is also the
+Angular realization of `.claude/rules/10-principles.md` P-13 and P-24. Recorded as **FE-AMB-3** in
+`docs/migration/phase-12-spec-kit-decoupling.md`: the requirement is preserved, and the fact that
+its source was a retiring artifact rather than the baseline is recorded rather than hidden.*
 *Enforcement: mechanical — six `no-restricted-imports` blocks in `apps/web/eslint.config.js`, with
 `npx eslint .` a failing step in `.github/workflows/web.yml`.*
 

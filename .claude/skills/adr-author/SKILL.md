@@ -97,7 +97,7 @@ Not sources, and not substitutes:
 - existing ADRs `0001`…`0009` — read them for structure and history, never to reconstruct what
   architecture currently says;
 - `docs/architecture/integrations-service-delta.md`, `docs/architecture/ragcore-langgraph-flow.md`;
-- `.specify/**`, `specs/**`, `README.md`, `Synthia-Platform-Specification.md`, `.serena/**`,
+- `README.md`, `Synthia-Platform-Specification.md`, `.serena/**`,
   `docs/current-implementation/**`;
 - the code. The implementation is evidence of what is, never authority for what should be. If the
   code already behaves the proposed way, that is a deviation to report inside the ADR's Context, not

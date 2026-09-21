@@ -202,5 +202,5 @@ def main() -> None:
     """
     raise NotImplementedError(
         "the consumer's parsing and conclusion paths are implemented and tested; the worker's "
-        "process wiring lands with the other workers — see specs/001-platform-scaffold/tasks.md"
+        "process wiring lands with the other workers."
     )

@@ -24,8 +24,14 @@ explicit baseline block in `docs/migration/phase-9-baseline-input.md`. Migrated 
 The **frontend baseline** (TypeScript, Angular, Electron) was migrated separately in Phase 12 from
 the frontend blocks of the retired Spec Kit constitution, under
 `docs/adr/0010-frontend-engineering-baseline.md`; the mapping is
-`docs/migration/phase-12-spec-kit-decoupling.md`. **Migration input is not authority** — the
-constitution remains non-authoritative (`00-authority.md` §00.4).
+`docs/migration/phase-12-spec-kit-decoupling.md`.
+
+Two further blocks were migrated out of the same retired constitution before it was deleted: the
+**testing baseline** in Phase 14 under `docs/adr/0011-required-test-categories-baseline.md`
+(`.claude/rules/40-testing.md` §40.8–§40.10), and **implementation honesty and reference fixtures**
+in Phase 16 under `docs/adr/0012-principle-ix-reference-fixtures-and-no-fabricated-success.md`
+(`.claude/rules/10-principles.md` §10.7, `H-1` and `H-2`). **Migration input is not authority** —
+the constitution was never authoritative and is now deleted (`00-authority.md` §00.4).
 
 ## 3. Authority hierarchy
 
@@ -44,7 +50,7 @@ authorities: **stop, record both sides, do not pick a winner** (`00-authority.md
 | File | Scope |
 |---|---|
 | `00-authority.md` | repository-wide — authority, precedence, conflicts, deviations |
-| `10-principles.md` | repository-wide — P1–P32, plus Conventional Commits, SemVer, Diátaxis, C4 |
+| `10-principles.md` | repository-wide — P1–P32, C1–C6 (Conventional Commits, SemVer, Diátaxis, C4), and §10.7 H-1/H-2 |
 | `20-dotnet.md` | **.NET / C# only** — `dotnet/**` |
 | `21-python.md` | **Python only** — `ragcore/**`, `integrations/**` |
 | `22-web-typescript.md` | **frontend, both clients** — `apps/**`: shared client rules + TypeScript |
@@ -103,7 +109,7 @@ When a change touches both the graph and checkpoint persistence, **DB ordering w
 
 ## 8. ADR requirements — `.claude/rules/70-adr.md`
 
-MADR in `docs/adr/`, four-digit sequential numbering (next: **0010**), a status field, and
+MADR in `docs/adr/`, four-digit sequential numbering (next: **0013**), a status field, and
 `Context` / `Decision` / `Consequences`. Required **before implementation** for an architecture,
 identity/authority, engineering-baseline, LangGraph-architecture or DB-authorization-boundary
 decision.
@@ -120,7 +126,7 @@ updating it never substitutes for a gate.
 
 ## 10. Retired Spec Kit artifacts are not authoritative
 
-`.specify/**` and `specs/**` remain in the tree pending a later retirement phase. They are history —
+`.specify/**` and `specs/**` were **deleted in Phase 16**. They survive only in git history —
 not architecture authority, not engineering baseline, not evidence of implemented behavior.
 
 The ten `speckit-*` skills were removed in Phase 12, and **no live Claude rule, skill, hook or
@@ -133,13 +139,17 @@ workflow headers were repointed to current authority in Phase 15
 and is corrected here. **Cite the rule files or the architecture documents, never the
 constitution.**
 
-Two citation groups deliberately remain, and neither is a live dependency:
+One citation group deliberately remains, and it is not a live dependency: the
+`Source: constitution#…` provenance lines in the three frontend rule files,
+`.claude/rules/40-testing.md` and `.claude/rules/10-principles.md` §10.7, which record **migration
+input** under `docs/adr/0010`, `0011` and `0012` and say in the same breath that the constitution
+is not authority.
 
-- the `Source: constitution#…` provenance lines in the three frontend rule files and `.claude/rules/40-testing.md`,
-  which record **migration input** under `docs/adr/0010` and `docs/adr/0011` and say in the same
-  breath that the constitution is not authority;
-- fifteen `Principle IX` citations and eight occurrences with no current home, held open as **B13-3**
-  and the Phase 15 ambiguous set pending a human decision.
+**B13-3 is closed.** The `Principle IX` citations were repointed to `10-principles.md` `H-1`/`H-2`
+in Phase 16. The **eight ambiguous cross-stack citations** of the Phase 15 set remain **open** —
+each cites a requirement stated only in the .NET baseline with no Python counterpart
+(`docs/migration/phase-15-final-spec-kit-reconciliation.md` §4.4). Closing them is a separate
+baseline decision under `70-adr.md` §70.2 B(6).
 
 ## Non-negotiables
 

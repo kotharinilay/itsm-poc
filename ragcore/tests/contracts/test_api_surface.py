@@ -370,7 +370,7 @@ class TestTheStreamingEnvelope:
 
 
 class TestTheScaffoldPerformsNothing:
-    """Constitution Principle IX: scaffold honestly; do not invent product."""
+    """.claude/rules/10-principles.md H-1: no fabricated, stubbed or silently degraded success."""
 
     @pytest.mark.parametrize(
         ("method", "path", "body"),
